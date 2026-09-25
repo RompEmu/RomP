@@ -1,0 +1,49 @@
+export component GameWindow inherits Window {
+    in property <string> game-title: "Cartridge";
+    in property <image> frame;
+    in property <float> aspect: 4 / 3;
+    in property <string> status;
+    callback key-event(string, bool) -> bool;
+
+    title: root.game-title;
+    preferred-width: 960px;
+    preferred-height: 720px;
+    background: black;
+    forward-focus: keys;
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            return root.key-event(event.text, true) ? EventResult.accept : EventResult.reject;
+        }
+        key-released(event) => {
+            return root.key-event(event.text, false) ? EventResult.accept : EventResult.reject;
+        }
+
+        Image {
+            source: root.frame;
+            image-fit: fill;
+            image-rendering: pixelated;
+            width: min(parent.width, parent.height * root.aspect);
+            height: self.width / root.aspect;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+
+        if root.status != "": Rectangle {
+            x: 16px;
+            y: parent.height - self.height - 16px;
+            width: parent.width - 32px;
+            height: label.preferred-height + 16px;
+            background: #000000c0;
+            border-radius: 6px;
+            label := Text {
+                x: 8px;
+                width: parent.width - 16px;
+                text: root.status;
+                color: white;
+                font-size: 15px;
+                wrap: word-wrap;
+            }
+        }
+    }
+}

@@ -12,8 +12,12 @@ cartridge-proto = { workspace = true }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dirs = "6"
+slint = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[build-dependencies]
+slint-build = "1"
 
 [dev-dependencies]
 tempfile = "3"
