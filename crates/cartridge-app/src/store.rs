@@ -1,0 +1,348 @@
+use crate::romm::types::{Platform, Rom};
+use rusqlite::{params, Connection};
+use std::path::Path;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformItem {
+    pub id: i64,
+    pub name: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GameItem {
+    pub id: i64,
+    pub title: String,
+    pub platform: String,
+    pub cover: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GameFilter {
+    pub platform: Option<i64>,
+    pub search: String,
+}
+
+pub struct Store {
+    conn: Connection,
+}
+
+const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS platforms (id INTEGER PRIMARY KEY, slug TEXT NOT NULL, name TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS games (
+    id INTEGER PRIMARY KEY,
+    platform_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT,
+    updated_at TEXT NOT NULL,
+    cover_small TEXT,
+    cover_large TEXT,
+    size_bytes INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS games_platform ON games(platform_id);
+";
+
+fn non_empty(s: &Option<String>) -> Option<&str> {
+    s.as_deref().filter(|s| !s.is_empty())
+}
+
+impl Store {
+    pub fn open(path: &Path) -> rusqlite::Result<Self> {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        Self::init(Connection::open(path)?)
+    }
+
+    pub fn open_in_memory() -> rusqlite::Result<Self> {
+        Self::init(Connection::open_in_memory()?)
+    }
+
+    fn init(conn: Connection) -> rusqlite::Result<Self> {
+        conn.execute_batch(SCHEMA)?;
+        Ok(Self { conn })
+    }
+
+    pub fn get(&self, key: &str) -> Option<String> {
+        self.conn
+            .query_row("SELECT value FROM kv WHERE key = ?1", [key], |r| r.get(0))
+            .ok()
+    }
+
+    pub fn set(&self, key: &str, value: &str) {
+        self.conn
+            .execute(
+                "INSERT INTO kv (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [key, value],
+            )
+            .expect("write kv");
+    }
+
+    pub fn remove(&self, key: &str) {
+        self.conn
+            .execute("DELETE FROM kv WHERE key = ?1", [key])
+            .expect("delete kv");
+    }
+
+    pub fn replace_platforms(&mut self, platforms: &[Platform]) {
+        let tx = self.conn.transaction().expect("tx");
+        tx.execute("DELETE FROM platforms", [])
+            .expect("clear platforms");
+        for p in platforms {
+            tx.execute(
+                "INSERT INTO platforms (id, slug, name) VALUES (?1, ?2, ?3)",
+                params![p.id, p.slug, p.display_name],
+            )
+            .expect("insert platform");
+        }
+        tx.commit().expect("commit");
+    }
+
+    pub fn upsert_games(&mut self, roms: &[Rom]) {
+        let tx = self.conn.transaction().expect("tx");
+        for r in roms {
+            tx.execute(
+                "INSERT OR REPLACE INTO games
+                 (id, platform_id, title, summary, updated_at, cover_small, cover_large, size_bytes)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    r.id,
+                    r.platform_id,
+                    r.title(),
+                    r.summary,
+                    r.updated_at,
+                    non_empty(&r.path_cover_small),
+                    non_empty(&r.path_cover_large),
+                    r.fs_size_bytes
+                ],
+            )
+            .expect("upsert game");
+        }
+        tx.commit().expect("commit");
+    }
+
+    pub fn retain_games(&mut self, ids: &[i64]) -> usize {
+        let tx = self.conn.transaction().expect("tx");
+        tx.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS keep (id INTEGER PRIMARY KEY)",
+            [],
+        )
+        .expect("temp table");
+        tx.execute("DELETE FROM keep", []).expect("clear keep");
+        for id in ids {
+            tx.execute("INSERT OR IGNORE INTO keep (id) VALUES (?1)", [id])
+                .expect("keep id");
+        }
+        let removed = tx
+            .execute(
+                "DELETE FROM games WHERE id NOT IN (SELECT id FROM keep)",
+                [],
+            )
+            .expect("retain");
+        tx.commit().expect("commit");
+        removed
+    }
+
+    pub fn platforms(&self) -> Vec<PlatformItem> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT p.id, p.name, COUNT(g.id) FROM platforms p
+                 JOIN games g ON g.platform_id = p.id
+                 GROUP BY p.id ORDER BY p.name COLLATE NOCASE",
+            )
+            .expect("prepare");
+        stmt.query_map([], |r| {
+            Ok(PlatformItem {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                count: r.get(2)?,
+            })
+        })
+        .expect("query")
+        .filter_map(Result::ok)
+        .collect()
+    }
+
+    pub fn games(&self, filter: &GameFilter) -> Vec<GameItem> {
+        let pattern = format!(
+            "%{}%",
+            filter
+                .search
+                .trim()
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
+        );
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small FROM games g
+                 LEFT JOIN platforms p ON p.id = g.platform_id
+                 WHERE (?1 IS NULL OR g.platform_id = ?1) AND g.title LIKE ?2 ESCAPE '\\'
+                 ORDER BY g.title COLLATE NOCASE, g.id",
+            )
+            .expect("prepare");
+        stmt.query_map(params![filter.platform, pattern], |r| {
+            Ok(GameItem {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                platform: r.get(2)?,
+                cover: r.get(3)?,
+            })
+        })
+        .expect("query")
+        .filter_map(Result::ok)
+        .collect()
+    }
+
+    pub fn clear_library(&mut self) {
+        self.conn
+            .execute_batch(
+                "DELETE FROM games; DELETE FROM platforms; DELETE FROM kv WHERE key = 'last_sync_at';",
+            )
+            .expect("clear library");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::romm::types::rom;
+
+    fn platform(id: i64, name: &str) -> Platform {
+        Platform {
+            id,
+            slug: name.to_lowercase(),
+            display_name: name.into(),
+            rom_count: 0,
+        }
+    }
+
+    fn seeded() -> Store {
+        let mut s = Store::open_in_memory().unwrap();
+        s.replace_platforms(&[
+            platform(1, "SNES"),
+            platform(2, "Game Boy"),
+            platform(3, "Empty"),
+        ]);
+        s.upsert_games(&[
+            rom(10, 1, "zelda", "2026-01-01T00:00:00+00:00"),
+            rom(11, 1, "Chrono Trigger", "2026-01-01T00:00:00+00:00"),
+            rom(12, 2, "Tetris", "2026-01-01T00:00:00+00:00"),
+        ]);
+        s
+    }
+
+    fn ids(s: &Store, f: GameFilter) -> Vec<i64> {
+        s.games(&f).into_iter().map(|g| g.id).collect()
+    }
+
+    #[test]
+    fn kv_round_trip() {
+        let s = Store::open_in_memory().unwrap();
+        assert_eq!(s.get("server"), None);
+        s.set("server", "http://a/");
+        s.set("server", "http://b/");
+        assert_eq!(s.get("server").as_deref(), Some("http://b/"));
+        s.remove("server");
+        assert_eq!(s.get("server"), None);
+    }
+
+    #[test]
+    fn games_sorted_case_insensitively_with_platform_names() {
+        let titles: Vec<_> = seeded()
+            .games(&GameFilter::default())
+            .into_iter()
+            .map(|g| (g.title, g.platform))
+            .collect();
+        assert_eq!(
+            titles,
+            [
+                ("Chrono Trigger".to_string(), "SNES".to_string()),
+                ("Tetris".to_string(), "Game Boy".to_string()),
+                ("zelda".to_string(), "SNES".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn filter_by_platform_and_search() {
+        let s = seeded();
+        let f = |platform, search: &str| GameFilter {
+            platform,
+            search: search.into(),
+        };
+        assert_eq!(ids(&s, f(Some(1), "")), [11, 10]);
+        assert_eq!(ids(&s, f(None, "TRI")), [11, 12]);
+        assert_eq!(ids(&s, f(Some(2), "zel")), Vec::<i64>::new());
+        assert_eq!(ids(&s, f(None, "50%_")), Vec::<i64>::new());
+    }
+
+    #[test]
+    fn upsert_replaces_existing_rows() {
+        let mut s = seeded();
+        s.upsert_games(&[rom(12, 2, "Tetris DX", "2026-02-01T00:00:00+00:00")]);
+        let g = s.games(&GameFilter {
+            platform: Some(2),
+            search: String::new(),
+        });
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].title, "Tetris DX");
+    }
+
+    #[test]
+    fn platforms_list_only_non_empty_with_counts() {
+        assert_eq!(
+            seeded().platforms(),
+            [
+                PlatformItem {
+                    id: 2,
+                    name: "Game Boy".into(),
+                    count: 1
+                },
+                PlatformItem {
+                    id: 1,
+                    name: "SNES".into(),
+                    count: 2
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn retain_removes_missing_games() {
+        let mut s = seeded();
+        assert_eq!(s.retain_games(&[10, 12]), 1);
+        assert_eq!(ids(&s, GameFilter::default()), [12, 10]);
+    }
+
+    #[test]
+    fn empty_cover_path_is_none() {
+        let mut s = Store::open_in_memory().unwrap();
+        let mut r = rom(1, 1, "A", "t");
+        r.path_cover_small = Some(String::new());
+        s.upsert_games(&[r]);
+        assert_eq!(s.games(&GameFilter::default())[0].cover, None);
+    }
+
+    #[test]
+    fn clear_library_drops_games_and_platforms_but_keeps_kv() {
+        let mut s = seeded();
+        s.set("device_id", "x");
+        s.clear_library();
+        assert!(s.games(&GameFilter::default()).is_empty());
+        assert!(s.platforms().is_empty());
+        assert_eq!(s.get("device_id").as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn reopening_a_file_keeps_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("c.db");
+        Store::open(&path).unwrap().set("k", "v");
+        assert_eq!(Store::open(&path).unwrap().get("k").as_deref(), Some("v"));
+    }
+}

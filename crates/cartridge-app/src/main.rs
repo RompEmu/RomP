@@ -3,6 +3,7 @@ mod input;
 mod paths;
 mod romm;
 mod session;
+mod store;
 
 use anyhow::Context;
 use cartridge_proto::msg::RunnerMsg;

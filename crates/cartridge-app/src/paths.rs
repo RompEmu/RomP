@@ -10,6 +10,10 @@ pub fn data_dir() -> PathBuf {
         })
 }
 
+pub fn db_path() -> PathBuf {
+    data_dir().join("cartridge.db")
+}
+
 pub fn runner_exe() -> std::io::Result<PathBuf> {
     Ok(std::env::current_exe()?.with_file_name("cartridge-runner"))
 }
