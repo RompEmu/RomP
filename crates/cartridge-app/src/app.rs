@@ -26,6 +26,7 @@ use tokio::sync::Semaphore;
 use tokio::task::AbortHandle;
 
 const PARALLEL_DOWNLOADS: usize = 6;
+const OFFLINE_RETRY: Duration = Duration::from_secs(60);
 
 const SCREEN_CONNECT: i32 = 0;
 const SCREEN_PAIRING: i32 = 1;
@@ -87,6 +88,7 @@ struct Controller {
     downloading: Cell<Option<i64>>,
     running: RefCell<Option<crate::play::RunningGame>>,
     offline: Cell<bool>,
+    offline_retry: RefCell<Option<Timer>>,
 }
 
 thread_local! {
@@ -127,6 +129,7 @@ pub fn run() -> anyhow::Result<()> {
         downloading: Cell::new(None),
         running: RefCell::new(None),
         offline: Cell::new(false),
+        offline_retry: RefCell::new(None),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -293,6 +296,7 @@ impl Controller {
 
     fn enter_library(&self, client: Client) {
         *self.client.borrow_mut() = Some(client.clone());
+        self.set_offline(false);
         self.library.borrow_mut().filter = GameFilter::default();
         if let Some(ui) = self.ui() {
             ui.set_selected_platform(-1);
@@ -334,8 +338,26 @@ impl Controller {
         }
     }
 
+    fn set_offline(&self, offline: bool) {
+        self.library.borrow_mut().filter.downloaded_only = offline;
+        if self.offline.replace(offline) == offline {
+            return;
+        }
+        *self.offline_retry.borrow_mut() = offline.then(|| {
+            let timer = Timer::default();
+            timer.start(TimerMode::Repeated, OFFLINE_RETRY, || {
+                with_controller(|c| c.sync())
+            });
+            timer
+        });
+        if self.game.borrow().is_some() {
+            self.refresh_game_page(false);
+        }
+    }
+
     fn sign_out(&self) {
         self.stop_sync();
+        self.set_offline(false);
         let server = self
             .client
             .borrow_mut()
@@ -555,11 +577,15 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         ui.set_syncing(false);
         match result {
-            Ok(_) => ui.set_sync_status("".into()),
+            Ok(_) => {
+                self.set_offline(false);
+                ui.set_sync_status("".into());
+            }
             Err(Error::Cancelled) => return,
             Err(Error::Unauthorized) => return self.needs_repair(),
             Err(Error::Unreachable) => {
-                ui.set_sync_status("Offline: showing your saved library".into())
+                self.set_offline(true);
+                ui.set_sync_status("Offline: showing downloaded games".into());
             }
             Err(e) => ui.set_sync_status(format!("Sync failed: {e}").into()),
         }

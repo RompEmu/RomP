@@ -60,7 +60,7 @@ impl Controller {
         self.load_game_cover(&detail);
     }
 
-    fn refresh_game_page(&self, reload: bool) {
+    pub(super) fn refresh_game_page(&self, reload: bool) {
         let Some(ui) = self.ui() else { return };
         let Some(mut detail) = self.current_game() else {
             return;
