@@ -85,7 +85,8 @@ struct Controller {
     sync_generation: Cell<u64>,
     sync_cancel: RefCell<Arc<AtomicBool>>,
     game: RefCell<Option<game::GameState>>,
-    downloading: Cell<Option<i64>>,
+    downloading: RefCell<Option<(i64, Arc<AtomicBool>)>>,
+    preparing: Cell<bool>,
     running: RefCell<Option<crate::play::RunningGame>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
@@ -114,7 +115,10 @@ pub fn run() -> anyhow::Result<()> {
         covers: Arc::new(Covers::new(paths::covers_dir())),
         downloads: Arc::new(Semaphore::new(PARALLEL_DOWNLOADS)),
         cores: Arc::new(Cores::new(paths::cores_dir())),
-        http: reqwest::Client::new(),
+        http: reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .read_timeout(Duration::from_secs(30))
+            .build()?,
     };
     let ui = AppWindow::new()?;
     let controller = Rc::new(Controller {
@@ -126,7 +130,8 @@ pub fn run() -> anyhow::Result<()> {
         sync_generation: Cell::new(0),
         sync_cancel: RefCell::default(),
         game: RefCell::new(None),
-        downloading: Cell::new(None),
+        downloading: RefCell::new(None),
+        preparing: Cell::new(false),
         running: RefCell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),

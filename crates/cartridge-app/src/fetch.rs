@@ -1,5 +1,5 @@
 use crate::download::{download_file, DownloadError};
-use crate::layout::{launch_target, m3u, plan, Launch};
+use crate::layout::{launch_target, m3u, plan, safe_component, Launch};
 use crate::romm::client::Client;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -15,6 +15,9 @@ pub async fn download_game(
         .rom_detail(rom_id)
         .await
         .map_err(DownloadError::Network)?;
+    if !safe_component(&rom.platform_slug) {
+        return Err(DownloadError::UnsafePath);
+    }
     let files = plan(&rom).map_err(|_| DownloadError::UnsafePath)?;
     let dir = roms_dir.join(&rom.platform_slug).join(rom.id.to_string());
     let total: u64 = files
@@ -111,6 +114,25 @@ mod tests {
                 "id": 7, "platform_id": 1, "platform_slug": "snes", "fs_name": "x", "fs_path": "roms/snes",
                 "has_multiple_files": false,
                 "files": [{"id": 1, "file_name": "../../evil", "file_path": "roms/snes", "file_size_bytes": 1, "sha1_hash": null}]})))
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/"));
+        let err = download_game(&client, 7, dir.path(), &|_, _| {}, &AtomicBool::new(false))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DownloadError::UnsafePath));
+    }
+
+    #[tokio::test]
+    async fn unsafe_platform_slug_is_refused() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 7, "platform_slug": "..", "fs_name": "x", "fs_path": "roms/x",
+                "has_multiple_files": false,
+                "files": [{"id": 1, "file_name": "x.sfc", "file_path": "roms/x", "file_size_bytes": 1, "sha1_hash": null}]})))
             .mount(&server)
             .await;
         let dir = tempfile::tempdir().unwrap();

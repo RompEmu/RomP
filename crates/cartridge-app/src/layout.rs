@@ -15,6 +15,11 @@ pub enum Launch {
 
 const DISC_ORDER: [&str; 8] = ["m3u", "cue", "gdi", "ccd", "cdi", "chd", "iso", "pbp"];
 
+pub fn safe_component(name: &str) -> bool {
+    let path = Path::new(name);
+    path.components().count() == 1 && safe(path)
+}
+
 fn safe(rel: &Path) -> bool {
     !rel.as_os_str().is_empty() && rel.components().all(|c| matches!(c, Component::Normal(_)))
 }
@@ -71,10 +76,13 @@ pub fn launch_target(rom: &RomDetail, rel_paths: &[PathBuf]) -> Option<Launch> {
             1 => return Some(Launch::File(found[0].clone())),
             _ if wanted == "m3u" => return Some(Launch::File(found[0].clone())),
             _ => {
-                return Some(Launch::Playlist {
-                    name: format!("{}.m3u", rom.fs_name),
-                    discs: found,
-                })
+                let name = format!("{}.m3u", rom.fs_name);
+                let name = if safe_component(&name) {
+                    name
+                } else {
+                    "game.m3u".to_string()
+                };
+                return Some(Launch::Playlist { name, discs: found });
             }
         }
     }
@@ -189,5 +197,20 @@ mod tests {
             matches!(launch_target(&r, &[PathBuf::from("Zelda.sfc")]), Some(Launch::File(p)) if p == Path::new("Zelda.sfc"))
         );
         assert!(launch_target(&r, &[PathBuf::from("sub/x.chd")]).is_none());
+    }
+
+    #[test]
+    fn playlist_name_never_leaves_the_game_folder() {
+        let mut r = rom(true, vec![]);
+        r.fs_name = "../../evil".into();
+        let files = [PathBuf::from("a.chd"), PathBuf::from("b.chd")];
+        match launch_target(&r, &files).unwrap() {
+            Launch::Playlist { name, .. } => assert_eq!(name, "game.m3u"),
+            other => panic!("{other:?}"),
+        }
+        assert!(safe_component("psx"));
+        assert!(!safe_component(".."));
+        assert!(!safe_component("a/b"));
+        assert!(!safe_component(""));
     }
 }

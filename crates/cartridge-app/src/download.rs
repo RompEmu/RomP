@@ -89,10 +89,21 @@ pub async fn download_file(
     if cancel.load(Ordering::SeqCst) {
         return Err(DownloadError::Cancelled);
     }
-    let mut resp = client
-        .download(url, offset)
-        .await
-        .map_err(DownloadError::Network)?;
+    let mut resp = match client.download(url.clone(), offset).await {
+        Err(Error::Status(416)) if offset > 0 => {
+            if matches(&part, sha1).await {
+                progress(offset);
+                return tokio::fs::rename(&part, dest).await.map_err(io);
+            }
+            let _ = tokio::fs::remove_file(&part).await;
+            offset = 0;
+            client
+                .download(url, 0)
+                .await
+                .map_err(DownloadError::Network)?
+        }
+        other => other.map_err(DownloadError::Network)?,
+    };
     let mut file = if resp.status().as_u16() == 206 && offset > 0 {
         tokio::fs::OpenOptions::new()
             .append(true)
@@ -258,5 +269,61 @@ mod tests {
         .await
         .unwrap();
         assert!(server.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn complete_part_answered_with_416_is_finished() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/f"))
+            .respond_with(ResponseTemplate::new(416))
+            .mount(&server)
+            .await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.bin");
+        std::fs::write(dir.path().join("game.bin.part"), BODY).unwrap();
+        download_file(
+            &client,
+            url,
+            &dest,
+            Some(&sha1_hex(BODY)),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), BODY);
+    }
+
+    #[tokio::test]
+    async fn bad_part_answered_with_416_restarts_from_zero() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/f"))
+            .and(header("range", "bytes=20-"))
+            .respond_with(ResponseTemplate::new(416))
+            .with_priority(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/f"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(BODY))
+            .with_priority(2)
+            .mount(&server)
+            .await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.bin");
+        std::fs::write(dir.path().join("game.bin.part"), b"XXXXXXXXXXXXXXXXXXXX").unwrap();
+        download_file(
+            &client,
+            url,
+            &dest,
+            Some(&sha1_hex(BODY)),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), BODY);
     }
 }

@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 pub(super) struct GameState {
     detail: GameDetail,
-    cancel: Arc<AtomicBool>,
 }
 
 pub(super) fn human_size(bytes: i64) -> String {
@@ -39,7 +38,22 @@ fn downloaded_path(detail: &GameDetail) -> Option<PathBuf> {
         .filter(|p| p.exists())
 }
 
+fn download_dir(detail: &GameDetail) -> Option<PathBuf> {
+    let roms = paths::roms_dir().canonicalize().ok()?;
+    let file = PathBuf::from(detail.local_path.as_deref()?)
+        .canonicalize()
+        .ok()?;
+    let rel = file.strip_prefix(&roms).ok()?;
+    let mut parts = rel.components();
+    let (slug, id) = (parts.next()?, parts.next()?);
+    (id.as_os_str() == detail.id.to_string().as_str()).then(|| roms.join(slug).join(id))
+}
+
 impl Controller {
+    fn downloading_id(&self) -> Option<i64> {
+        self.downloading.borrow().as_ref().map(|(id, _)| *id)
+    }
+
     fn current_game(&self) -> Option<GameDetail> {
         self.game.borrow().as_ref().map(|g| g.detail.clone())
     }
@@ -50,7 +64,6 @@ impl Controller {
         };
         *self.game.borrow_mut() = Some(GameState {
             detail: detail.clone(),
-            cancel: Arc::default(),
         });
         self.refresh_game_page(true);
         if let Some(ui) = self.ui() {
@@ -74,7 +87,7 @@ impl Controller {
             }
         }
         let playable = core_for_platform(&detail.platform_slug).is_some();
-        let busy = self.downloading.get() == Some(detail.id);
+        let busy = self.downloading_id() == Some(detail.id);
         ui.set_game_title(detail.title.clone().into());
         ui.set_game_platform(detail.platform.clone().into());
         ui.set_game_summary(detail.summary.clone().unwrap_or_default().into());
@@ -82,12 +95,12 @@ impl Controller {
         ui.set_game_downloaded(downloaded_path(&detail).is_some());
         ui.set_game_busy(busy);
         ui.set_game_playable(playable);
-        ui.set_game_can_download(!self.offline.get() && self.downloading.get().is_none());
+        ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
             ui.set_game_status(
                 format!("Cartridge can't play {} games yet.", detail.platform).into(),
             );
-        } else if self.downloading.get().is_some_and(|d| d != detail.id) {
+        } else if self.downloading_id().is_some_and(|d| d != detail.id) {
             ui.set_game_status("Another download is in progress.".into());
         } else if self.offline.get() && downloaded_path(&detail).is_none() {
             ui.set_game_status("Connect to your server to download this game.".into());
@@ -151,14 +164,11 @@ impl Controller {
         let Some(client) = self.client.borrow().clone() else {
             return;
         };
-        if self.downloading.get().is_some() {
+        if self.downloading_id().is_some() {
             return;
         }
         let cancel = Arc::new(AtomicBool::new(false));
-        if let Some(state) = self.game.borrow_mut().as_mut() {
-            state.cancel = cancel.clone();
-        }
-        self.downloading.set(Some(detail.id));
+        *self.downloading.borrow_mut() = Some((detail.id, cancel.clone()));
         if let Some(ui) = self.ui() {
             ui.set_game_progress(0.0);
             ui.set_game_status("Downloading…".into());
@@ -200,7 +210,7 @@ impl Controller {
     }
 
     fn download_finished(&self, id: i64, result: Result<PathBuf, DownloadError>) {
-        self.downloading.set(None);
+        self.downloading.borrow_mut().take();
         let status = match result {
             Ok(path) => {
                 self.shared
@@ -224,8 +234,8 @@ impl Controller {
     }
 
     pub(super) fn cancel_download(&self) {
-        if let Some(state) = self.game.borrow().as_ref() {
-            state.cancel.store(true, Ordering::SeqCst);
+        if let Some((_, cancel)) = self.downloading.borrow().as_ref() {
+            cancel.store(true, Ordering::SeqCst);
         }
     }
 
@@ -234,7 +244,7 @@ impl Controller {
         let Some(detail) = self.current_game() else {
             return;
         };
-        if self.running.borrow().is_some() {
+        if self.running.borrow().is_some() || self.preparing.get() {
             ui.set_game_status("A game is already running.".into());
             return;
         }
@@ -244,6 +254,7 @@ impl Controller {
         let Some(rom) = downloaded_path(&detail) else {
             return;
         };
+        self.preparing.set(true);
         ui.set_game_status("Getting ready…".into());
         let cores = self.shared.cores.clone();
         let http = self.shared.http.clone();
@@ -293,6 +304,7 @@ impl Controller {
         core_path: Result<PathBuf, String>,
         missing: Vec<String>,
     ) {
+        self.preparing.set(false);
         let core = match core_path {
             Ok(path) => path,
             Err(e) => return self.game_status(detail.id, e),
@@ -333,13 +345,12 @@ impl Controller {
         let Some(detail) = self.current_game() else {
             return;
         };
-        if self.running.borrow().is_some() {
+        if self.running.borrow().is_some() || self.preparing.get() {
             return self.game_status(detail.id, "Close the running game first.".into());
         }
-        let dir = paths::roms_dir()
-            .join(&detail.platform_slug)
-            .join(detail.id.to_string());
-        let _ = std::fs::remove_dir_all(dir);
+        if let Some(dir) = download_dir(&detail) {
+            let _ = std::fs::remove_dir_all(dir);
+        }
         self.shared
             .store
             .lock()

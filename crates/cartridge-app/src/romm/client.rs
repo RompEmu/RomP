@@ -66,19 +66,30 @@ pub fn check_version(version: &str) -> Result<(), String> {
 pub struct Client {
     base: Url,
     http: reqwest::Client,
+    transfer: reqwest::Client,
     token: Option<String>,
 }
 
 impl Client {
     pub fn new(base: Url) -> Self {
+        Self::with_request_timeout(base, Duration::from_secs(30))
+    }
+
+    pub(crate) fn with_request_timeout(base: Url, timeout: Duration) -> Self {
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(30))
+            .timeout(timeout)
+            .build()
+            .expect("http client");
+        let transfer = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .read_timeout(Duration::from_secs(30))
             .build()
             .expect("http client");
         Self {
             base,
             http,
+            transfer,
             token: None,
         }
     }
@@ -233,7 +244,7 @@ impl Client {
     }
 
     pub async fn download(&self, url: Url, offset: u64) -> Result<reqwest::Response, Error> {
-        let mut req = self.http.get(url);
+        let mut req = self.transfer.get(url);
         if let Some(token) = &self.token {
             req = req.bearer_auth(token);
         }
@@ -590,5 +601,27 @@ pub(crate) mod tests {
             client.firmware(32).await.unwrap()[0].file_name,
             "scph5501.bin"
         );
+    }
+
+    #[tokio::test]
+    async fn downloads_are_not_limited_by_the_request_timeout() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/big"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string("data")
+                    .set_delay(Duration::from_millis(1500)),
+            )
+            .mount(&server)
+            .await;
+        let client =
+            Client::with_request_timeout(base_of(&server, "/"), Duration::from_millis(500));
+        assert!(client
+            .get_json::<serde_json::Value>("/big", &[])
+            .await
+            .is_err());
+        let resp = client.download(client.url("/big"), 0).await.unwrap();
+        assert_eq!(resp.text().await.unwrap(), "data");
     }
 }
