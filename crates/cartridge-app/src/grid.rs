@@ -1,7 +1,8 @@
 use std::collections::VecDeque;
 use std::ops::Range;
 
-pub const DEFAULT_COVER_CAPACITY: usize = 400;
+pub const DEFAULT_COVER_CAPACITY: usize = 150;
+pub const RECENT_ROWS: usize = 16;
 
 pub fn row_count(items: usize, columns: usize) -> usize {
     items.div_ceil(columns.max(1))
@@ -51,6 +52,43 @@ impl CoverSlots {
     }
 }
 
+pub struct RecentRows {
+    capacity: usize,
+    rows: VecDeque<usize>,
+}
+
+impl RecentRows {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            rows: VecDeque::new(),
+        }
+    }
+
+    pub fn push(&mut self, row: usize) {
+        if let Some(pos) = self.rows.iter().position(|&r| r == row) {
+            self.rows.remove(pos);
+        }
+        self.rows.push_back(row);
+        while self.rows.len() > self.capacity {
+            self.rows.pop_front();
+        }
+    }
+
+    #[cfg(test)]
+    pub fn contains(&self, row: usize) -> bool {
+        self.rows.contains(&row)
+    }
+
+    pub fn rows(&self) -> impl Iterator<Item = usize> + '_ {
+        self.rows.iter().copied()
+    }
+
+    pub fn clear(&mut self) {
+        self.rows.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,5 +111,16 @@ mod tests {
         assert!(s.touch(1).is_empty());
         assert_eq!(s.touch(3), vec![2]);
         assert!(s.contains(1) && s.contains(3) && !s.contains(2));
+    }
+
+    #[test]
+    fn recent_rows_keep_the_latest_distinct_rows() {
+        let mut r = RecentRows::new(3);
+        for row in [1, 2, 3, 2, 4] {
+            r.push(row);
+        }
+        assert!(!r.contains(1));
+        assert!(r.contains(2) && r.contains(3) && r.contains(4));
+        assert_eq!(r.rows().count(), 3);
     }
 }

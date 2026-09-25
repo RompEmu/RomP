@@ -199,6 +199,19 @@ impl Store {
         .collect()
     }
 
+    pub fn switch_server(&mut self, server: &str) {
+        if self.get("server").as_deref() != Some(server) {
+            self.clear_library();
+            self.set("server", server);
+        }
+    }
+
+    pub fn game_count(&self) -> usize {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM games", [], |r| r.get::<_, i64>(0))
+            .unwrap_or(0) as usize
+    }
+
     pub fn clear_library(&mut self) {
         self.conn
             .execute_batch(
@@ -345,5 +358,20 @@ mod tests {
         let path = dir.path().join("c.db");
         Store::open(&path).unwrap().set("k", "v");
         assert_eq!(Store::open(&path).unwrap().get("k").as_deref(), Some("v"));
+    }
+
+    #[test]
+    fn switching_server_clears_the_library_only_when_it_changes() {
+        let mut s = seeded();
+        s.set("last_sync_at", "t");
+        s.switch_server("http://a/");
+        assert_eq!(s.game_count(), 0);
+        assert_eq!(s.get("server").as_deref(), Some("http://a/"));
+        assert_eq!(s.get("last_sync_at"), None);
+        s.upsert_games(&[rom(1, 1, "A", "x")]);
+        s.set("last_sync_at", "t");
+        s.switch_server("http://a/");
+        assert_eq!(s.game_count(), 1);
+        assert_eq!(s.get("last_sync_at").as_deref(), Some("t"));
     }
 }

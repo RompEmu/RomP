@@ -13,6 +13,8 @@ pub enum Error {
     Status(u16),
     #[error("unexpected response from the server: {0}")]
     Decode(String),
+    #[error("cancelled")]
+    Cancelled,
 }
 
 pub fn server_candidates(input: &str) -> Result<Vec<Url>, String> {
@@ -96,6 +98,15 @@ impl Client {
 
     pub async fn heartbeat(&self) -> Result<Heartbeat, Error> {
         self.get_json("/api/heartbeat", &[]).await
+    }
+
+    pub async fn server_time(&self) -> Option<std::time::SystemTime> {
+        let resp = self
+            .send(self.request(reqwest::Method::GET, "/api/heartbeat"))
+            .await
+            .ok()?;
+        let date = resp.headers().get(reqwest::header::DATE)?.to_str().ok()?;
+        httpdate::parse_http_date(date).ok()
     }
 
     pub async fn device_init(&self, device_id: &str, name: &str) -> Result<DeviceAuth, Error> {

@@ -1,8 +1,40 @@
 use crate::romm::client::{Client, Error};
 use crate::store::Store;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const PAGE_SIZE: i64 = 500;
+const CURSOR_MARGIN: Duration = Duration::from_secs(60);
+
+pub fn cursor_from(time: SystemTime) -> String {
+    let secs = time
+        .checked_sub(CURSOR_MARGIN)
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .unwrap_or_default()
+        .as_secs();
+    let (y, m, d) = civil_from_days((secs / 86_400) as i64);
+    let rem = secs % 86_400;
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}+00:00",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
+}
+
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    (y, m, d)
+}
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct SyncReport {
@@ -10,22 +42,30 @@ pub struct SyncReport {
     pub removed: usize,
 }
 
-pub async fn sync_library(
+fn write<T>(
+    store: &Mutex<Store>,
+    cancel: &AtomicBool,
+    f: impl FnOnce(&mut Store) -> T,
+) -> Result<T, Error> {
+    let mut store = store.lock().unwrap();
+    if cancel.load(Ordering::SeqCst) {
+        return Err(Error::Cancelled);
+    }
+    Ok(f(&mut store))
+}
+
+async fn fetch_pages(
     client: &Client,
     store: &Mutex<Store>,
     page_size: i64,
-) -> Result<SyncReport, Error> {
-    let platforms = client.platforms().await?;
-    store.lock().unwrap().replace_platforms(&platforms);
-
-    let since = store.lock().unwrap().get("last_sync_at");
+    since: Option<&str>,
+    cancel: &AtomicBool,
+    report: &mut SyncReport,
+) -> Result<Option<String>, Error> {
     let mut newest: Option<String> = None;
-    let mut report = SyncReport::default();
     let mut offset = 0;
     loop {
-        let page = client
-            .roms_page(offset, page_size, since.as_deref())
-            .await?;
+        let page = client.roms_page(offset, page_size, since).await?;
         let count = page.items.len();
         for rom in &page.items {
             if newest
@@ -35,18 +75,46 @@ pub async fn sync_library(
                 newest = Some(rom.updated_at.clone());
             }
         }
-        store.lock().unwrap().upsert_games(&page.items);
+        write(store, cancel, |s| s.upsert_games(&page.items))?;
         report.updated += count;
         offset += count as i64;
         if (count as i64) < page_size {
-            break;
+            return Ok(newest);
         }
     }
+}
+
+pub async fn sync_library(
+    client: &Client,
+    store: &Mutex<Store>,
+    page_size: i64,
+    cancel: &AtomicBool,
+) -> Result<SyncReport, Error> {
+    let started = client.server_time().await;
+    let platforms = client.platforms().await?;
+    write(store, cancel, |s| s.replace_platforms(&platforms))?;
+
+    let since = store.lock().unwrap().get("last_sync_at");
+    let mut report = SyncReport::default();
+    let mut newest = fetch_pages(
+        client,
+        store,
+        page_size,
+        since.as_deref(),
+        cancel,
+        &mut report,
+    )
+    .await?;
 
     let ids = client.rom_ids().await?;
-    report.removed = store.lock().unwrap().retain_games(&ids);
-    if let Some(newest) = newest {
-        store.lock().unwrap().set("last_sync_at", &newest);
+    report.removed = write(store, cancel, |s| s.retain_games(&ids))?;
+    if since.is_some() && store.lock().unwrap().game_count() < ids.len() {
+        let full = fetch_pages(client, store, page_size, None, cancel, &mut report).await?;
+        newest = newest.max(full);
+    }
+
+    if let Some(cursor) = started.map(cursor_from).or(newest) {
+        write(store, cancel, |s| s.set("last_sync_at", &cursor))?;
     }
     Ok(report)
 }
@@ -102,6 +170,10 @@ mod tests {
         ids
     }
 
+    fn go() -> AtomicBool {
+        AtomicBool::new(false)
+    }
+
     fn client(server: &MockServer) -> Client {
         Client::new(base_of(server, "/")).with_token("t".into())
     }
@@ -140,7 +212,9 @@ mod tests {
                 .await;
         }
         let store = store();
-        let report = sync_library(&client(&server), &store, 2).await.unwrap();
+        let report = sync_library(&client(&server), &store, 2, &go())
+            .await
+            .unwrap();
         assert_eq!(
             report,
             SyncReport {
@@ -177,7 +251,9 @@ mod tests {
             s.set("last_sync_at", "2026-01-03T00:00:00+00:00");
             s.upsert_games(&[rom(1, 1, "A", "x"), rom(2, 1, "B", "x")]);
         }
-        let report = sync_library(&client(&server), &store, 500).await.unwrap();
+        let report = sync_library(&client(&server), &store, 500, &go())
+            .await
+            .unwrap();
         assert_eq!(
             report,
             SyncReport {
@@ -205,7 +281,9 @@ mod tests {
             .lock()
             .unwrap()
             .set("last_sync_at", "2026-01-03T00:00:00+00:00");
-        sync_library(&client(&server), &store, 500).await.unwrap();
+        sync_library(&client(&server), &store, 500, &go())
+            .await
+            .unwrap();
         assert_eq!(
             store.lock().unwrap().get("last_sync_at").as_deref(),
             Some("2026-01-03T00:00:00+00:00")
@@ -222,7 +300,7 @@ mod tests {
         let store = store();
         store.lock().unwrap().upsert_games(&[rom(1, 1, "A", "x")]);
         assert!(matches!(
-            sync_library(&client(&server), &store, 500).await,
+            sync_library(&client(&server), &store, 500, &go()).await,
             Err(Error::Unauthorized)
         ));
         assert_eq!(ids(&store), [1]);
@@ -235,7 +313,7 @@ mod tests {
         let client =
             Client::new(url::Url::parse("http://127.0.0.1:9/").unwrap()).with_token("t".into());
         assert!(matches!(
-            sync_library(&client, &store, 500).await,
+            sync_library(&client, &store, 500, &go()).await,
             Err(Error::Unreachable)
         ));
         assert_eq!(ids(&store), [1]);
@@ -253,9 +331,13 @@ mod tests {
             .remove(0);
         let client = Client::new(base).with_token(cfg["token"].as_str().unwrap().into());
         let store = store();
-        let first = sync_library(&client, &store, PAGE_SIZE).await.unwrap();
+        let first = sync_library(&client, &store, PAGE_SIZE, &go())
+            .await
+            .unwrap();
         assert!(first.updated > 0);
-        let second = sync_library(&client, &store, PAGE_SIZE).await.unwrap();
+        let second = sync_library(&client, &store, PAGE_SIZE, &go())
+            .await
+            .unwrap();
         assert!(
             second.updated <= 1,
             "incremental sync refetched {} roms",
@@ -266,5 +348,94 @@ mod tests {
             first.updated,
             store.lock().unwrap().platforms().len()
         );
+    }
+
+    #[test]
+    fn cursor_is_utc_iso_minus_margin() {
+        let t = UNIX_EPOCH + Duration::from_secs(1_790_330_400);
+        assert_eq!(cursor_from(t), "2026-09-25T09:59:00+00:00");
+        assert_eq!(
+            cursor_from(UNIX_EPOCH + Duration::from_secs(951_782_400 + 60)),
+            "2000-02-29T00:00:00+00:00"
+        );
+    }
+
+    #[tokio::test]
+    async fn cursor_comes_from_server_clock_at_start() {
+        let server = server_with(json!([]), json!([1])).await;
+        Mock::given(method("GET"))
+            .and(path("/api/heartbeat"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("date", "Fri, 25 Sep 2026 10:00:00 GMT")
+                    .set_body_json(json!({"SYSTEM": {"VERSION": "5.3.1"}})),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .respond_with(page(vec![rom_json(1, "2026-09-25T10:30:00+00:00")]))
+            .mount(&server)
+            .await;
+        let store = store();
+        sync_library(&client(&server), &store, 500, &go())
+            .await
+            .unwrap();
+        assert_eq!(
+            store.lock().unwrap().get("last_sync_at").as_deref(),
+            Some("2026-09-25T09:59:00+00:00")
+        );
+    }
+
+    #[tokio::test]
+    async fn games_missing_after_incremental_sync_trigger_a_full_pass() {
+        let server = server_with(json!([]), json!([1, 2])).await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("updated_after", "2026-01-03T00:00:00+00:00"))
+            .respond_with(page(vec![]))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param_is_missing("updated_after"))
+            .respond_with(page(vec![
+                rom_json(1, "2026-01-01T00:00:00+00:00"),
+                rom_json(2, "2026-01-01T00:00:00+00:00"),
+            ]))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let store = store();
+        {
+            let mut s = store.lock().unwrap();
+            s.set("last_sync_at", "2026-01-03T00:00:00+00:00");
+            s.upsert_games(&[rom(1, 1, "A", "x")]);
+        }
+        sync_library(&client(&server), &store, 500, &go())
+            .await
+            .unwrap();
+        assert_eq!(ids(&store), [1, 2]);
+    }
+
+    #[tokio::test]
+    async fn cancelled_sync_writes_nothing() {
+        let server = server_with(
+            json!([{"id": 1, "slug": "snes", "display_name": "SNES", "rom_count": 1}]),
+            json!([1]),
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .respond_with(page(vec![rom_json(1, "2026-01-01T00:00:00+00:00")]))
+            .mount(&server)
+            .await;
+        let store = store();
+        let result = sync_library(&client(&server), &store, 500, &AtomicBool::new(true)).await;
+        assert!(matches!(result, Err(Error::Cancelled)));
+        let s = store.lock().unwrap();
+        assert_eq!(s.game_count(), 0);
+        assert!(s.platforms().is_empty());
+        assert_eq!(s.get("last_sync_at"), None);
     }
 }

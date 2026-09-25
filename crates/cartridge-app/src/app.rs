@@ -1,6 +1,6 @@
 use crate::covers::Covers;
 use crate::credentials::{Keychain, TokenStore};
-use crate::grid::{row_count, row_range, CoverSlots};
+use crate::grid::{row_count, row_range, CoverSlots, RecentRows, RECENT_ROWS};
 use crate::romm::client::{check_version, server_candidates, Client, Error};
 use crate::romm::pairing::{PollStep, Poller};
 use crate::romm::types::{DeviceAuth, PollOutcome, User};
@@ -11,14 +11,18 @@ use slint::{
     ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode,
     VecModel, Weak,
 };
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
+use tokio::sync::Semaphore;
 use tokio::task::AbortHandle;
+
+const PARALLEL_DOWNLOADS: usize = 6;
 
 const SCREEN_CONNECT: i32 = 0;
 const SCREEN_PAIRING: i32 = 1;
@@ -29,6 +33,7 @@ struct Shared {
     store: Arc<Mutex<Store>>,
     tokens: Arc<dyn TokenStore>,
     covers: Arc<Covers>,
+    downloads: Arc<Semaphore>,
 }
 
 struct Library {
@@ -38,6 +43,8 @@ struct Library {
     rows: Rc<VecModel<GameRow>>,
     covers: CoverSlots,
     loading: HashSet<i64>,
+    recent: RecentRows,
+    wanted: Arc<Mutex<HashSet<i64>>>,
 }
 
 impl Default for Library {
@@ -49,6 +56,8 @@ impl Default for Library {
             rows: Rc::new(VecModel::default()),
             covers: CoverSlots::with_default_capacity(),
             loading: HashSet::new(),
+            recent: RecentRows::new(RECENT_ROWS),
+            wanted: Arc::default(),
         }
     }
 }
@@ -66,6 +75,8 @@ struct Controller {
     pairing: RefCell<Pairing>,
     client: RefCell<Option<Client>>,
     library: RefCell<Library>,
+    sync_generation: Cell<u64>,
+    sync_cancel: RefCell<Arc<AtomicBool>>,
 }
 
 thread_local! {
@@ -89,6 +100,7 @@ pub fn run() -> anyhow::Result<()> {
         store: Arc::new(Mutex::new(Store::open(&paths::db_path())?)),
         tokens: Arc::new(Keychain),
         covers: Arc::new(Covers::new(paths::covers_dir())),
+        downloads: Arc::new(Semaphore::new(PARALLEL_DOWNLOADS)),
     };
     let ui = AppWindow::new()?;
     let controller = Rc::new(Controller {
@@ -97,6 +109,8 @@ pub fn run() -> anyhow::Result<()> {
         pairing: RefCell::default(),
         client: RefCell::new(None),
         library: RefCell::default(),
+        sync_generation: Cell::new(0),
+        sync_cancel: RefCell::default(),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -218,7 +232,8 @@ impl Controller {
                     ui.set_pair_status(e.into());
                     return;
                 }
-                self.shared.store.lock().unwrap().set("server", &server);
+                self.stop_sync();
+                self.shared.store.lock().unwrap().switch_server(&server);
                 self.enter_library(client.with_token(token));
                 return;
             }
@@ -256,8 +271,10 @@ impl Controller {
 
     fn enter_library(&self, client: Client) {
         *self.client.borrow_mut() = Some(client.clone());
+        self.library.borrow_mut().filter = GameFilter::default();
         if let Some(ui) = self.ui() {
             ui.set_selected_platform(-1);
+            ui.set_search("".into());
             ui.set_screen(SCREEN_LIBRARY);
         }
         self.reload_sidebar();
@@ -286,7 +303,17 @@ impl Controller {
         ui.set_screen(SCREEN_CONNECT);
     }
 
+    fn stop_sync(&self) {
+        self.sync_cancel.borrow().store(true, Ordering::SeqCst);
+        self.sync_generation.set(self.sync_generation.get() + 1);
+        if let Some(ui) = self.ui() {
+            ui.set_syncing(false);
+            ui.set_sync_status("".into());
+        }
+    }
+
     fn sign_out(&self) {
+        self.stop_sync();
         let server = self
             .client
             .borrow_mut()
@@ -358,6 +385,8 @@ impl Controller {
     fn rebuild_rows(&self) {
         let mut lib = self.library.borrow_mut();
         lib.covers.clear();
+        lib.recent.clear();
+        lib.wanted.lock().unwrap().clear();
         let total = lib.games.len();
         let rows: Vec<GameRow> = (0..row_count(total, lib.columns))
             .map(|r| {
@@ -380,12 +409,25 @@ impl Controller {
     }
 
     fn row_shown(&self, row: usize) {
-        let games: Vec<(i64, String)> = {
-            let lib = self.library.borrow();
-            lib.games[row_range(row, lib.games.len(), lib.columns)]
+        let (games, wanted) = {
+            let mut lib = self.library.borrow_mut();
+            let total = lib.games.len();
+            lib.recent.push(row);
+            let visible: HashSet<i64> = lib
+                .recent
+                .rows()
+                .flat_map(|r| {
+                    lib.games[row_range(r, total, lib.columns)]
+                        .iter()
+                        .map(|g| g.id)
+                })
+                .collect();
+            *lib.wanted.lock().unwrap() = visible;
+            let games: Vec<(i64, String)> = lib.games[row_range(row, total, lib.columns)]
                 .iter()
                 .filter_map(|g| Some((g.id, g.cover.clone()?)))
-                .collect()
+                .collect();
+            (games, lib.wanted.clone())
         };
         let Some(client) = self.client.borrow().clone() else {
             return;
@@ -400,13 +442,21 @@ impl Controller {
                 continue;
             }
             let covers = self.shared.covers.clone();
+            let downloads = self.shared.downloads.clone();
+            let wanted = wanted.clone();
             let client = client.clone();
             self.shared.rt.spawn(async move {
-                let result = covers.ensure(&client, id, &cover).await;
+                let _permit = downloads.acquire_owned().await;
+                let result = if wanted.lock().unwrap().contains(&id) {
+                    covers.ensure(&client, id, &cover).await.map(Some)
+                } else {
+                    Ok(None)
+                };
                 on_ui(move |c| {
                     c.library.borrow_mut().loading.remove(&id);
                     match result {
-                        Ok(path) => c.show_cover(id, &path),
+                        Ok(Some(path)) => c.show_cover(id, &path),
+                        Ok(None) => {}
                         Err(e) => tracing::debug!("cover {id}: {e}"),
                     }
                 });
@@ -438,8 +488,11 @@ impl Controller {
     }
 
     fn show_cover(&self, id: i64, path: &Path) {
-        if self.library.borrow().covers.contains(id) {
-            return;
+        {
+            let lib = self.library.borrow();
+            if lib.covers.contains(id) || !lib.wanted.lock().unwrap().contains(&id) {
+                return;
+            }
         }
         let Ok(image) = Image::load_from_path(path) else {
             return;
@@ -461,18 +514,26 @@ impl Controller {
         }
         ui.set_syncing(true);
         ui.set_sync_status("Syncing…".into());
+        let generation = self.sync_generation.get() + 1;
+        self.sync_generation.set(generation);
+        let cancel = Arc::new(AtomicBool::new(false));
+        *self.sync_cancel.borrow_mut() = cancel.clone();
         let store = self.shared.store.clone();
         self.shared.rt.spawn(async move {
-            let result = sync_library(&client, &store, PAGE_SIZE).await;
-            on_ui(move |c| c.sync_finished(result));
+            let result = sync_library(&client, &store, PAGE_SIZE, &cancel).await;
+            on_ui(move |c| c.sync_finished(generation, result));
         });
     }
 
-    fn sync_finished(&self, result: Result<SyncReport, Error>) {
+    fn sync_finished(&self, generation: u64, result: Result<SyncReport, Error>) {
+        if generation != self.sync_generation.get() {
+            return;
+        }
         let Some(ui) = self.ui() else { return };
         ui.set_syncing(false);
         match result {
             Ok(_) => ui.set_sync_status("".into()),
+            Err(Error::Cancelled) => return,
             Err(Error::Unauthorized) => return self.needs_repair(),
             Err(Error::Unreachable) => {
                 ui.set_sync_status("Offline: showing your saved library".into())

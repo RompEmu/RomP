@@ -806,6 +806,7 @@ dependencies = [
  "cartridge-proto",
  "clap",
  "dirs",
+ "httpdate",
  "image",
  "keyring",
  "libc",
