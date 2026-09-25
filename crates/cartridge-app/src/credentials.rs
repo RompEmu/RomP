@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
-
 pub trait TokenStore: Send + Sync {
     fn load(&self, server: &str) -> Option<String>;
     fn save(&self, server: &str, token: &str) -> Result<(), String>;
@@ -32,9 +29,11 @@ impl TokenStore for Keychain {
     }
 }
 
+#[cfg(test)]
 #[derive(Default)]
-pub struct MemoryTokens(Mutex<HashMap<String, String>>);
+pub struct MemoryTokens(std::sync::Mutex<std::collections::HashMap<String, String>>);
 
+#[cfg(test)]
 impl TokenStore for MemoryTokens {
     fn load(&self, server: &str) -> Option<String> {
         self.0.lock().unwrap().get(server).cloned()

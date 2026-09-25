@@ -1,0 +1,153 @@
+import { Button, LineEdit, Spinner } from "std-widgets.slint";
+
+component Connect inherits Rectangle {
+    in-out property <string> server-url;
+    in property <string> error;
+    in property <bool> busy;
+    callback connect();
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                width: 420px;
+                spacing: 14px;
+                Text { text: "Connect to RomM"; font-size: 26px; font-weight: 700; }
+                Text { text: "Enter the address of your RomM server."; color: #888; }
+                url := LineEdit {
+                    placeholder-text: "romm.example.com";
+                    text <=> root.server-url;
+                    enabled: !root.busy;
+                    accepted => { root.connect(); }
+                }
+                if root.error != "": Text { text: root.error; color: #e5484d; wrap: word-wrap; }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+                    if root.busy: Spinner { indeterminate: true; width: 24px; height: 24px; }
+                    Button {
+                        text: "Continue";
+                        primary: true;
+                        enabled: !root.busy && root.server-url != "";
+                        clicked => { root.connect(); }
+                    }
+                }
+            }
+        }
+    }
+    init => { url.focus(); }
+}
+
+component Pairing inherits Rectangle {
+    in property <image> qr;
+    in property <string> link;
+    in property <string> user-code;
+    in property <int> seconds-left;
+    in property <string> status;
+    in property <bool> failed;
+    callback copy-link();
+    callback open-link();
+    callback cancel();
+    callback retry();
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                width: 460px;
+                spacing: 14px;
+                Text { text: "Approve this device"; font-size: 26px; font-weight: 700; }
+                Text {
+                    text: "Scan the code or open the link on a device signed in to RomM, then approve Cartridge.";
+                    color: #888;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Image { source: root.qr; width: 220px; height: 220px; image-rendering: pixelated; }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Text { text: root.user-code; font-size: 30px; font-weight: 700; letter-spacing: 4px; }
+                }
+                Text { text: root.link; horizontal-alignment: center; color: #888; wrap: word-wrap; }
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 10px;
+                    Button { text: "Copy link"; clicked => { root.copy-link(); } }
+                    Button { text: "Open in browser"; clicked => { root.open-link(); } }
+                }
+                Text {
+                    horizontal-alignment: center;
+                    color: root.failed ? #e5484d : #888;
+                    text: root.status != "" ? root.status
+                        : "Waiting for approval… (" + floor(root.seconds-left / 60) + ":"
+                          + (mod(root.seconds-left, 60) < 10 ? "0" : "") + mod(root.seconds-left, 60) + ")";
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 10px;
+                    Button { text: "Back"; clicked => { root.cancel(); } }
+                    if root.failed: Button { text: "Try again"; primary: true; clicked => { root.retry(); } }
+                }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Cartridge";
+    preferred-width: 1100px;
+    preferred-height: 760px;
+    min-width: 640px;
+    min-height: 480px;
+
+    in property <int> screen;
+
+    in-out property <string> server-url;
+    in property <string> connect-error;
+    in property <bool> busy;
+    callback connect();
+
+    in property <image> qr;
+    in property <string> pair-link;
+    in property <string> user-code;
+    in-out property <int> seconds-left;
+    in property <string> pair-status;
+    in property <bool> pair-failed;
+    callback copy-link();
+    callback open-link();
+    callback cancel-pairing();
+    callback retry-pairing();
+
+    in property <string> user-label;
+    callback sign-out();
+
+    if root.screen == 0: Connect {
+        server-url <=> root.server-url;
+        error: root.connect-error;
+        busy: root.busy;
+        connect => { root.connect(); }
+    }
+    if root.screen == 1: Pairing {
+        qr: root.qr;
+        link: root.pair-link;
+        user-code: root.user-code;
+        seconds-left: root.seconds-left;
+        status: root.pair-status;
+        failed: root.pair-failed;
+        copy-link => { root.copy-link(); }
+        open-link => { root.open-link(); }
+        cancel => { root.cancel-pairing(); }
+        retry => { root.retry-pairing(); }
+    }
+    if root.screen == 2: VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+        alignment: start;
+        Text { text: "Signed in as " + root.user-label; font-size: 20px; }
+        Button { text: "Sign out"; clicked => { root.sign-out(); } }
+    }
+}
