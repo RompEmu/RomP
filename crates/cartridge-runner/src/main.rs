@@ -1,6 +1,6 @@
 use anyhow::Context;
 use cartridge_libretro::{self as lr, HwContextProvider as _};
-use cartridge_proto::frame::{FrameWriter, SrcFormat};
+use cartridge_proto::frame::{self, FrameWriter, SrcFormat};
 use cartridge_proto::msg::{AppMsg, RunnerMsg};
 use cartridge_runner::frontend::Frontend;
 use cartridge_runner::ipc::Link;
@@ -57,6 +57,7 @@ fn main() -> anyhow::Result<()> {
 
 fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> {
     let mut frames = FrameWriter::open(&args.frames).context("open frame buffer")?;
+    let _ = frame::unlink(&args.frames);
     std::fs::create_dir_all(&args.save_dir)?;
     std::fs::create_dir_all(&args.system_dir)?;
     lr::set_core_dirs(Some(&args.system_dir), Some(&args.save_dir));
@@ -129,7 +130,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         sample_rate: av.timing.sample_rate,
     });
 
-    let aspect = av.geometry.aspect_ratio;
+    frontend.aspect = av.geometry.aspect_ratio;
     let frame_duration = Duration::from_secs_f64(1.0 / av.timing.fps.max(1.0));
     let mut next_frame_at = Instant::now();
     let mut paused = false;
@@ -165,7 +166,14 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     let (w, h) =
                         hw_gl::hw_frame_size(frontend.hw_frame_width, frontend.hw_frame_height);
                     let pixels = ctx.readback_bgra(w, h);
-                    frames.write(&pixels, w, h, w as usize * 4, SrcFormat::Xrgb8888, aspect);
+                    frames.write(
+                        &pixels,
+                        w,
+                        h,
+                        w as usize * 4,
+                        SrcFormat::Xrgb8888,
+                        frontend.aspect,
+                    );
                 }
             }
             if frontend.video_dirty {
@@ -177,7 +185,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                         v.height,
                         v.pitch,
                         src_format(frontend.video_format),
-                        aspect,
+                        frontend.aspect,
                     );
                 }
             }

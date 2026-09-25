@@ -108,6 +108,7 @@ impl Shm {
                 "frame buffer too small",
             ));
         }
+        // SAFETY: fd is a valid shm descriptor at least SIZE bytes long (checked above).
         let ptr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
@@ -133,6 +134,7 @@ impl Shm {
         self.atomic(8)
     }
 
+    // SAFETY (get_u32/set_u32): offsets are 4-aligned header fields inside the mapping.
     fn get_u32(&self, offset: usize) -> u32 {
         unsafe { std::ptr::read_volatile(self.ptr.add(offset) as *const u32) }
     }
@@ -181,6 +183,7 @@ impl FrameReader {
         let aspect = f32::from_bits(self.shm.get_u32(base + 16));
         let len = width as usize * height as usize * 4;
         out.resize(len, 0);
+        // SAFETY: len fits in the slot; a copy torn by a concurrent write is discarded by the generation re-check.
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.shm.ptr.add(base + SLOT_HEADER),
@@ -257,6 +260,14 @@ impl FrameWriter {
         generation.store(g + 2, Ordering::Release);
         self.shm.seq().store(next, Ordering::Release);
     }
+}
+
+pub fn unlink(name: &str) -> io::Result<()> {
+    let name = CString::new(name)?;
+    if unsafe { libc::shm_unlink(name.as_ptr()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -360,5 +371,22 @@ mod tests {
             io::ErrorKind::NotFound
         );
         FrameReader::create(&name).unwrap();
+    }
+
+    #[test]
+    fn unlinked_buffer_keeps_working_for_both_sides() {
+        let name = unique_name();
+        let reader = FrameReader::create(&name).unwrap();
+        let mut writer = FrameWriter::open(&name).unwrap();
+        unlink(&name).unwrap();
+        assert_eq!(
+            FrameWriter::open(&name).err().unwrap().kind(),
+            io::ErrorKind::NotFound
+        );
+        writer.write(&[1, 2, 3, 0], 1, 1, 4, SrcFormat::Xrgb8888, 1.0);
+        let mut out = Vec::new();
+        assert_eq!(reader.read_into(0, &mut out).unwrap().seq, 1);
+        assert_eq!(out, [3, 2, 1, 255]);
+        drop(reader);
     }
 }
