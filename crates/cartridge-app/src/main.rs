@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 mod covers;
 mod credentials;
+mod grid;
 mod identity;
 mod input;
 mod paths;
