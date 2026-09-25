@@ -85,7 +85,6 @@ pub struct RomFile {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RomDetail {
     pub id: i64,
-    pub platform_id: i64,
     pub platform_slug: String,
     pub fs_name: String,
     pub fs_path: String,
@@ -97,7 +96,6 @@ pub struct RomDetail {
 pub struct Firmware {
     pub id: i64,
     pub file_name: String,
-    pub file_size_bytes: i64,
     pub sha1_hash: Option<String>,
 }
 

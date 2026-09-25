@@ -1,3 +1,6 @@
+mod game;
+
+use crate::cores::Cores;
 use crate::covers::Covers;
 use crate::credentials::{Keychain, TokenStore};
 use crate::grid::{row_count, row_range, CoverSlots, RecentRows, RECENT_ROWS};
@@ -27,6 +30,7 @@ const PARALLEL_DOWNLOADS: usize = 6;
 const SCREEN_CONNECT: i32 = 0;
 const SCREEN_PAIRING: i32 = 1;
 const SCREEN_LIBRARY: i32 = 2;
+const SCREEN_GAME: i32 = 3;
 
 struct Shared {
     rt: Runtime,
@@ -34,6 +38,8 @@ struct Shared {
     tokens: Arc<dyn TokenStore>,
     covers: Arc<Covers>,
     downloads: Arc<Semaphore>,
+    cores: Arc<Cores>,
+    http: reqwest::Client,
 }
 
 struct Library {
@@ -77,6 +83,10 @@ struct Controller {
     library: RefCell<Library>,
     sync_generation: Cell<u64>,
     sync_cancel: RefCell<Arc<AtomicBool>>,
+    game: RefCell<Option<game::GameState>>,
+    downloading: Cell<Option<i64>>,
+    running: RefCell<Option<crate::play::RunningGame>>,
+    offline: Cell<bool>,
 }
 
 thread_local! {
@@ -101,6 +111,8 @@ pub fn run() -> anyhow::Result<()> {
         tokens: Arc::new(Keychain),
         covers: Arc::new(Covers::new(paths::covers_dir())),
         downloads: Arc::new(Semaphore::new(PARALLEL_DOWNLOADS)),
+        cores: Arc::new(Cores::new(paths::cores_dir())),
+        http: reqwest::Client::new(),
     };
     let ui = AppWindow::new()?;
     let controller = Rc::new(Controller {
@@ -111,6 +123,10 @@ pub fn run() -> anyhow::Result<()> {
         library: RefCell::default(),
         sync_generation: Cell::new(0),
         sync_cancel: RefCell::default(),
+        game: RefCell::new(None),
+        downloading: Cell::new(None),
+        running: RefCell::new(None),
+        offline: Cell::new(false),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -138,6 +154,12 @@ impl Controller {
         ui.on_columns_changed(|n| with_controller(|c| c.set_columns(n)));
         ui.on_row_shown(|i| with_controller(|c| c.row_shown(i.max(0) as usize)));
         ui.on_refresh(|| with_controller(|c| c.sync()));
+        ui.on_open_game(|id| with_controller(|c| c.open_game(id as i64)));
+        ui.on_back_to_library(|| with_controller(|c| c.back_to_library()));
+        ui.on_download_game(|| with_controller(|c| c.download_game()));
+        ui.on_cancel_download(|| with_controller(|c| c.cancel_download()));
+        ui.on_play_game(|| with_controller(|c| c.play_game()));
+        ui.on_delete_game(|| with_controller(|c| c.delete_game()));
     }
 
     fn start(&self) {
@@ -398,6 +420,7 @@ impl Controller {
                         platform: g.platform.clone().into(),
                         cover: Image::default(),
                         has_cover: false,
+                        downloaded: g.downloaded,
                     })
                     .collect();
                 GameRow {

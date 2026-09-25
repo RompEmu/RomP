@@ -1,7 +1,7 @@
-import { Button, LineEdit, ListView, Spinner } from "std-widgets.slint";
+import { Button, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner } from "std-widgets.slint";
 
 export struct PlatformEntry { id: int, name: string, count: int }
-export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool }
+export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool }
 export struct GameRow { cards: [GameCard] }
 
 component Connect inherits Rectangle {
@@ -121,8 +121,10 @@ component SidebarItem inherits Rectangle {
 
 component Card inherits Rectangle {
     in property <GameCard> game;
+    callback clicked();
     width: 172px;
     height: 290px;
+    touch := TouchArea { clicked => { root.clicked(); } }
     VerticalLayout {
         spacing: 6px;
         Rectangle {
@@ -145,6 +147,16 @@ component Card inherits Rectangle {
                 width: parent.width - 16px;
                 x: 8px;
             }
+            if root.game.downloaded: Rectangle {
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                width: 22px;
+                height: 22px;
+                border-radius: 11px;
+                background: #2f9e44;
+                Text { text: "✓"; color: white; font-weight: 700; }
+            }
+            if touch.has-hover: Rectangle { background: #ffffff14; }
         }
         Text { text: root.game.title; overflow: elide; font-weight: 600; }
         Text { text: root.game.platform; overflow: elide; color: #888; font-size: 12px; }
@@ -166,6 +178,7 @@ component Library inherits Rectangle {
     callback row-shown(int);
     callback refresh();
     callback sign-out();
+    callback open-game(int);
 
     HorizontalLayout {
         Rectangle {
@@ -228,7 +241,78 @@ component Library inherits Rectangle {
                         alignment: start;
                         init => { root.row-shown(i); }
                         changed index => { root.row-shown(self.index); }
-                        for game in row.cards: Card { game: game; }
+                        for game in row.cards: Card {
+                            game: game;
+                            clicked => { root.open-game(game.id); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+component GamePage inherits Rectangle {
+    in property <string> title;
+    in property <string> platform;
+    in property <string> summary;
+    in property <string> size;
+    in property <image> cover;
+    in property <bool> has-cover;
+    in property <bool> downloaded;
+    in property <bool> busy;
+    in property <bool> playable;
+    in property <bool> can-download;
+    in property <float> progress;
+    in property <string> status;
+    callback back();
+    callback download();
+    callback cancel();
+    callback play();
+    callback delete();
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        HorizontalLayout {
+            alignment: start;
+            Button { text: "← Library"; clicked => { root.back(); } }
+        }
+        HorizontalLayout {
+            spacing: 24px;
+            Rectangle {
+                width: 300px;
+                height: 400px;
+                border-radius: 10px;
+                clip: true;
+                background: #2a2e36;
+                if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: contain; }
+            }
+            VerticalLayout {
+                spacing: 10px;
+                Text { text: root.title; font-size: 28px; font-weight: 700; wrap: word-wrap; }
+                Text { text: root.platform + (root.size != "" ? "  ·  " + root.size : ""); color: #888; }
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: 10px;
+                    if !root.downloaded && !root.busy && root.playable: Button {
+                        text: "Download";
+                        primary: true;
+                        enabled: root.can-download;
+                        clicked => { root.download(); }
+                    }
+                    if root.busy: ProgressIndicator { width: 220px; progress: root.progress; }
+                    if root.busy: Button { text: "Cancel"; clicked => { root.cancel(); } }
+                    if root.downloaded && !root.busy: Button { text: "Play"; primary: true; clicked => { root.play(); } }
+                    if root.downloaded && !root.busy: Button { text: "Delete download"; clicked => { root.delete(); } }
+                }
+                if root.status != "": Text { text: root.status; color: #bbb; wrap: word-wrap; }
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        alignment: start;
+                        Text { text: root.summary; wrap: word-wrap; color: #ccc; }
                     }
                 }
             }
@@ -276,6 +360,25 @@ export component AppWindow inherits Window {
     callback columns-changed(int);
     callback row-shown(int);
     callback refresh();
+    callback open-game(int);
+
+    in property <string> game-title;
+    in property <string> game-platform;
+    in property <string> game-summary;
+    in property <string> game-size;
+    in property <image> game-cover;
+    in property <bool> has-game-cover;
+    in property <bool> game-downloaded;
+    in property <bool> game-busy;
+    in property <bool> game-playable;
+    in property <bool> game-can-download;
+    in property <float> game-progress;
+    in property <string> game-status;
+    callback back-to-library();
+    callback download-game();
+    callback cancel-download();
+    callback play-game();
+    callback delete-game();
 
     if root.screen == 0: Connect {
         server-url <=> root.server-url;
@@ -309,6 +412,26 @@ export component AppWindow inherits Window {
         columns-changed(n) => { root.columns-changed(n); }
         row-shown(i) => { root.row-shown(i); }
         refresh => { root.refresh(); }
+        open-game(id) => { root.open-game(id); }
         sign-out => { root.sign-out(); }
+    }
+    if root.screen == 3: GamePage {
+        title: root.game-title;
+        platform: root.game-platform;
+        summary: root.game-summary;
+        size: root.game-size;
+        cover: root.game-cover;
+        has-cover: root.has-game-cover;
+        downloaded: root.game-downloaded;
+        busy: root.game-busy;
+        playable: root.game-playable;
+        can-download: root.game-can-download;
+        progress: root.game-progress;
+        status: root.game-status;
+        back => { root.back-to-library(); }
+        download => { root.download-game(); }
+        cancel => { root.cancel-download(); }
+        play => { root.play-game(); }
+        delete => { root.delete-game(); }
     }
 }

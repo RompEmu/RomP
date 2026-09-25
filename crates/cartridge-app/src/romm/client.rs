@@ -558,7 +558,6 @@ pub(crate) mod tests {
         let fw = Firmware {
             id: 81,
             file_name: "scph5501.bin".into(),
-            file_size_bytes: 0,
             sha1_hash: None,
         };
         assert_eq!(

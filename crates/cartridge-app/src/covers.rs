@@ -34,6 +34,44 @@ impl Covers {
         ))
     }
 
+    pub fn large_path_for(&self, game_id: i64, cover: &str) -> PathBuf {
+        let ext = cover
+            .split('?')
+            .next()
+            .and_then(|p| p.rsplit_once('.'))
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .filter(|e| matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp"))
+            .unwrap_or_else(|| "png".into());
+        self.dir.join(format!(
+            "large-{game_id}-{:016x}.{ext}",
+            crate::paths::fnv1a(cover.as_bytes())
+        ))
+    }
+
+    pub async fn ensure_large(
+        &self,
+        client: &Client,
+        game_id: i64,
+        cover: &str,
+    ) -> Result<PathBuf, String> {
+        let path = self.large_path_for(game_id, cover);
+        if tokio::fs::try_exists(&path).await.unwrap_or(false) {
+            return Ok(path);
+        }
+        let bytes = client.fetch_bytes(cover).await.map_err(|e| e.to_string())?;
+        tokio::fs::create_dir_all(&self.dir)
+            .await
+            .map_err(|e| e.to_string())?;
+        let tmp = path.with_extension("tmp");
+        tokio::fs::write(&tmp, bytes)
+            .await
+            .map_err(|e| e.to_string())?;
+        tokio::fs::rename(&tmp, &path)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(path)
+    }
+
     pub async fn ensure(
         &self,
         client: &Client,
@@ -118,5 +156,31 @@ mod tests {
         let second = covers.ensure(&client, 7, cover).await.unwrap();
         assert_eq!(first, second);
         assert_eq!(image::open(&first).unwrap().width(), THUMB_WIDTH);
+    }
+
+    #[tokio::test]
+    async fn ensure_large_keeps_original_bytes_once() {
+        let server = MockServer::start().await;
+        let original = png(600, 800);
+        Mock::given(method("GET"))
+            .and(path("/assets/romm/resources/roms/1/7/cover/big.png"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(original.clone()))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let covers = Covers::new(dir.path().to_path_buf());
+        let client = Client::new(base_of(&server, "/"));
+        let cover = "/assets/romm/resources/roms/1/7/cover/big.png?ts=1";
+        let first = covers.ensure_large(&client, 7, cover).await.unwrap();
+        assert_eq!(covers.ensure_large(&client, 7, cover).await.unwrap(), first);
+        assert_eq!(std::fs::read(&first).unwrap(), original);
+        assert!(first
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("large-7-"));
+        assert_eq!(first.extension().unwrap(), "png");
     }
 }

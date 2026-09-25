@@ -102,7 +102,6 @@ mod tests {
     fn rom(multi: bool, files: Vec<RomFile>) -> RomDetail {
         RomDetail {
             id: 1,
-            platform_id: 32,
             platform_slug: "psx".into(),
             fs_name: "Arc III".into(),
             fs_path: "roms/psx".into(),
