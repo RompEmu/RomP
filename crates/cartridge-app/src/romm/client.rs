@@ -199,7 +199,10 @@ impl Client {
         &self,
         req: reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, Error> {
-        let resp = req.send().await.map_err(|_| Error::Unreachable)?;
+        let resp = req.send().await.map_err(|e| {
+            tracing::debug!("request failed: {e:?}");
+            Error::Unreachable
+        })?;
         match resp.status().as_u16() {
             200..=299 => Ok(resp),
             401 => Err(Error::Unauthorized),

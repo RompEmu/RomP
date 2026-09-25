@@ -4,6 +4,7 @@ mod paths;
 mod romm;
 mod session;
 mod store;
+mod sync;
 
 use anyhow::Context;
 use cartridge_proto::msg::RunnerMsg;
