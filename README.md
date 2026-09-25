@@ -1,6 +1,6 @@
 # Cartridge
 
-Play retro games using libretro cores, with each game running in its own sandboxed process.
+Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
 
 ## Running
 
@@ -8,6 +8,14 @@ Requires [rustup](https://rustup.rs) and CMake.
 
 ```sh
 cargo build --release
+./target/release/cartridge
+```
+
+Enter your RomM server address (RomM 5.0 or newer). Approve Cartridge in RomM by scanning the code or opening the link. Your library then appears, and stays available when the server is offline.
+
+To play a game file directly with a libretro core:
+
+```sh
 ./target/release/cartridge --core <libretro core> --rom <game>
 ```
 
@@ -24,4 +32,4 @@ Add `--jit` for cores that use a dynamic recompiler. Cores are available from th
 | F5, F7 | Save, load state |
 | Esc | Quit |
 
-Saves are stored in `~/Library/Application Support/Cartridge` on macOS and `~/.local/share/Cartridge` on Linux.
+Your library cache and saves are stored in `~/Library/Application Support/Cartridge` on macOS and `~/.local/share/Cartridge` on Linux.

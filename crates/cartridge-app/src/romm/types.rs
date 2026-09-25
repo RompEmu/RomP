@@ -32,7 +32,6 @@ pub enum PollOutcome {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct User {
-    pub id: i64,
     pub username: String,
 }
 
@@ -72,7 +71,6 @@ impl Rom {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RomPage {
     pub items: Vec<Rom>,
-    pub total: Option<i64>,
 }
 
 #[cfg(test)]

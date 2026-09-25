@@ -1,4 +1,8 @@
-import { Button, LineEdit, Spinner } from "std-widgets.slint";
+import { Button, LineEdit, ListView, Spinner } from "std-widgets.slint";
+
+export struct PlatformEntry { id: int, name: string, count: int }
+export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool }
+export struct GameRow { cards: [GameCard] }
 
 component Connect inherits Rectangle {
     in-out property <string> server-url;
@@ -97,6 +101,141 @@ component Pairing inherits Rectangle {
     }
 }
 
+
+component SidebarItem inherits Rectangle {
+    in property <string> label;
+    in property <int> count;
+    in property <bool> selected;
+    callback clicked();
+    height: 34px;
+    border-radius: 6px;
+    background: root.selected ? #3a3f4b : touch.has-hover ? #2a2e36 : transparent;
+    touch := TouchArea { clicked => { root.clicked(); } }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        Text { text: root.label; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+        Text { text: root.count; vertical-alignment: center; color: #888; }
+    }
+}
+
+component Card inherits Rectangle {
+    in property <GameCard> game;
+    width: 172px;
+    height: 290px;
+    VerticalLayout {
+        spacing: 6px;
+        Rectangle {
+            height: 230px;
+            border-radius: 8px;
+            clip: true;
+            background: #2a2e36;
+            if root.game.has-cover: Image {
+                source: root.game.cover;
+                width: parent.width;
+                height: parent.height;
+                image-fit: cover;
+            }
+            if !root.game.has-cover: Text {
+                text: root.game.title;
+                color: #aaa;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: parent.width - 16px;
+                x: 8px;
+            }
+        }
+        Text { text: root.game.title; overflow: elide; font-weight: 600; }
+        Text { text: root.game.platform; overflow: elide; color: #888; font-size: 12px; }
+    }
+}
+
+component Library inherits Rectangle {
+    in property <string> user-label;
+    in property <[PlatformEntry]> platforms;
+    in property <int> selected-platform;
+    in property <int> total-games;
+    in property <[GameRow]> rows;
+    in property <string> sync-status;
+    in property <bool> syncing;
+    in-out property <string> search;
+    callback select-platform(int);
+    callback search-edited(string);
+    callback columns-changed(int);
+    callback row-shown(int);
+    callback refresh();
+    callback sign-out();
+
+    HorizontalLayout {
+        Rectangle {
+            width: 240px;
+            background: #1b1e24;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 4px;
+                Text { text: "Cartridge"; font-size: 20px; font-weight: 700; }
+                Rectangle { height: 8px; }
+                SidebarItem {
+                    label: "All games";
+                    count: root.total-games;
+                    selected: root.selected-platform == -1;
+                    clicked => { root.select-platform(-1); }
+                }
+                ListView {
+                    vertical-stretch: 1;
+                    for p in root.platforms: SidebarItem {
+                        label: p.name;
+                        count: p.count;
+                        selected: root.selected-platform == p.id;
+                        clicked => { root.select-platform(p.id); }
+                    }
+                }
+                Text { text: root.user-label; color: #888; overflow: elide; }
+                Button { text: "Sign out"; clicked => { root.sign-out(); } }
+            }
+        }
+        VerticalLayout {
+            padding: 12px;
+            spacing: 10px;
+            HorizontalLayout {
+                spacing: 10px;
+                LineEdit {
+                    placeholder-text: "Search";
+                    text <=> root.search;
+                    edited(text) => { root.search-edited(text); }
+                }
+                Text { text: root.sync-status; color: #888; vertical-alignment: center; }
+                if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
+                Button { text: "Refresh"; enabled: !root.syncing; clicked => { root.refresh(); } }
+            }
+            grid := Rectangle {
+                vertical-stretch: 1;
+                property <int> columns: max(1, floor((self.width - 24px) / 188px));
+                changed columns => { root.columns-changed(self.columns); }
+                init => { root.columns-changed(self.columns); }
+                if root.rows.length == 0: Text {
+                    text: root.syncing ? "Loading your library…" : "No games found.";
+                    color: #888;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                ListView {
+                    for row[i] in root.rows: HorizontalLayout {
+                        property <int> index: i;
+                        padding: 8px;
+                        spacing: 16px;
+                        alignment: start;
+                        init => { root.row-shown(i); }
+                        changed index => { root.row-shown(self.index); }
+                        for game in row.cards: Card { game: game; }
+                    }
+                }
+            }
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "Cartridge";
     preferred-width: 1100px;
@@ -125,6 +264,19 @@ export component AppWindow inherits Window {
     in property <string> user-label;
     callback sign-out();
 
+    in property <[PlatformEntry]> platforms;
+    in property <int> selected-platform: -1;
+    in property <int> total-games;
+    in property <[GameRow]> rows;
+    in property <string> sync-status;
+    in property <bool> syncing;
+    in-out property <string> search;
+    callback select-platform(int);
+    callback search-edited(string);
+    callback columns-changed(int);
+    callback row-shown(int);
+    callback refresh();
+
     if root.screen == 0: Connect {
         server-url <=> root.server-url;
         error: root.connect-error;
@@ -143,11 +295,20 @@ export component AppWindow inherits Window {
         cancel => { root.cancel-pairing(); }
         retry => { root.retry-pairing(); }
     }
-    if root.screen == 2: VerticalLayout {
-        padding: 24px;
-        spacing: 12px;
-        alignment: start;
-        Text { text: "Signed in as " + root.user-label; font-size: 20px; }
-        Button { text: "Sign out"; clicked => { root.sign-out(); } }
+    if root.screen == 2: Library {
+        user-label: root.user-label;
+        platforms: root.platforms;
+        selected-platform: root.selected-platform;
+        total-games: root.total-games;
+        rows: root.rows;
+        sync-status: root.sync-status;
+        syncing: root.syncing;
+        search <=> root.search;
+        select-platform(id) => { root.select-platform(id); }
+        search-edited(text) => { root.search-edited(text); }
+        columns-changed(n) => { root.columns-changed(n); }
+        row-shown(i) => { root.row-shown(i); }
+        refresh => { root.refresh(); }
+        sign-out => { root.sign-out(); }
     }
 }

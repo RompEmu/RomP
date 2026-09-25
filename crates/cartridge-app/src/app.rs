@@ -1,11 +1,19 @@
+use crate::covers::Covers;
 use crate::credentials::{Keychain, TokenStore};
+use crate::grid::{row_count, row_range, CoverSlots};
 use crate::romm::client::{check_version, server_candidates, Client, Error};
 use crate::romm::pairing::{PollStep, Poller};
 use crate::romm::types::{DeviceAuth, PollOutcome, User};
-use crate::store::Store;
-use crate::{identity, paths, qr, AppWindow};
-use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, Weak};
+use crate::store::{GameFilter, GameItem, Store};
+use crate::sync::{sync_library, SyncReport, PAGE_SIZE};
+use crate::{identity, paths, qr, AppWindow, GameCard, GameRow, PlatformEntry};
+use slint::{
+    ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode,
+    VecModel, Weak,
+};
 use std::cell::RefCell;
+use std::collections::HashSet;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -20,6 +28,29 @@ struct Shared {
     rt: Runtime,
     store: Arc<Mutex<Store>>,
     tokens: Arc<dyn TokenStore>,
+    covers: Arc<Covers>,
+}
+
+struct Library {
+    filter: GameFilter,
+    columns: usize,
+    games: Vec<GameItem>,
+    rows: Rc<VecModel<GameRow>>,
+    covers: CoverSlots,
+    loading: HashSet<i64>,
+}
+
+impl Default for Library {
+    fn default() -> Self {
+        Self {
+            filter: GameFilter::default(),
+            columns: 1,
+            games: Vec::new(),
+            rows: Rc::new(VecModel::default()),
+            covers: CoverSlots::with_default_capacity(),
+            loading: HashSet::new(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -34,6 +65,7 @@ struct Controller {
     ui: Weak<AppWindow>,
     pairing: RefCell<Pairing>,
     client: RefCell<Option<Client>>,
+    library: RefCell<Library>,
 }
 
 thread_local! {
@@ -56,6 +88,7 @@ pub fn run() -> anyhow::Result<()> {
         rt: Runtime::new()?,
         store: Arc::new(Mutex::new(Store::open(&paths::db_path())?)),
         tokens: Arc::new(Keychain),
+        covers: Arc::new(Covers::new(paths::covers_dir())),
     };
     let ui = AppWindow::new()?;
     let controller = Rc::new(Controller {
@@ -63,7 +96,9 @@ pub fn run() -> anyhow::Result<()> {
         ui: ui.as_weak(),
         pairing: RefCell::default(),
         client: RefCell::new(None),
+        library: RefCell::default(),
     });
+    ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
     controller.wire(&ui);
     controller.start();
@@ -84,6 +119,11 @@ impl Controller {
         ui.on_cancel_pairing(|| with_controller(|c| c.cancel_pairing()));
         ui.on_retry_pairing(|| with_controller(|c| c.connect()));
         ui.on_sign_out(|| with_controller(|c| c.sign_out()));
+        ui.on_select_platform(|id| with_controller(|c| c.set_platform(id)));
+        ui.on_search_edited(|text| with_controller(|c| c.set_search(text.to_string())));
+        ui.on_columns_changed(|n| with_controller(|c| c.set_columns(n)));
+        ui.on_row_shown(|i| with_controller(|c| c.row_shown(i.max(0) as usize)));
+        ui.on_refresh(|| with_controller(|c| c.sync()));
     }
 
     fn start(&self) {
@@ -217,8 +257,12 @@ impl Controller {
     fn enter_library(&self, client: Client) {
         *self.client.borrow_mut() = Some(client.clone());
         if let Some(ui) = self.ui() {
+            ui.set_selected_platform(-1);
             ui.set_screen(SCREEN_LIBRARY);
         }
+        self.reload_sidebar();
+        self.reload_games();
+        self.sync();
         self.shared.rt.spawn(async move {
             let me = client.me().await;
             on_ui(move |c| c.signed_in(me));
@@ -256,11 +300,187 @@ impl Controller {
             store.clear_library();
             store.remove("server");
         }
+        self.library.borrow_mut().games.clear();
+        self.rebuild_rows();
+        self.reload_sidebar();
         if let Some(ui) = self.ui() {
             ui.set_user_label("".into());
             ui.set_connect_error("".into());
+            ui.set_sync_status("".into());
             ui.set_screen(SCREEN_CONNECT);
         }
+    }
+
+    fn set_platform(&self, id: i32) {
+        self.library.borrow_mut().filter.platform = (id >= 0).then_some(id as i64);
+        if let Some(ui) = self.ui() {
+            ui.set_selected_platform(id);
+        }
+        self.reload_games();
+    }
+
+    fn set_search(&self, text: String) {
+        self.library.borrow_mut().filter.search = text;
+        self.reload_games();
+    }
+
+    fn set_columns(&self, columns: i32) {
+        let columns = columns.max(1) as usize;
+        if self.library.borrow().columns != columns {
+            self.library.borrow_mut().columns = columns;
+            self.rebuild_rows();
+        }
+    }
+
+    fn reload_sidebar(&self) {
+        let Some(ui) = self.ui() else { return };
+        let platforms = self.shared.store.lock().unwrap().platforms();
+        let total: i64 = platforms.iter().map(|p| p.count).sum();
+        let entries: Vec<PlatformEntry> = platforms
+            .into_iter()
+            .map(|p| PlatformEntry {
+                id: p.id as i32,
+                name: p.name.into(),
+                count: p.count as i32,
+            })
+            .collect();
+        ui.set_platforms(ModelRc::new(VecModel::from(entries)));
+        ui.set_total_games(total as i32);
+    }
+
+    fn reload_games(&self) {
+        let filter = self.library.borrow().filter.clone();
+        let games = self.shared.store.lock().unwrap().games(&filter);
+        self.library.borrow_mut().games = games;
+        self.rebuild_rows();
+    }
+
+    fn rebuild_rows(&self) {
+        let mut lib = self.library.borrow_mut();
+        lib.covers.clear();
+        let total = lib.games.len();
+        let rows: Vec<GameRow> = (0..row_count(total, lib.columns))
+            .map(|r| {
+                let cards: Vec<GameCard> = lib.games[row_range(r, total, lib.columns)]
+                    .iter()
+                    .map(|g| GameCard {
+                        id: g.id as i32,
+                        title: g.title.clone().into(),
+                        platform: g.platform.clone().into(),
+                        cover: Image::default(),
+                        has_cover: false,
+                    })
+                    .collect();
+                GameRow {
+                    cards: ModelRc::new(VecModel::from(cards)),
+                }
+            })
+            .collect();
+        lib.rows.set_vec(rows);
+    }
+
+    fn row_shown(&self, row: usize) {
+        let games: Vec<(i64, String)> = {
+            let lib = self.library.borrow();
+            lib.games[row_range(row, lib.games.len(), lib.columns)]
+                .iter()
+                .filter_map(|g| Some((g.id, g.cover.clone()?)))
+                .collect()
+        };
+        let Some(client) = self.client.borrow().clone() else {
+            return;
+        };
+        for (id, cover) in games {
+            let cached = self.shared.covers.path_for(id, &cover);
+            if cached.exists() {
+                self.show_cover(id, &cached);
+                continue;
+            }
+            if !self.library.borrow_mut().loading.insert(id) {
+                continue;
+            }
+            let covers = self.shared.covers.clone();
+            let client = client.clone();
+            self.shared.rt.spawn(async move {
+                let result = covers.ensure(&client, id, &cover).await;
+                on_ui(move |c| {
+                    c.library.borrow_mut().loading.remove(&id);
+                    match result {
+                        Ok(path) => c.show_cover(id, &path),
+                        Err(e) => tracing::debug!("cover {id}: {e}"),
+                    }
+                });
+            });
+        }
+    }
+
+    fn position_of(&self, id: i64) -> Option<(usize, usize)> {
+        let lib = self.library.borrow();
+        let index = lib.games.iter().position(|g| g.id == id)?;
+        let columns = lib.columns.max(1);
+        Some((index / columns, index % columns))
+    }
+
+    fn set_card_cover(&self, id: i64, image: Option<Image>) {
+        let Some((row, col)) = self.position_of(id) else {
+            return;
+        };
+        let rows = self.library.borrow().rows.clone();
+        let Some(row_data) = rows.row_data(row) else {
+            return;
+        };
+        let Some(mut card) = row_data.cards.row_data(col) else {
+            return;
+        };
+        card.has_cover = image.is_some();
+        card.cover = image.unwrap_or_default();
+        row_data.cards.set_row_data(col, card);
+    }
+
+    fn show_cover(&self, id: i64, path: &Path) {
+        if self.library.borrow().covers.contains(id) {
+            return;
+        }
+        let Ok(image) = Image::load_from_path(path) else {
+            return;
+        };
+        self.set_card_cover(id, Some(image));
+        let evicted = self.library.borrow_mut().covers.touch(id);
+        for old in evicted {
+            self.set_card_cover(old, None);
+        }
+    }
+
+    fn sync(&self) {
+        let Some(client) = self.client.borrow().clone() else {
+            return;
+        };
+        let Some(ui) = self.ui() else { return };
+        if ui.get_syncing() {
+            return;
+        }
+        ui.set_syncing(true);
+        ui.set_sync_status("Syncing…".into());
+        let store = self.shared.store.clone();
+        self.shared.rt.spawn(async move {
+            let result = sync_library(&client, &store, PAGE_SIZE).await;
+            on_ui(move |c| c.sync_finished(result));
+        });
+    }
+
+    fn sync_finished(&self, result: Result<SyncReport, Error>) {
+        let Some(ui) = self.ui() else { return };
+        ui.set_syncing(false);
+        match result {
+            Ok(_) => ui.set_sync_status("".into()),
+            Err(Error::Unauthorized) => return self.needs_repair(),
+            Err(Error::Unreachable) => {
+                ui.set_sync_status("Offline: showing your saved library".into())
+            }
+            Err(e) => ui.set_sync_status(format!("Sync failed: {e}").into()),
+        }
+        self.reload_sidebar();
+        self.reload_games();
     }
 }
 

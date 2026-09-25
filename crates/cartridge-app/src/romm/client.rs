@@ -440,7 +440,6 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(page.items[0].id, 4596);
-        assert_eq!(page.total, Some(4596));
     }
 
     #[tokio::test]
