@@ -17,6 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const LOG_TAIL: usize = 40;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const STOP_GRACE: Duration = Duration::from_secs(3);
+const WRITE_TIMEOUT: Duration = Duration::from_millis(50);
 
 pub struct SessionConfig {
     pub runner: PathBuf,
@@ -111,6 +112,7 @@ impl Session {
             }
         };
 
+        stream.set_write_timeout(Some(WRITE_TIMEOUT))?;
         let child = Arc::new(Mutex::new(child));
         let (tx, events) = mpsc::channel();
         let mut reader = stream.try_clone()?;

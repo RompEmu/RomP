@@ -1,4 +1,4 @@
-use cartridge_proto::msg::PadState;
+use cartridge_proto::msg::{AppMsg, PadState};
 use slint::platform::Key;
 
 pub const B: u32 = 0;
@@ -82,6 +82,45 @@ impl Pad {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Command {
+    Send(AppMsg),
+    Quit,
+}
+
+#[derive(Default)]
+pub struct Controls {
+    pad: Pad,
+}
+
+impl Controls {
+    pub fn key(&mut self, text: &str, pressed: bool, repeat: bool) -> Option<Option<Command>> {
+        let action = map_key(text)?;
+        let command = match action {
+            KeyAction::Button(button) => self
+                .pad
+                .set(button, pressed)
+                .map(|state| Command::Send(AppMsg::Pad { port: 0, state })),
+            _ if !pressed || repeat => None,
+            KeyAction::SaveSlot(slot) => Some(Command::Send(AppMsg::SaveSlot(slot))),
+            KeyAction::LoadSlot(slot) => Some(Command::Send(AppMsg::LoadSlot(slot))),
+            KeyAction::Quit => Some(Command::Quit),
+        };
+        Some(command)
+    }
+
+    pub fn release_all(&mut self) -> Option<Command> {
+        if self.pad.state == PadState::default() {
+            return None;
+        }
+        self.pad = Pad::default();
+        Some(Command::Send(AppMsg::Pad {
+            port: 0,
+            state: PadState::default(),
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +175,62 @@ mod tests {
         assert_eq!(pad.set(A, true), None);
         assert_eq!(pad.set(B, true).unwrap().buttons, 1 << A | 1 << B);
         assert_eq!(pad.set(A, false).unwrap().buttons, 1 << B);
+    }
+
+    fn f5() -> String {
+        key(Key::F5)
+    }
+
+    #[test]
+    fn held_hotkey_fires_once() {
+        let mut controls = Controls::default();
+        assert_eq!(
+            controls.key(&f5(), true, false),
+            Some(Some(Command::Send(AppMsg::SaveSlot(1))))
+        );
+        assert_eq!(controls.key(&f5(), true, true), Some(None));
+        assert_eq!(controls.key(&f5(), false, false), Some(None));
+    }
+
+    #[test]
+    fn buttons_send_pad_state_once_per_change() {
+        let mut controls = Controls::default();
+        let pressed = PadState {
+            buttons: 1 << A,
+            axes: [0; 6],
+        };
+        assert_eq!(
+            controls.key("x", true, false),
+            Some(Some(Command::Send(AppMsg::Pad {
+                port: 0,
+                state: pressed
+            })))
+        );
+        assert_eq!(controls.key("x", true, true), Some(None));
+    }
+
+    #[test]
+    fn escape_quits_and_unknown_keys_are_not_handled() {
+        let mut controls = Controls::default();
+        assert_eq!(
+            controls.key(&key(Key::Escape), true, false),
+            Some(Some(Command::Quit))
+        );
+        assert_eq!(controls.key("p", true, false), None);
+    }
+
+    #[test]
+    fn release_all_clears_held_buttons_once() {
+        let mut controls = Controls::default();
+        controls.key("x", true, false);
+        controls.key(&key(Key::UpArrow), true, false);
+        assert_eq!(
+            controls.release_all(),
+            Some(Command::Send(AppMsg::Pad {
+                port: 0,
+                state: PadState::default()
+            }))
+        );
+        assert_eq!(controls.release_all(), None);
     }
 }

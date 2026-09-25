@@ -2,9 +2,10 @@ mod input;
 mod paths;
 mod session;
 
-use cartridge_proto::msg::{AppMsg, RunnerMsg};
+use anyhow::Context;
+use cartridge_proto::msg::RunnerMsg;
 use clap::Parser;
-use input::{KeyAction, Pad};
+use input::{Command, Controls};
 use session::{Session, SessionConfig, SessionEvent};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
 use std::cell::RefCell;
@@ -34,17 +35,20 @@ fn main() -> anyhow::Result<()> {
         .init();
     let args = Args::parse();
     let data = paths::data_dir();
-    let name = args
+    let rom = args
         .rom
+        .canonicalize()
+        .with_context(|| format!("ROM not found: {}", args.rom.display()))?;
+    let name = rom
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
     let cfg = SessionConfig {
         runner: paths::runner_exe()?,
         core: args.core,
-        rom: args.rom,
+        save_dir: data.join("saves").join(paths::local_save_dir_name(&rom)),
+        rom,
         system_dir: data.join("system"),
-        save_dir: data.join("saves").join(format!("local-{name}")),
         jit: args.jit,
         load_slot: None,
     };
@@ -53,28 +57,28 @@ fn main() -> anyhow::Result<()> {
     let ui = GameWindow::new()?;
     ui.set_game_title(format!("{name} — Cartridge").into());
 
-    let pad = RefCell::new(Pad::default());
+    ui.set_status("Starting…".into());
+
+    let controls = Rc::new(RefCell::new(Controls::default()));
     ui.on_key_event({
         let session = session.clone();
-        move |text, pressed| {
-            let Some(action) = input::map_key(&text) else {
-                return false;
-            };
-            let mut session = session.borrow_mut();
-            match action {
-                KeyAction::Button(button) => {
-                    if let Some(state) = pad.borrow_mut().set(button, pressed) {
-                        session.send(&AppMsg::Pad { port: 0, state });
-                    }
+        let controls = controls.clone();
+        move |text, pressed, repeat| match controls.borrow_mut().key(&text, pressed, repeat) {
+            None => false,
+            Some(command) => {
+                if let Some(command) = command {
+                    run(&mut session.borrow_mut(), command);
                 }
-                KeyAction::SaveSlot(slot) if pressed => session.send(&AppMsg::SaveSlot(slot)),
-                KeyAction::LoadSlot(slot) if pressed => session.send(&AppMsg::LoadSlot(slot)),
-                KeyAction::Quit if pressed => {
-                    let _ = slint::quit_event_loop();
-                }
-                _ => {}
+                true
             }
-            true
+        }
+    });
+    ui.on_focus_lost({
+        let session = session.clone();
+        move || {
+            if let Some(command) = controls.borrow_mut().release_all() {
+                run(&mut session.borrow_mut(), command);
+            }
         }
     });
 
@@ -116,6 +120,15 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn run(session: &mut Session, command: Command) {
+    match command {
+        Command::Send(msg) => session.send(&msg),
+        Command::Quit => {
+            let _ = slint::quit_event_loop();
+        }
+    }
+}
+
 fn handle_event(ui: &GameWindow, event: SessionEvent) {
     if let SessionEvent::Ended { code, .. } = &event {
         tracing::info!(?code, "emulator exited");
@@ -127,6 +140,7 @@ fn handle_event(ui: &GameWindow, event: SessionEvent) {
             ..
         }) => {
             tracing::info!("running {core_name} {core_version}");
+            ui.set_status("".into());
         }
         SessionEvent::Runner(RunnerMsg::StateWritten { slot, ok }) => flash(
             ui,

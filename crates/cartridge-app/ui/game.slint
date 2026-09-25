@@ -3,7 +3,8 @@ export component GameWindow inherits Window {
     in property <image> frame;
     in property <float> aspect: 4 / 3;
     in property <string> status;
-    callback key-event(string, bool) -> bool;
+    callback key-event(string, bool, bool) -> bool;
+    callback focus-lost();
 
     title: root.game-title;
     preferred-width: 960px;
@@ -13,10 +14,13 @@ export component GameWindow inherits Window {
 
     keys := FocusScope {
         key-pressed(event) => {
-            return root.key-event(event.text, true) ? EventResult.accept : EventResult.reject;
+            return root.key-event(event.text, true, event.repeat) ? EventResult.accept : EventResult.reject;
+        }
+        focus-lost(reason) => {
+            root.focus-lost();
         }
         key-released(event) => {
-            return root.key-event(event.text, false) ? EventResult.accept : EventResult.reject;
+            return root.key-event(event.text, false, false) ? EventResult.accept : EventResult.reject;
         }
 
         Image {
