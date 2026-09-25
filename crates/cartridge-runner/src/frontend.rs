@@ -15,6 +15,7 @@ pub struct Frontend {
     pub video: Option<VideoFrame>,
     pub video_dirty: bool,
     pub video_format: lr::PixelFormat,
+    pub aspect: f32,
     pub audio: Option<AudioProducer>,
     pub input: InputState,
     pub shutdown: bool,
@@ -29,6 +30,7 @@ impl Frontend {
             video: None,
             video_dirty: false,
             video_format: lr::PixelFormat::Xrgb8888,
+            aspect: 0.0,
             audio: None,
             input: InputState::default(),
             shutdown: false,
@@ -108,5 +110,28 @@ impl lr::Frontend for Frontend {
 
     fn shutdown(&mut self) {
         self.shutdown = true;
+    }
+
+    fn set_geometry(&mut self, geometry: lr::Geometry) {
+        self.aspect = geometry.aspect_ratio;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cartridge_libretro::Frontend as _;
+
+    #[test]
+    fn geometry_changes_update_the_aspect_ratio() {
+        let mut frontend = Frontend::new();
+        frontend.set_geometry(lr::Geometry {
+            base_width: 640,
+            base_height: 448,
+            max_width: 640,
+            max_height: 480,
+            aspect_ratio: 4.0 / 3.0,
+        });
+        assert_eq!(frontend.aspect, 4.0 / 3.0);
     }
 }

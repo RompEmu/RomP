@@ -89,6 +89,18 @@ pub struct Geometry {
     pub aspect_ratio: f32,
 }
 
+impl From<&sys::retro_game_geometry> for Geometry {
+    fn from(g: &sys::retro_game_geometry) -> Self {
+        Self {
+            base_width: g.base_width,
+            base_height: g.base_height,
+            max_width: g.max_width,
+            max_height: g.max_height,
+            aspect_ratio: g.aspect_ratio,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Timing {
     pub fps: f64,
@@ -124,6 +136,7 @@ pub trait Frontend {
     fn input_poll(&mut self);
     fn input_state(&mut self, port: u32, device: u32, index: u32, id: u32) -> i16;
     fn set_pixel_format(&mut self, fmt: PixelFormat) -> bool;
+    fn set_geometry(&mut self, _geometry: Geometry) {}
     fn shutdown(&mut self);
 }
 
@@ -225,13 +238,7 @@ impl Core {
         let mut info = sys::retro_system_av_info::default();
         unsafe { (self.syms.get_system_av_info)(&mut info) };
         AvInfo {
-            geometry: Geometry {
-                base_width: info.geometry.base_width,
-                base_height: info.geometry.base_height,
-                max_width: info.geometry.max_width,
-                max_height: info.geometry.max_height,
-                aspect_ratio: info.geometry.aspect_ratio,
-            },
+            geometry: Geometry::from(&info.geometry),
             timing: Timing {
                 fps: info.timing.fps,
                 sample_rate: info.timing.sample_rate,
@@ -825,6 +832,22 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             store_core_option_defs(unsafe { parse_variables(data as *const sys::retro_variable) });
             true
         }
+        sys::RETRO_ENVIRONMENT_SET_GEOMETRY => {
+            if data.is_null() {
+                return false;
+            }
+            let geometry = Geometry::from(unsafe { &*(data as *const sys::retro_game_geometry) });
+            with_frontend(|f| f.set_geometry(geometry));
+            true
+        }
+        sys::RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO => {
+            if data.is_null() {
+                return false;
+            }
+            let info = unsafe { &*(data as *const sys::retro_system_av_info) };
+            with_frontend(|f| f.set_geometry(Geometry::from(&info.geometry)));
+            true
+        }
         sys::RETRO_ENVIRONMENT_SET_PIXEL_FORMAT => {
             if data.is_null() {
                 return false;
@@ -1049,4 +1072,84 @@ unsafe extern "C" fn input_state_trampoline(
     id: c_uint,
 ) -> i16 {
     with_frontend(|f| f.input_state(port, device, index, id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct Recorder {
+        geometry: Option<Geometry>,
+    }
+
+    impl Frontend for Recorder {
+        fn video_refresh(&mut self, _: Option<VideoFrame<'_>>) {}
+        fn video_refresh_hw(&mut self, _: u32, _: u32) {}
+        fn audio_sample_batch(&mut self, s: &[i16]) -> usize {
+            s.len() / 2
+        }
+        fn input_poll(&mut self) {}
+        fn input_state(&mut self, _: u32, _: u32, _: u32, _: u32) -> i16 {
+            0
+        }
+        fn set_pixel_format(&mut self, _: PixelFormat) -> bool {
+            true
+        }
+        fn shutdown(&mut self) {}
+        fn set_geometry(&mut self, geometry: Geometry) {
+            self.geometry = Some(geometry);
+        }
+    }
+
+    fn raw_geometry(aspect_ratio: f32) -> sys::retro_game_geometry {
+        sys::retro_game_geometry {
+            base_width: 320,
+            base_height: 240,
+            max_width: 640,
+            max_height: 480,
+            aspect_ratio,
+        }
+    }
+
+    #[test]
+    fn set_geometry_reaches_the_frontend() {
+        let mut recorder = Recorder::default();
+        let mut raw = raw_geometry(1.5);
+        let handled = {
+            let _g = FrontendGuard::install(&mut recorder);
+            unsafe {
+                env_trampoline(
+                    sys::RETRO_ENVIRONMENT_SET_GEOMETRY,
+                    &mut raw as *mut _ as *mut c_void,
+                )
+            }
+        };
+        assert!(handled);
+        let g = recorder.geometry.expect("geometry forwarded");
+        assert_eq!(
+            (g.base_width, g.base_height, g.aspect_ratio),
+            (320, 240, 1.5)
+        );
+    }
+
+    #[test]
+    fn set_system_av_info_forwards_its_geometry() {
+        let mut recorder = Recorder::default();
+        let mut raw = sys::retro_system_av_info {
+            geometry: raw_geometry(4.0 / 3.0),
+            ..Default::default()
+        };
+        let handled = {
+            let _g = FrontendGuard::install(&mut recorder);
+            unsafe {
+                env_trampoline(
+                    sys::RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO,
+                    &mut raw as *mut _ as *mut c_void,
+                )
+            }
+        };
+        assert!(handled);
+        assert_eq!(recorder.geometry.unwrap().aspect_ratio, 4.0 / 3.0);
+    }
 }
