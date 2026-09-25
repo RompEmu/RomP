@@ -1,4 +1,6 @@
-use crate::romm::types::{DeviceAuth, Heartbeat, Platform, PollOutcome, RomPage, User};
+use crate::romm::types::{
+    DeviceAuth, Firmware, Heartbeat, Platform, PollOutcome, RomDetail, RomFile, RomPage, User,
+};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use url::Url;
@@ -196,6 +198,38 @@ impl Client {
     pub async fn fetch_bytes(&self, path: &str) -> Result<Vec<u8>, Error> {
         let resp = self.send(self.request(reqwest::Method::GET, path)).await?;
         Ok(resp.bytes().await.map_err(|_| Error::Unreachable)?.to_vec())
+    }
+
+    pub async fn rom_detail(&self, id: i64) -> Result<RomDetail, Error> {
+        self.get_json(&format!("/api/roms/{id}"), &[]).await
+    }
+
+    pub async fn firmware(&self, platform_id: i64) -> Result<Vec<Firmware>, Error> {
+        self.get_json("/api/firmware", &[("platform_id", platform_id.to_string())])
+            .await
+    }
+
+    fn content_url(&self, prefix: &str, file_name: &str) -> Url {
+        let mut url = self.url(prefix);
+        url.path_segments_mut()
+            .expect("http url")
+            .pop_if_empty()
+            .push(file_name);
+        url
+    }
+
+    pub fn rom_file_url(&self, rom_id: i64, file: &RomFile) -> Url {
+        let mut url = self.content_url(&format!("/api/roms/{rom_id}/content/"), &file.file_name);
+        url.query_pairs_mut()
+            .append_pair("file_ids", &file.id.to_string());
+        url
+    }
+
+    pub fn firmware_url(&self, firmware: &Firmware) -> Url {
+        self.content_url(
+            &format!("/api/firmware/{}/content/", firmware.id),
+            &firmware.file_name,
+        )
     }
 
     pub async fn download(&self, url: Url, offset: u64) -> Result<reqwest::Response, Error> {
@@ -505,5 +539,57 @@ pub(crate) mod tests {
             "ZX Spectrum"
         );
         assert_eq!(client.rom_ids().await.unwrap(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn content_urls_encode_names_as_one_segment() {
+        let client = Client::new(Url::parse("https://host/romm/").unwrap());
+        let f = RomFile {
+            id: 3705,
+            file_name: "Arc (Disc 1) #1?.chd".into(),
+            file_path: String::new(),
+            file_size_bytes: 0,
+            sha1_hash: None,
+        };
+        assert_eq!(
+            client.rom_file_url(3672, &f).as_str(),
+            "https://host/romm/api/roms/3672/content/Arc%20(Disc%201)%20%231%3F.chd?file_ids=3705"
+        );
+        let fw = Firmware {
+            id: 81,
+            file_name: "scph5501.bin".into(),
+            file_size_bytes: 0,
+            sha1_hash: None,
+        };
+        assert_eq!(
+            client.firmware_url(&fw).as_str(),
+            "https://host/romm/api/firmware/81/content/scph5501.bin"
+        );
+    }
+
+    #[tokio::test]
+    async fn rom_detail_and_firmware() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/3672"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 3672, "platform_id": 32, "platform_slug": "psx", "fs_name": "Arc III", "fs_path": "roms/psx",
+                "has_multiple_files": true, "files": [{"id": 3705, "file_name": "Disc 1.chd", "file_path": "roms/psx/Arc III",
+                "file_size_bytes": 10, "sha1_hash": "ab", "category": "game"}]})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware"))
+            .and(query_param("platform_id", "32"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": 81, "file_name": "scph5501.bin", "file_path": "bios/psx", "file_size_bytes": 524288, "sha1_hash": null}])))
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        assert_eq!(client.rom_detail(3672).await.unwrap().files[0].id, 3705);
+        assert_eq!(
+            client.firmware(32).await.unwrap()[0].file_name,
+            "scph5501.bin"
+        );
     }
 }

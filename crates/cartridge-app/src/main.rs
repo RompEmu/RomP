@@ -6,6 +6,7 @@ mod download;
 mod grid;
 mod identity;
 mod input;
+mod layout;
 mod paths;
 mod play;
 mod qr;

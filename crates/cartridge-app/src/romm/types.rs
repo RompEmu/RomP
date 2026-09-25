@@ -73,6 +73,34 @@ pub struct RomPage {
     pub items: Vec<Rom>,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RomFile {
+    pub id: i64,
+    pub file_name: String,
+    pub file_path: String,
+    pub file_size_bytes: i64,
+    pub sha1_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RomDetail {
+    pub id: i64,
+    pub platform_id: i64,
+    pub platform_slug: String,
+    pub fs_name: String,
+    pub fs_path: String,
+    pub has_multiple_files: bool,
+    pub files: Vec<RomFile>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Firmware {
+    pub id: i64,
+    pub file_name: String,
+    pub file_size_bytes: i64,
+    pub sha1_hash: Option<String>,
+}
+
 #[cfg(test)]
 pub(crate) fn rom(id: i64, platform_id: i64, name: &str, updated_at: &str) -> Rom {
     Rom {
