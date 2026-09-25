@@ -1,4 +1,4 @@
-use crate::romm::types::{DeviceAuth, Heartbeat, PollOutcome};
+use crate::romm::types::{DeviceAuth, Heartbeat, Platform, PollOutcome, RomPage, User};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use url::Url;
@@ -149,6 +149,44 @@ impl Client {
         }
     }
 
+    pub async fn me(&self) -> Result<User, Error> {
+        self.get_json("/api/users/me", &[]).await
+    }
+
+    pub async fn platforms(&self) -> Result<Vec<Platform>, Error> {
+        self.get_json("/api/platforms", &[]).await
+    }
+
+    pub async fn roms_page(
+        &self,
+        offset: i64,
+        limit: i64,
+        updated_after: Option<&str>,
+    ) -> Result<RomPage, Error> {
+        let mut query = vec![
+            ("offset", offset.to_string()),
+            ("limit", limit.to_string()),
+            ("order_by", "id".to_string()),
+            ("order_dir", "asc".to_string()),
+            ("with_char_index", "false".to_string()),
+            ("with_filter_values", "false".to_string()),
+            ("with_rom_id_index", "false".to_string()),
+        ];
+        if let Some(since) = updated_after {
+            query.push(("updated_after", since.to_string()));
+        }
+        self.get_json("/api/roms", &query).await
+    }
+
+    pub async fn rom_ids(&self) -> Result<Vec<i64>, Error> {
+        self.get_json("/api/roms/identifiers", &[]).await
+    }
+
+    pub async fn fetch_bytes(&self, path: &str) -> Result<Vec<u8>, Error> {
+        let resp = self.send(self.request(reqwest::Method::GET, path)).await?;
+        Ok(resp.bytes().await.map_err(|_| Error::Unreachable)?.to_vec())
+    }
+
     pub(crate) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
         let req = self.http.request(method, self.url(path));
         match &self.token {
@@ -184,7 +222,9 @@ impl Client {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use wiremock::matchers::{body_json, method, path};
+    use wiremock::matchers::{
+        body_json, header, method, path, query_param, query_param_is_missing,
+    };
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     pub(crate) fn base_of(server: &MockServer, sub: &str) -> Url {
@@ -329,5 +369,117 @@ pub(crate) mod tests {
             .await,
             PollOutcome::Approved("rmm_abc".into())
         );
+    }
+
+    fn authed(server: &MockServer) -> Client {
+        Client::new(base_of(server, "/")).with_token("rmm_test".into())
+    }
+
+    #[tokio::test]
+    async fn me_sends_bearer_token() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/users/me"))
+            .and(header("authorization", "Bearer rmm_test"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({"id": 1, "username": "beshr", "role": "admin"}),
+                ),
+            )
+            .mount(&server)
+            .await;
+        assert_eq!(authed(&server).me().await.unwrap().username, "beshr");
+    }
+
+    #[tokio::test]
+    async fn unauthorized_maps_to_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/users/me"))
+            .respond_with(
+                ResponseTemplate::new(401)
+                    .set_body_json(serde_json::json!({"detail": "Not authenticated"})),
+            )
+            .mount(&server)
+            .await;
+        assert!(matches!(
+            authed(&server).me().await,
+            Err(Error::Unauthorized)
+        ));
+    }
+
+    #[tokio::test]
+    async fn roms_page_requests_light_pages_in_id_order() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("offset", "500"))
+            .and(query_param("limit", "500"))
+            .and(query_param("order_by", "id"))
+            .and(query_param("order_dir", "asc"))
+            .and(query_param("with_char_index", "false"))
+            .and(query_param("with_filter_values", "false"))
+            .and(query_param("with_rom_id_index", "false"))
+            .and(query_param("updated_after", "2026-09-25T09:38:20+00:00"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "items": [{
+                    "id": 4596, "platform_id": 47, "name": "Tir Na Nog", "fs_name": "Tir Na Nog.tzx",
+                    "summary": "s", "updated_at": "2026-09-25T09:38:20+00:00",
+                    "path_cover_small": "/assets/romm/resources/roms/47/4596/cover/small.png?ts=2026-09-25 09:38:20",
+                    "path_cover_large": "", "fs_size_bytes": 46857, "files": []
+                }],
+                "total": 4596, "limit": 500, "offset": 500, "char_index": {}, "rom_id_index": [], "filter_values": {}
+            })))
+            .mount(&server)
+            .await;
+        let page = authed(&server)
+            .roms_page(500, 500, Some("2026-09-25T09:38:20+00:00"))
+            .await
+            .unwrap();
+        assert_eq!(page.items[0].id, 4596);
+        assert_eq!(page.total, Some(4596));
+    }
+
+    #[tokio::test]
+    async fn roms_page_without_since_omits_the_filter() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param_is_missing("updated_after"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"items": [], "total": 0})),
+            )
+            .mount(&server)
+            .await;
+        assert!(authed(&server)
+            .roms_page(0, 500, None)
+            .await
+            .unwrap()
+            .items
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn platforms_and_ids() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/platforms"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": 47, "slug": "zxs", "display_name": "ZX Spectrum", "rom_count": 3, "name": "ZX Spectrum"}
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/identifiers"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([1, 2, 3])))
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        assert_eq!(
+            client.platforms().await.unwrap()[0].display_name,
+            "ZX Spectrum"
+        );
+        assert_eq!(client.rom_ids().await.unwrap(), vec![1, 2, 3]);
     }
 }

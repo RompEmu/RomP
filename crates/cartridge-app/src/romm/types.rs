@@ -29,3 +29,81 @@ pub enum PollOutcome {
     Expired,
     Approved(String),
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct User {
+    pub id: i64,
+    pub username: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Platform {
+    pub id: i64,
+    pub slug: String,
+    pub display_name: String,
+    pub rom_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Rom {
+    pub id: i64,
+    pub platform_id: i64,
+    pub name: Option<String>,
+    pub fs_name: String,
+    pub summary: Option<String>,
+    pub updated_at: String,
+    pub path_cover_small: Option<String>,
+    pub path_cover_large: Option<String>,
+    pub fs_size_bytes: i64,
+}
+
+impl Rom {
+    pub fn title(&self) -> &str {
+        match self.name.as_deref().map(str::trim) {
+            Some(name) if !name.is_empty() => name,
+            _ => self
+                .fs_name
+                .rsplit_once('.')
+                .map_or(self.fs_name.as_str(), |(stem, _)| stem),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RomPage {
+    pub items: Vec<Rom>,
+    pub total: Option<i64>,
+}
+
+#[cfg(test)]
+pub(crate) fn rom(id: i64, platform_id: i64, name: &str, updated_at: &str) -> Rom {
+    Rom {
+        id,
+        platform_id,
+        name: Some(name.into()),
+        fs_name: format!("{name}.bin"),
+        summary: None,
+        updated_at: updated_at.into(),
+        path_cover_small: Some(format!(
+            "/assets/romm/resources/roms/{platform_id}/{id}/cover/small.png"
+        )),
+        path_cover_large: None,
+        fs_size_bytes: 1024,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn title_falls_back_to_file_name_without_extension() {
+        let mut r = rom(1, 1, "Tir Na Nog", "t");
+        assert_eq!(r.title(), "Tir Na Nog");
+        r.name = Some("  ".into());
+        r.fs_name = "Tir Na Nog (1984).tzx".into();
+        assert_eq!(r.title(), "Tir Na Nog (1984)");
+        r.name = None;
+        assert_eq!(r.title(), "Tir Na Nog (1984)");
+    }
+}
