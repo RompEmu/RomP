@@ -15,12 +15,28 @@ pub struct GameItem {
     pub title: String,
     pub platform: String,
     pub cover: Option<String>,
+    pub downloaded: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GameDetail {
+    pub id: i64,
+    pub title: String,
+    pub platform_id: i64,
+    pub platform_slug: String,
+    pub platform: String,
+    pub summary: Option<String>,
+    pub size_bytes: i64,
+    pub cover_small: Option<String>,
+    pub cover_large: Option<String>,
+    pub local_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GameFilter {
     pub platform: Option<i64>,
     pub search: String,
+    pub downloaded_only: bool,
 }
 
 pub struct Store {
@@ -62,6 +78,12 @@ impl Store {
 
     fn init(conn: Connection) -> rusqlite::Result<Self> {
         conn.execute_batch(SCHEMA)?;
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version < 1 {
+            conn.execute_batch(
+                "ALTER TABLE games ADD COLUMN local_path TEXT; PRAGMA user_version = 1;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -105,9 +127,14 @@ impl Store {
         let tx = self.conn.transaction().expect("tx");
         for r in roms {
             tx.execute(
-                "INSERT OR REPLACE INTO games
+                "INSERT INTO games
                  (id, platform_id, title, summary, updated_at, cover_small, cover_large, size_bytes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(id) DO UPDATE SET
+                   platform_id = excluded.platform_id, title = excluded.title,
+                   summary = excluded.summary, updated_at = excluded.updated_at,
+                   cover_small = excluded.cover_small, cover_large = excluded.cover_large,
+                   size_bytes = excluded.size_bytes",
                 params![
                     r.id,
                     r.platform_id,
@@ -138,7 +165,7 @@ impl Store {
         }
         let removed = tx
             .execute(
-                "DELETE FROM games WHERE id NOT IN (SELECT id FROM keep)",
+                "DELETE FROM games WHERE id NOT IN (SELECT id FROM keep) AND local_path IS NULL",
                 [],
             )
             .expect("retain");
@@ -180,23 +207,62 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small FROM games g
-                 LEFT JOIN platforms p ON p.id = g.platform_id
+                "SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL
+                 FROM games g LEFT JOIN platforms p ON p.id = g.platform_id
                  WHERE (?1 IS NULL OR g.platform_id = ?1) AND g.title LIKE ?2 ESCAPE '\\'
+                   AND (?3 = 0 OR g.local_path IS NOT NULL)
                  ORDER BY g.title COLLATE NOCASE, g.id",
             )
             .expect("prepare");
-        stmt.query_map(params![filter.platform, pattern], |r| {
-            Ok(GameItem {
-                id: r.get(0)?,
-                title: r.get(1)?,
-                platform: r.get(2)?,
-                cover: r.get(3)?,
-            })
-        })
+        stmt.query_map(
+            params![filter.platform, pattern, filter.downloaded_only],
+            |r| {
+                Ok(GameItem {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    platform: r.get(2)?,
+                    cover: r.get(3)?,
+                    downloaded: r.get(4)?,
+                })
+            },
+        )
         .expect("query")
         .filter_map(Result::ok)
         .collect()
+    }
+
+    pub fn game(&self, id: i64) -> Option<GameDetail> {
+        self.conn
+            .query_row(
+                "SELECT g.id, g.title, g.platform_id, COALESCE(p.slug, ''), COALESCE(p.name, ''),
+                        g.summary, g.size_bytes, g.cover_small, g.cover_large, g.local_path
+                 FROM games g LEFT JOIN platforms p ON p.id = g.platform_id WHERE g.id = ?1",
+                [id],
+                |r| {
+                    Ok(GameDetail {
+                        id: r.get(0)?,
+                        title: r.get(1)?,
+                        platform_id: r.get(2)?,
+                        platform_slug: r.get(3)?,
+                        platform: r.get(4)?,
+                        summary: r.get(5)?,
+                        size_bytes: r.get(6)?,
+                        cover_small: r.get(7)?,
+                        cover_large: r.get(8)?,
+                        local_path: r.get(9)?,
+                    })
+                },
+            )
+            .ok()
+    }
+
+    pub fn set_local_path(&mut self, id: i64, path: Option<&str>) {
+        self.conn
+            .execute(
+                "UPDATE games SET local_path = ?2 WHERE id = ?1",
+                params![id, path],
+            )
+            .expect("set local path");
     }
 
     pub fn switch_server(&mut self, server: &str) {
@@ -288,6 +354,7 @@ mod tests {
         let f = |platform, search: &str| GameFilter {
             platform,
             search: search.into(),
+            downloaded_only: false,
         };
         assert_eq!(ids(&s, f(Some(1), "")), [11, 10]);
         assert_eq!(ids(&s, f(None, "TRI")), [11, 12]);
@@ -301,7 +368,7 @@ mod tests {
         s.upsert_games(&[rom(12, 2, "Tetris DX", "2026-02-01T00:00:00+00:00")]);
         let g = s.games(&GameFilter {
             platform: Some(2),
-            search: String::new(),
+            ..GameFilter::default()
         });
         assert_eq!(g.len(), 1);
         assert_eq!(g[0].title, "Tetris DX");
@@ -373,5 +440,68 @@ mod tests {
         s.switch_server("http://a/");
         assert_eq!(s.game_count(), 1);
         assert_eq!(s.get("last_sync_at").as_deref(), Some("t"));
+    }
+
+    #[test]
+    fn upsert_keeps_local_path() {
+        let mut s = seeded();
+        s.set_local_path(12, Some("/roms/gb/12/Tetris.gb"));
+        s.upsert_games(&[rom(12, 2, "Tetris DX", "2026-02-01T00:00:00+00:00")]);
+        let g = s.game(12).unwrap();
+        assert_eq!(g.title, "Tetris DX");
+        assert_eq!(g.local_path.as_deref(), Some("/roms/gb/12/Tetris.gb"));
+    }
+
+    #[test]
+    fn retain_keeps_downloaded_games() {
+        let mut s = seeded();
+        s.set_local_path(11, Some("/x"));
+        assert_eq!(s.retain_games(&[10]), 1);
+        assert_eq!(ids(&s, GameFilter::default()), [11, 10]);
+    }
+
+    #[test]
+    fn downloaded_only_filter_and_flag() {
+        let mut s = seeded();
+        s.set_local_path(10, Some("/x"));
+        let f = GameFilter {
+            downloaded_only: true,
+            ..GameFilter::default()
+        };
+        let games = s.games(&f);
+        assert_eq!(games.len(), 1);
+        assert!(games[0].downloaded);
+        s.set_local_path(10, None);
+        assert!(s.games(&f).is_empty());
+    }
+
+    #[test]
+    fn game_detail_joins_platform() {
+        let s = seeded();
+        let g = s.game(12).unwrap();
+        assert_eq!(
+            (g.platform_slug.as_str(), g.platform.as_str(), g.size_bytes),
+            ("game boy", "Game Boy", 1024)
+        );
+        assert!(s.game(999).is_none());
+    }
+
+    #[test]
+    fn migrating_a_v0_database_adds_local_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.db");
+        rusqlite::Connection::open(&path)
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE games (id INTEGER PRIMARY KEY, platform_id INTEGER NOT NULL, title TEXT NOT NULL,
+                 summary TEXT, updated_at TEXT NOT NULL, cover_small TEXT, cover_large TEXT, size_bytes INTEGER NOT NULL);
+                 INSERT INTO games VALUES (1, 1, 'A', NULL, 't', NULL, NULL, 5);",
+            )
+            .unwrap();
+        let mut s = Store::open(&path).unwrap();
+        s.set_local_path(1, Some("/x"));
+        assert_eq!(s.game(1).unwrap().local_path.as_deref(), Some("/x"));
+        drop(s);
+        Store::open(&path).unwrap();
     }
 }
