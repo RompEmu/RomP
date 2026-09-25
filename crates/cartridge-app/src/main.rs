@@ -3,6 +3,7 @@ mod app;
 mod covers;
 mod credentials;
 mod download;
+mod fetch;
 mod grid;
 mod identity;
 mod input;
