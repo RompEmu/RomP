@@ -1,0 +1,38 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PadState {
+    pub buttons: u16,
+    pub axes: [i16; 6],
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AppMsg {
+    Pad { port: u8, state: PadState },
+    Pause(bool),
+    SaveSlot(u8),
+    LoadSlot(u8),
+    Shutdown,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RunnerMsg {
+    Started {
+        core_name: String,
+        core_version: String,
+        fps: f64,
+        sample_rate: f64,
+    },
+    SramWritten,
+    StateWritten {
+        slot: u8,
+        ok: bool,
+    },
+    StateLoaded {
+        slot: u8,
+        ok: bool,
+    },
+    Exited {
+        error: Option<String>,
+    },
+}
