@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 mod app;
+mod cores;
 mod covers;
 mod credentials;
 mod download;

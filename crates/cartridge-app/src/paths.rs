@@ -10,6 +10,18 @@ pub fn data_dir() -> PathBuf {
         })
 }
 
+pub fn cores_dir() -> PathBuf {
+    data_dir().join("cores")
+}
+
+pub fn system_dir() -> PathBuf {
+    data_dir().join("system")
+}
+
+pub fn roms_dir() -> PathBuf {
+    data_dir().join("roms")
+}
+
 pub fn covers_dir() -> PathBuf {
     data_dir().join("covers")
 }
