@@ -191,7 +191,11 @@ fn unique_id() -> String {
 
 fn spawn_log_reader(stderr: ChildStderr, tail: Arc<Mutex<VecDeque<String>>>) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+        let mut reader = BufReader::new(stderr);
+        let mut raw = Vec::new();
+        while matches!(reader.read_until(b'\n', &mut raw), Ok(n) if n > 0) {
+            let line = String::from_utf8_lossy(&raw).trim_end().to_string();
+            raw.clear();
             eprintln!("[runner] {line}");
             let mut tail = tail.lock().unwrap();
             if tail.len() == LOG_TAIL {
@@ -280,6 +284,21 @@ mod tests {
             .expect("start should fail");
         let text = format!("{err:#}");
         assert!(text.contains("core exploded"), "{text}");
+    }
+
+    #[test]
+    fn log_survives_non_utf8_stderr_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("fake-runner");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nprintf 'title \\377\\376\\n' >&2\necho 'still logging' >&2\nexit 3\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let err = Session::start(&config(script)).err().unwrap();
+        let text = format!("{err:#}");
+        assert!(text.contains("still logging"), "{text}");
     }
 
     #[test]
