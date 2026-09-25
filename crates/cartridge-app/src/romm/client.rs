@@ -1,4 +1,4 @@
-use crate::romm::types::Heartbeat;
+use crate::romm::types::{DeviceAuth, Heartbeat, PollOutcome};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use url::Url;
@@ -98,6 +98,57 @@ impl Client {
         self.get_json("/api/heartbeat", &[]).await
     }
 
+    pub async fn device_init(&self, device_id: &str, name: &str) -> Result<DeviceAuth, Error> {
+        let body = serde_json::json!({
+            "client_device_identifier": device_id,
+            "name": name,
+            "client": "Cartridge",
+            "platform": std::env::consts::OS,
+            "client_version": env!("CARGO_PKG_VERSION"),
+            "requested_scopes": crate::romm::pairing::SCOPES,
+        });
+        let resp = self
+            .send(
+                self.request(reqwest::Method::POST, "/api/auth/device/init")
+                    .json(&body),
+            )
+            .await?;
+        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    pub async fn device_token(&self, device_code: &str) -> Result<PollOutcome, Error> {
+        #[derive(serde::Deserialize)]
+        struct Token {
+            access_token: String,
+        }
+        #[derive(serde::Deserialize)]
+        struct Detail {
+            detail: String,
+        }
+        let resp = self
+            .request(reqwest::Method::POST, "/api/auth/device/token")
+            .json(&serde_json::json!({ "device_code": device_code }))
+            .send()
+            .await
+            .map_err(|_| Error::Unreachable)?;
+        let decode = |e: reqwest::Error| Error::Decode(e.to_string());
+        match resp.status().as_u16() {
+            200 => Ok(PollOutcome::Approved(
+                resp.json::<Token>().await.map_err(decode)?.access_token,
+            )),
+            429 => Ok(PollOutcome::SlowDown),
+            400 => Ok(
+                match resp.json::<Detail>().await.map_err(decode)?.detail.as_str() {
+                    "authorization_pending" => PollOutcome::Pending,
+                    "slow_down" => PollOutcome::SlowDown,
+                    "access_denied" => PollOutcome::Denied,
+                    _ => PollOutcome::Expired,
+                },
+            ),
+            status => Err(Error::Status(status)),
+        }
+    }
+
     pub(crate) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
         let req = self.http.request(method, self.url(path));
         match &self.token {
@@ -133,7 +184,7 @@ impl Client {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     pub(crate) fn base_of(server: &MockServer, sub: &str) -> Url {
@@ -202,5 +253,81 @@ pub(crate) mod tests {
     async fn unreachable_server_is_reported() {
         let client = Client::new(Url::parse("http://127.0.0.1:9/").unwrap());
         assert!(matches!(client.heartbeat().await, Err(Error::Unreachable)));
+    }
+
+    #[tokio::test]
+    async fn device_init_sends_identity_and_scopes() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/auth/device/init"))
+            .and(body_json(serde_json::json!({
+                "client_device_identifier": "dev-1",
+                "name": "Cartridge on test",
+                "client": "Cartridge",
+                "platform": std::env::consts::OS,
+                "client_version": env!("CARGO_PKG_VERSION"),
+                "requested_scopes": crate::romm::pairing::SCOPES,
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+                "device_code": "d".repeat(64), "user_code": "FDF64KC5",
+                "verification_path": "/pair/device",
+                "verification_path_complete": "/pair/device?user_code=FDF64KC5",
+                "expires_in": 600, "interval": 5
+            })))
+            .mount(&server)
+            .await;
+        let auth = Client::new(base_of(&server, "/"))
+            .device_init("dev-1", "Cartridge on test")
+            .await
+            .unwrap();
+        assert_eq!(auth.user_code, "FDF64KC5");
+        assert_eq!((auth.expires_in, auth.interval), (600, 5));
+    }
+
+    async fn poll_with(status: u16, body: serde_json::Value) -> PollOutcome {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/auth/device/token"))
+            .and(body_json(serde_json::json!({"device_code": "abc"})))
+            .respond_with(ResponseTemplate::new(status).set_body_json(body))
+            .mount(&server)
+            .await;
+        Client::new(base_of(&server, "/"))
+            .device_token("abc")
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn device_token_outcomes() {
+        use serde_json::json;
+        assert_eq!(
+            poll_with(400, json!({"detail": "authorization_pending"})).await,
+            PollOutcome::Pending
+        );
+        assert_eq!(
+            poll_with(400, json!({"detail": "slow_down"})).await,
+            PollOutcome::SlowDown
+        );
+        assert_eq!(
+            poll_with(429, json!({"detail": "Too many polling attempts."})).await,
+            PollOutcome::SlowDown
+        );
+        assert_eq!(
+            poll_with(400, json!({"detail": "access_denied"})).await,
+            PollOutcome::Denied
+        );
+        assert_eq!(
+            poll_with(400, json!({"detail": "expired_token"})).await,
+            PollOutcome::Expired
+        );
+        assert_eq!(
+            poll_with(
+                200,
+                json!({"access_token": "rmm_abc", "device_id": "u", "scopes": [], "expires_at": null})
+            )
+            .await,
+            PollOutcome::Approved("rmm_abc".into())
+        );
     }
 }
