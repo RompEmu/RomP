@@ -12,6 +12,8 @@ cartridge-proto = { workspace = true }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dirs = "6"
+keyring = "4"
+libc = "0.2"
 rusqlite = { version = "0.40", features = ["bundled"] }
 reqwest = { version = "0.13", features = ["json", "query"] }
 serde = { version = "1", features = ["derive"] }

@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+mod credentials;
+mod identity;
 mod input;
 mod paths;
 mod romm;
