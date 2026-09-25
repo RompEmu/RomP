@@ -10,6 +10,10 @@ pub fn data_dir() -> PathBuf {
         })
 }
 
+pub fn covers_dir() -> PathBuf {
+    data_dir().join("covers")
+}
+
 pub fn db_path() -> PathBuf {
     data_dir().join("cartridge.db")
 }
@@ -29,7 +33,7 @@ pub fn local_save_dir_name(rom: &std::path::Path) -> String {
     )
 }
 
-fn fnv1a(bytes: &[u8]) -> u64 {
+pub(crate) fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
         (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
     })

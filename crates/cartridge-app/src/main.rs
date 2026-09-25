@@ -1,8 +1,10 @@
 #![allow(dead_code)]
+mod covers;
 mod credentials;
 mod identity;
 mod input;
 mod paths;
+mod qr;
 mod romm;
 mod session;
 mod store;
