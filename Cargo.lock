@@ -758,6 +758,7 @@ dependencies = [
  "clap",
  "cubeb",
  "landlock",
+ "libc",
  "parking_lot",
  "ringbuf",
  "sevenz-rust",

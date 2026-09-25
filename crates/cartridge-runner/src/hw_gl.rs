@@ -610,3 +610,22 @@ mod platform_impl {
 }
 
 use platform_impl::Platform;
+
+pub const FBO_WIDTH: u32 = 1920;
+pub const FBO_HEIGHT: u32 = 1080;
+
+pub fn hw_frame_size(width: u32, height: u32) -> (u32, u32) {
+    (width.min(FBO_WIDTH), height.min(FBO_HEIGHT))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hw_frame_size_is_clamped_to_the_fbo() {
+        assert_eq!(hw_frame_size(640, 480), (640, 480));
+        assert_eq!(hw_frame_size(2560, 1440), (FBO_WIDTH, FBO_HEIGHT));
+        assert_eq!(hw_frame_size(1920, 1088), (1920, FBO_HEIGHT));
+    }
+}

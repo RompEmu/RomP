@@ -16,6 +16,7 @@ cartridge-proto = { workspace = true }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 cubeb = "0.34"
+libc = "0.2"
 parking_lot = "0.12"
 ringbuf = "0.5"
 sevenz-rust = "0.6"

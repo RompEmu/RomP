@@ -13,6 +13,7 @@ use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 const NUDGE: f64 = 0.02;
+const UNLOAD_GRACE: Duration = Duration::from_secs(2);
 
 #[derive(Parser)]
 #[command(name = "cartridge-runner")]
@@ -60,7 +61,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     std::fs::create_dir_all(&args.system_dir)?;
     lr::set_core_dirs(Some(&args.system_dir), Some(&args.save_dir));
 
-    let hw_ctx = hw_gl::HwGlContext::create(1920, 1080)
+    let hw_ctx = hw_gl::HwGlContext::create(hw_gl::FBO_WIDTH, hw_gl::FBO_HEIGHT)
         .map(Box::new)
         .map_err(|e| warn!("HW GL context unavailable: {e}"))
         .ok();
@@ -73,14 +74,16 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         };
     }
 
+    archive::remove_stale_scratch(&std::env::temp_dir());
     apply_sandbox(args)?;
 
     let mut core = unsafe { lr::Core::load(&args.core) }.context("load core")?;
     let sys = core.system_info();
     info!(core = %sys.library_name, version = %sys.library_version, "core loaded");
+    let session_tag = std::process::id().to_string();
     let rom = archive::open_rom(
         &args.rom,
-        &std::process::id().to_string(),
+        &session_tag,
         sys.need_fullpath,
         &sys.valid_extensions,
     )?;
@@ -130,6 +133,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let frame_duration = Duration::from_secs_f64(1.0 / av.timing.fps.max(1.0));
     let mut next_frame_at = Instant::now();
     let mut paused = false;
+    let mut stop_requested = false;
     loop {
         let now = Instant::now();
         if now < next_frame_at {
@@ -146,20 +150,20 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     let ok = saves.load_state(slot, &mut core, frontend);
                     link.send(&RunnerMsg::StateLoaded { slot, ok });
                 }
-                AppMsg::Shutdown => {
-                    saves.save_on_shutdown(&mut core, frontend);
-                    link.send(&RunnerMsg::Exited { error: None });
-                    std::process::exit(0);
-                }
+                AppMsg::Shutdown => stop_requested = true,
                 AppMsg::Pad { .. } => {}
             }
+        }
+        if stop_requested {
+            break;
         }
         if !paused {
             core.run(frontend);
             if frontend.hw_frame_dirty {
                 frontend.hw_frame_dirty = false;
                 if let Some(ctx) = &hw_ctx {
-                    let (w, h) = (frontend.hw_frame_width, frontend.hw_frame_height);
+                    let (w, h) =
+                        hw_gl::hw_frame_size(frontend.hw_frame_width, frontend.hw_frame_height);
                     let pixels = ctx.readback_bgra(w, h);
                     frames.write(&pixels, w, h, w as usize * 4, SrcFormat::Xrgb8888, aspect);
                 }
@@ -190,9 +194,21 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             next_frame_at = now;
         }
     }
-    saves.flush_sram(&mut core, frontend);
+    if stop_requested {
+        saves.save_on_shutdown(&mut core, frontend);
+        let scratch = archive::scratch_dir(&session_tag);
+        std::thread::spawn(move || {
+            std::thread::sleep(UNLOAD_GRACE);
+            let _ = std::fs::remove_dir_all(scratch);
+            std::process::exit(0);
+        });
+    } else {
+        saves.flush_sram(&mut core, frontend);
+    }
     core.unload_game(frontend);
     lr::uninstall_hw_provider();
+    drop(core);
+    let _ = std::fs::remove_dir_all(archive::scratch_dir(&session_tag));
     Ok(())
 }
 

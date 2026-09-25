@@ -142,7 +142,7 @@ fn open_zip(
         });
     }
 
-    let base = std::env::temp_dir().join(format!("cartridge-rom-{session_id}"));
+    let base = scratch_dir(session_id);
     std::fs::create_dir_all(&base).with_context(|| format!("mkdir {}", base.display()))?;
     let file_name = Path::new(&name)
         .file_name()
@@ -231,7 +231,7 @@ fn open_7z(
         });
     }
 
-    let base = std::env::temp_dir().join(format!("cartridge-rom-{session_id}"));
+    let base = scratch_dir(session_id);
     std::fs::create_dir_all(&base).with_context(|| format!("mkdir {}", base.display()))?;
     let file_name = Path::new(&name)
         .file_name()
@@ -320,7 +320,7 @@ fn extract_disc_image_archive(
     session_id: &str,
     kind: DiscImageKind,
 ) -> Result<LoadedRom> {
-    let base = std::env::temp_dir().join(format!("cartridge-rom-{session_id}"));
+    let base = scratch_dir(session_id);
     std::fs::create_dir_all(&base).with_context(|| format!("mkdir {}", base.display()))?;
 
     let primary_entry_name = match &kind {
@@ -573,4 +573,51 @@ fn parse_gdi_referenced_files(gdi_bytes: &[u8]) -> Vec<String> {
         }
     }
     files
+}
+
+pub fn scratch_dir(session_id: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("cartridge-rom-{session_id}"))
+}
+
+pub fn remove_stale_scratch(tmp: &Path) {
+    let Ok(entries) = std::fs::read_dir(tmp) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name
+            .to_str()
+            .and_then(|n| n.strip_prefix("cartridge-rom-"))
+            .and_then(|p| p.parse::<libc::pid_t>().ok())
+        else {
+            continue;
+        };
+        let dead = unsafe { libc::kill(pid, 0) } != 0
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
+        if dead {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_scratch_dirs_of_dead_runners_are_removed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let live = tmp
+            .path()
+            .join(format!("cartridge-rom-{}", std::process::id()));
+        let dead = tmp.path().join("cartridge-rom-2147483000");
+        let other = tmp.path().join("unrelated");
+        for dir in [&live, &dead, &other] {
+            std::fs::create_dir_all(dir.join("disc")).unwrap();
+        }
+        remove_stale_scratch(tmp.path());
+        assert!(live.exists());
+        assert!(!dead.exists());
+        assert!(other.exists());
+    }
 }
