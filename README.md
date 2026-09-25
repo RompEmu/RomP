@@ -11,7 +11,9 @@ cargo build --release
 ./target/release/cartridge
 ```
 
-Enter your RomM server address (RomM 5.0 or newer). Approve Cartridge in RomM by scanning the code or opening the link. Your library then appears, and stays available when the server is offline.
+Enter your RomM server address (RomM 5.0 or newer). Approve Cartridge in RomM by scanning the code or opening the link.
+
+Open a game from your library to download and play it. Cartridge installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
 
 To play a game file directly with a libretro core:
 
@@ -23,6 +25,8 @@ Add `--jit` for cores that use a dynamic recompiler. Cores are available from th
 
 ## Controls
 
+A connected gamepad controls player 1. On the keyboard:
+
 | Key | Action |
 |---|---|
 | Arrow keys | D-pad |
@@ -32,4 +36,4 @@ Add `--jit` for cores that use a dynamic recompiler. Cores are available from th
 | F5, F7 | Save, load state |
 | Esc | Quit |
 
-Your library cache and saves are stored in `~/Library/Application Support/Cartridge` on macOS and `~/.local/share/Cartridge` on Linux.
+Your games, saves and library cache are stored in `~/Library/Application Support/Cartridge` on macOS and `~/.local/share/Cartridge` on Linux.

@@ -1,9 +1,9 @@
-use crate::input::{Command, Controls};
+use crate::input::{self, Command, Controls};
 use crate::paths;
 use crate::session::{Session, SessionConfig, SessionEvent};
 use crate::GameWindow;
 use anyhow::Context;
-use cartridge_proto::msg::RunnerMsg;
+use cartridge_proto::msg::{PadState, RunnerMsg};
 use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
@@ -116,6 +116,7 @@ pub fn launch(opts: GameOptions, on_closed: impl Fn() + 'static) -> anyhow::Resu
     ui.on_focus_lost({
         let session = session.clone();
         let finish = finish.clone();
+        let controls = controls.clone();
         move || {
             let command = controls.borrow_mut().release_all();
             if let Some(command) = command {
@@ -130,8 +131,16 @@ pub fn launch(opts: GameOptions, on_closed: impl Fn() + 'static) -> anyhow::Resu
         let session = session.clone();
         let mut buf = Vec::new();
         let mut last_seq = 0;
+        let mut gilrs = gilrs::Gilrs::new().ok();
+        let finish = finish.clone();
         move || {
             let Some(ui) = ui.upgrade() else { return };
+            if let Some(gilrs) = gilrs.as_mut() {
+                let command = controls.borrow_mut().set_gamepad(read_gamepad(gilrs));
+                if let Some(command) = command {
+                    apply(&session, command, &finish);
+                }
+            }
             let events = {
                 let session = session.borrow();
                 if let Some(info) = session.frames.read_into(last_seq, &mut buf) {
@@ -163,6 +172,49 @@ pub fn launch(opts: GameOptions, on_closed: impl Fn() + 'static) -> anyhow::Resu
         _timer: timer,
         session,
     })
+}
+
+fn read_gamepad(gilrs: &mut gilrs::Gilrs) -> PadState {
+    use gilrs::{Axis, Button};
+    while gilrs.next_event().is_some() {}
+    let Some((_, pad)) = gilrs.gamepads().find(|(_, g)| g.is_connected()) else {
+        return PadState::default();
+    };
+    let mut state = PadState::default();
+    for button in [
+        Button::South,
+        Button::East,
+        Button::West,
+        Button::North,
+        Button::LeftTrigger,
+        Button::RightTrigger,
+        Button::LeftTrigger2,
+        Button::RightTrigger2,
+        Button::Select,
+        Button::Start,
+        Button::DPadUp,
+        Button::DPadDown,
+        Button::DPadLeft,
+        Button::DPadRight,
+        Button::LeftThumb,
+        Button::RightThumb,
+    ] {
+        if pad.is_pressed(button) {
+            if let Some(bit) = input::retro_button(button) {
+                state.buttons |= 1 << bit;
+            }
+        }
+    }
+    let trigger = |b: Button| (pad.button_data(b).map_or(0.0, |d| d.value()) * 32767.0) as i16;
+    state.axes = [
+        input::stick(pad.value(Axis::LeftStickX), false),
+        input::stick(pad.value(Axis::LeftStickY), true),
+        input::stick(pad.value(Axis::RightStickX), false),
+        input::stick(pad.value(Axis::RightStickY), true),
+        trigger(Button::LeftTrigger2),
+        trigger(Button::RightTrigger2),
+    ];
+    state
 }
 
 fn apply(session: &RefCell<Session>, command: Command, finish: &Rc<dyn Fn()>) {

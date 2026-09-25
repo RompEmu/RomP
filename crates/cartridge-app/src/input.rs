@@ -82,6 +82,45 @@ impl Pad {
     }
 }
 
+pub const L3: u32 = 14;
+pub const R3: u32 = 15;
+const DEADZONE: f32 = 0.15;
+
+pub fn retro_button(button: gilrs::Button) -> Option<u32> {
+    use gilrs::Button::*;
+    Some(match button {
+        South => B,
+        East => A,
+        West => Y,
+        North => X,
+        LeftTrigger => L,
+        RightTrigger => R,
+        LeftTrigger2 => L2,
+        RightTrigger2 => R2,
+        Select => SELECT,
+        Start => START,
+        DPadUp => UP,
+        DPadDown => DOWN,
+        DPadLeft => LEFT,
+        DPadRight => RIGHT,
+        LeftThumb => L3,
+        RightThumb => R3,
+        _ => return None,
+    })
+}
+
+pub fn stick(value: f32, invert: bool) -> i16 {
+    if value.abs() < DEADZONE {
+        return 0;
+    }
+    let v = (value.clamp(-1.0, 1.0) * 32767.0) as i16;
+    if invert {
+        -v
+    } else {
+        v
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Send(AppMsg),
@@ -91,16 +130,18 @@ pub enum Command {
 #[derive(Default)]
 pub struct Controls {
     pad: Pad,
+    gamepad: PadState,
+    sent: PadState,
 }
 
 impl Controls {
     pub fn key(&mut self, text: &str, pressed: bool, repeat: bool) -> Option<Option<Command>> {
         let action = map_key(text)?;
         let command = match action {
-            KeyAction::Button(button) => self
-                .pad
-                .set(button, pressed)
-                .map(|state| Command::Send(AppMsg::Pad { port: 0, state })),
+            KeyAction::Button(button) => {
+                self.pad.set(button, pressed);
+                self.push()
+            }
             _ if !pressed || repeat => None,
             KeyAction::SaveSlot(slot) => Some(Command::Send(AppMsg::SaveSlot(slot))),
             KeyAction::LoadSlot(slot) => Some(Command::Send(AppMsg::LoadSlot(slot))),
@@ -109,15 +150,31 @@ impl Controls {
         Some(command)
     }
 
+    pub fn set_gamepad(&mut self, state: PadState) -> Option<Command> {
+        self.gamepad = state;
+        self.push()
+    }
+
     pub fn release_all(&mut self) -> Option<Command> {
-        if self.pad.state == PadState::default() {
+        self.pad = Pad::default();
+        self.gamepad = PadState::default();
+        self.push()
+    }
+
+    fn merged(&self) -> PadState {
+        PadState {
+            buttons: self.pad.state.buttons | self.gamepad.buttons,
+            axes: self.gamepad.axes,
+        }
+    }
+
+    fn push(&mut self) -> Option<Command> {
+        let state = self.merged();
+        if state == self.sent {
             return None;
         }
-        self.pad = Pad::default();
-        Some(Command::Send(AppMsg::Pad {
-            port: 0,
-            state: PadState::default(),
-        }))
+        self.sent = state;
+        Some(Command::Send(AppMsg::Pad { port: 0, state }))
     }
 }
 
@@ -232,5 +289,52 @@ mod tests {
             }))
         );
         assert_eq!(controls.release_all(), None);
+    }
+
+    #[test]
+    fn gamepad_buttons_map_to_retropad() {
+        use gilrs::Button;
+        assert_eq!(retro_button(Button::South), Some(B));
+        assert_eq!(retro_button(Button::East), Some(A));
+        assert_eq!(retro_button(Button::Start), Some(START));
+        assert_eq!(retro_button(Button::DPadLeft), Some(LEFT));
+        assert_eq!(retro_button(Button::LeftThumb), Some(L3));
+        assert_eq!(retro_button(Button::Mode), None);
+    }
+
+    #[test]
+    fn sticks_have_a_deadzone_and_full_range() {
+        assert_eq!(stick(0.1, false), 0);
+        assert_eq!(stick(1.0, false), 32767);
+        assert_eq!(stick(1.0, true), -32767);
+        assert_eq!(stick(-1.0, false), -32767);
+    }
+
+    #[test]
+    fn keyboard_and_gamepad_are_merged() {
+        let mut controls = Controls::default();
+        controls.key("x", true, false);
+        let pad = PadState {
+            buttons: 1 << B,
+            axes: [100, 0, 0, 0, 0, 0],
+        };
+        assert_eq!(
+            controls.set_gamepad(pad),
+            Some(Command::Send(AppMsg::Pad {
+                port: 0,
+                state: PadState {
+                    buttons: 1 << A | 1 << B,
+                    axes: [100, 0, 0, 0, 0, 0]
+                }
+            }))
+        );
+        assert_eq!(controls.set_gamepad(pad), None);
+        assert_eq!(
+            controls.release_all(),
+            Some(Command::Send(AppMsg::Pad {
+                port: 0,
+                state: PadState::default()
+            }))
+        );
     }
 }
