@@ -1,5 +1,7 @@
+#![allow(dead_code)]
 mod input;
 mod paths;
+mod romm;
 mod session;
 
 use anyhow::Context;

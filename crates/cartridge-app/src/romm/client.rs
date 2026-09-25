@@ -1,0 +1,206 @@
+use crate::romm::types::Heartbeat;
+use serde::de::DeserializeOwned;
+use std::time::Duration;
+use url::Url;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("could not reach the server")]
+    Unreachable,
+    #[error("this device is not signed in to the server")]
+    Unauthorized,
+    #[error("the server answered with status {0}")]
+    Status(u16),
+    #[error("unexpected response from the server: {0}")]
+    Decode(String),
+}
+
+pub fn server_candidates(input: &str) -> Result<Vec<Url>, String> {
+    let input = input.trim().trim_end_matches('/');
+    if input.is_empty() {
+        return Err("Enter your RomM server address.".into());
+    }
+    let raw: Vec<String> = if input.contains("://") {
+        vec![input.to_string()]
+    } else {
+        vec![format!("https://{input}"), format!("http://{input}")]
+    };
+    raw.iter()
+        .map(|s| {
+            let invalid = || format!("\"{input}\" is not a valid address.");
+            let mut url = Url::parse(s).map_err(|_| invalid())?;
+            if !matches!(url.scheme(), "http" | "https") || url.host().is_none() {
+                return Err(invalid());
+            }
+            if !url.path().ends_with('/') {
+                let path = format!("{}/", url.path());
+                url.set_path(&path);
+            }
+            Ok(url)
+        })
+        .collect()
+}
+
+pub fn check_version(version: &str) -> Result<(), String> {
+    if version == "development" {
+        return Ok(());
+    }
+    match version
+        .split('.')
+        .next()
+        .and_then(|m| m.parse::<u32>().ok())
+    {
+        Some(major) if major >= 5 => Ok(()),
+        Some(_) => Err(format!(
+            "This server runs RomM {version}. Cartridge needs RomM 5.0 or newer."
+        )),
+        None => Err(format!("Unrecognised RomM version \"{version}\".")),
+    }
+}
+
+#[derive(Clone)]
+pub struct Client {
+    base: Url,
+    http: reqwest::Client,
+    token: Option<String>,
+}
+
+impl Client {
+    pub fn new(base: Url) -> Self {
+        let http = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("http client");
+        Self {
+            base,
+            http,
+            token: None,
+        }
+    }
+
+    pub fn with_token(mut self, token: String) -> Self {
+        self.token = Some(token);
+        self
+    }
+
+    pub fn base(&self) -> &Url {
+        &self.base
+    }
+
+    pub fn url(&self, path: &str) -> Url {
+        self.base
+            .join(path.trim_start_matches('/'))
+            .expect("relative url")
+    }
+
+    pub async fn heartbeat(&self) -> Result<Heartbeat, Error> {
+        self.get_json("/api/heartbeat", &[]).await
+    }
+
+    pub(crate) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
+        let req = self.http.request(method, self.url(path));
+        match &self.token {
+            Some(token) => req.bearer_auth(token),
+            None => req,
+        }
+    }
+
+    pub(crate) async fn send(
+        &self,
+        req: reqwest::RequestBuilder,
+    ) -> Result<reqwest::Response, Error> {
+        let resp = req.send().await.map_err(|_| Error::Unreachable)?;
+        match resp.status().as_u16() {
+            200..=299 => Ok(resp),
+            401 => Err(Error::Unauthorized),
+            status => Err(Error::Status(status)),
+        }
+    }
+
+    pub(crate) async fn get_json<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<T, Error> {
+        let resp = self
+            .send(self.request(reqwest::Method::GET, path).query(query))
+            .await?;
+        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    pub(crate) fn base_of(server: &MockServer, sub: &str) -> Url {
+        Url::parse(&format!("{}{sub}", server.uri())).unwrap()
+    }
+
+    #[test]
+    fn server_candidates_add_schemes_and_trailing_slash() {
+        let c = server_candidates(" romm.tvpc.home ").unwrap();
+        let c: Vec<_> = c.iter().map(Url::as_str).collect();
+        assert_eq!(c, ["https://romm.tvpc.home/", "http://romm.tvpc.home/"]);
+        let c = server_candidates("http://host:8080/romm").unwrap();
+        assert_eq!(c[0].as_str(), "http://host:8080/romm/");
+        assert_eq!(c.len(), 1);
+    }
+
+    #[test]
+    fn server_candidates_reject_garbage() {
+        assert!(server_candidates("").is_err());
+        assert!(server_candidates("ftp://host").is_err());
+    }
+
+    #[test]
+    fn version_check() {
+        assert!(check_version("5.3.1").is_ok());
+        assert!(check_version("5.0.0-beta.1").is_ok());
+        assert!(check_version("development").is_ok());
+        assert!(check_version("4.9.2").is_err());
+        assert!(check_version("nonsense").is_err());
+    }
+
+    #[test]
+    fn urls_resolve_under_a_sub_path() {
+        let client = Client::new(Url::parse("https://host/romm/").unwrap());
+        assert_eq!(
+            client.url("/api/heartbeat").as_str(),
+            "https://host/romm/api/heartbeat"
+        );
+        assert_eq!(
+            client
+                .url("/assets/romm/resources/roms/1/2/cover/small.png?ts=2026-09-25 09:38:20")
+                .as_str(),
+            "https://host/romm/assets/romm/resources/roms/1/2/cover/small.png?ts=2026-09-25%2009:38:20"
+        );
+    }
+
+    #[tokio::test]
+    async fn heartbeat_reads_version() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/heartbeat"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "SYSTEM": {"VERSION": "5.3.1", "GIT_BRANCH": null, "SHOW_SETUP_WIZARD": false},
+                "FRONTEND": {"DISABLE_USERPASS_LOGIN": false}
+            })))
+            .mount(&server)
+            .await;
+        let hb = Client::new(base_of(&server, "/"))
+            .heartbeat()
+            .await
+            .unwrap();
+        assert_eq!(hb.system.version, "5.3.1");
+    }
+
+    #[tokio::test]
+    async fn unreachable_server_is_reported() {
+        let client = Client::new(Url::parse("http://127.0.0.1:9/").unwrap());
+        assert!(matches!(client.heartbeat().await, Err(Error::Unreachable)));
+    }
+}
