@@ -7,6 +7,14 @@ use thiserror::Error;
 
 mod sys;
 
+// Unlike eprintln!, never panics when stderr is closed; a panic here would abort inside a core callback.
+macro_rules! log {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
 pub use sys::{
     RETRO_DEVICE_ANALOG, RETRO_DEVICE_ID_ANALOG_X, RETRO_DEVICE_ID_ANALOG_Y,
     RETRO_DEVICE_ID_JOYPAD_A, RETRO_DEVICE_ID_JOYPAD_B, RETRO_DEVICE_ID_JOYPAD_DOWN,
@@ -750,7 +758,7 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
                     let text = unsafe { CStr::from_ptr(msg.msg) }
                         .to_string_lossy()
                         .into_owned();
-                    eprintln!("[core OSD] {text} (frames={})", msg.frames);
+                    log!("[core OSD] {text} (frames={})", msg.frames);
                 }
             }
             true
@@ -946,7 +954,7 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
                 return false;
             }
             let cb = unsafe { &mut *(data as *mut sys::retro_hw_render_callback) };
-            eprintln!("[env] SET_HW_RENDER context_type={}", cb.context_type);
+            log!("[env] SET_HW_RENDER context_type={}", cb.context_type);
             let raw = HW_PROVIDER.lock().unwrap().as_ref().map(|r| r.0);
             if let Some(p) = raw {
                 let provider = unsafe { &*p };
@@ -957,19 +965,19 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
                     *HW_CONTEXT_DESTROY.lock().unwrap() = cb.context_destroy;
                     true
                 } else {
-                    eprintln!(
+                    log!(
                         "[env] SET_HW_RENDER unsupported context_type={}",
                         cb.context_type
                     );
                     false
                 }
             } else {
-                eprintln!("[env] SET_HW_RENDER no HW provider");
+                log!("[env] SET_HW_RENDER no HW provider");
                 false
             }
         }
         _ => {
-            eprintln!("[env] unhandled cmd={}", cmd);
+            log!("[env] unhandled cmd={}", cmd);
             false
         }
     }
