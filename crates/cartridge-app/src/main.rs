@@ -2,6 +2,7 @@
 mod app;
 mod covers;
 mod credentials;
+mod download;
 mod grid;
 mod identity;
 mod input;

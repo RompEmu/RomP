@@ -1,0 +1,262 @@
+use crate::romm::client::{Client, Error};
+use std::io::Read;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::io::AsyncWriteExt;
+use url::Url;
+
+#[derive(Debug)]
+pub enum DownloadError {
+    Network(Error),
+    Io(String),
+    HashMismatch,
+    Cancelled,
+    UnsafePath,
+}
+
+impl std::fmt::Display for DownloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Network(Error::Unreachable) => write!(f, "Could not reach the server"),
+            Self::Network(e) => write!(f, "Download failed: {e}"),
+            Self::Io(e) => write!(f, "Could not save the file: {e}"),
+            Self::HashMismatch => write!(f, "The downloaded file is corrupted; try again"),
+            Self::Cancelled => write!(f, "Download cancelled"),
+            Self::UnsafePath => write!(f, "The server sent an invalid file path"),
+        }
+    }
+}
+
+fn io(e: std::io::Error) -> DownloadError {
+    DownloadError::Io(e.to_string())
+}
+
+pub fn sha1_file(path: &Path) -> std::io::Result<String> {
+    use sha1::Digest;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = sha1::Sha1::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+async fn matches(path: &Path, sha1: Option<&str>) -> bool {
+    let Some(expected) = sha1 else {
+        return true;
+    };
+    let path = path.to_path_buf();
+    let expected = expected.to_ascii_lowercase();
+    tokio::task::spawn_blocking(move || sha1_file(&path).is_ok_and(|h| h == expected))
+        .await
+        .unwrap_or(false)
+}
+
+pub async fn download_file(
+    client: &Client,
+    url: Url,
+    dest: &Path,
+    sha1: Option<&str>,
+    progress: &(dyn Fn(u64) + Send + Sync),
+    cancel: &AtomicBool,
+) -> Result<(), DownloadError> {
+    if let Ok(meta) = tokio::fs::metadata(dest).await {
+        if matches(dest, sha1).await {
+            progress(meta.len());
+            return Ok(());
+        }
+    }
+    let dir = dest.parent().ok_or(DownloadError::UnsafePath)?;
+    tokio::fs::create_dir_all(dir).await.map_err(io)?;
+    let name = dest
+        .file_name()
+        .ok_or(DownloadError::UnsafePath)?
+        .to_string_lossy();
+    let part = dir.join(format!("{name}.part"));
+    let mut offset = tokio::fs::metadata(&part)
+        .await
+        .map(|m| m.len())
+        .unwrap_or(0);
+    if cancel.load(Ordering::SeqCst) {
+        return Err(DownloadError::Cancelled);
+    }
+    let mut resp = client
+        .download(url, offset)
+        .await
+        .map_err(DownloadError::Network)?;
+    let mut file = if resp.status().as_u16() == 206 && offset > 0 {
+        tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(&part)
+            .await
+            .map_err(io)?
+    } else {
+        offset = 0;
+        tokio::fs::File::create(&part).await.map_err(io)?
+    };
+    progress(offset);
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|_| DownloadError::Network(Error::Unreachable))?
+    {
+        if cancel.load(Ordering::SeqCst) {
+            file.flush().await.map_err(io)?;
+            return Err(DownloadError::Cancelled);
+        }
+        file.write_all(&chunk).await.map_err(io)?;
+        offset += chunk.len() as u64;
+        progress(offset);
+    }
+    file.flush().await.map_err(io)?;
+    drop(file);
+    if !matches(&part, sha1).await {
+        let _ = tokio::fs::remove_file(&part).await;
+        return Err(DownloadError::HashMismatch);
+    }
+    tokio::fs::rename(&part, dest).await.map_err(io)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::romm::client::tests::base_of;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    const BODY: &[u8] = b"0123456789abcdefghij";
+
+    fn sha1_hex(bytes: &[u8]) -> String {
+        use sha1::Digest;
+        sha1::Sha1::digest(bytes)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
+    }
+
+    async fn serve(server: &MockServer) {
+        Mock::given(method("GET"))
+            .and(path("/f"))
+            .and(header("range", "bytes=10-"))
+            .respond_with(ResponseTemplate::new(206).set_body_bytes(&BODY[10..]))
+            .with_priority(1)
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/f"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(BODY))
+            .with_priority(2)
+            .mount(server)
+            .await;
+    }
+
+    fn setup(server: &MockServer) -> (Client, Url, tempfile::TempDir) {
+        let client = Client::new(base_of(server, "/"));
+        let url = client.url("/f");
+        (client, url, tempfile::tempdir().unwrap())
+    }
+
+    #[tokio::test]
+    async fn downloads_and_verifies() {
+        let server = MockServer::start().await;
+        serve(&server).await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("a/b/game.bin");
+        let seen = std::sync::Mutex::new(0u64);
+        download_file(
+            &client,
+            url,
+            &dest,
+            Some(&sha1_hex(BODY)),
+            &|n| *seen.lock().unwrap() = n,
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), BODY);
+        assert_eq!(*seen.lock().unwrap(), BODY.len() as u64);
+        assert!(!dest.with_file_name("game.bin.part").exists());
+    }
+
+    #[tokio::test]
+    async fn resumes_from_part_file() {
+        let server = MockServer::start().await;
+        serve(&server).await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.bin");
+        std::fs::write(dir.path().join("game.bin.part"), &BODY[..10]).unwrap();
+        download_file(
+            &client,
+            url,
+            &dest,
+            Some(&sha1_hex(BODY)),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), BODY);
+    }
+
+    #[tokio::test]
+    async fn hash_mismatch_deletes_part() {
+        let server = MockServer::start().await;
+        serve(&server).await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.bin");
+        let err = download_file(
+            &client,
+            url,
+            &dest,
+            Some("00"),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, DownloadError::HashMismatch));
+        assert!(!dest.exists());
+        assert!(!dir.path().join("game.bin.part").exists());
+    }
+
+    #[tokio::test]
+    async fn cancel_keeps_part() {
+        let server = MockServer::start().await;
+        serve(&server).await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.bin");
+        let err = download_file(&client, url, &dest, None, &|_| {}, &AtomicBool::new(true))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DownloadError::Cancelled));
+        assert!(!dest.exists());
+    }
+
+    #[tokio::test]
+    async fn existing_verified_file_is_not_downloaded_again() {
+        let server = MockServer::start().await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.bin");
+        std::fs::write(&dest, BODY).unwrap();
+        download_file(
+            &client,
+            url,
+            &dest,
+            Some(&sha1_hex(BODY)),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert!(server.received_requests().await.unwrap().is_empty());
+    }
+}

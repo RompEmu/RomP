@@ -198,6 +198,17 @@ impl Client {
         Ok(resp.bytes().await.map_err(|_| Error::Unreachable)?.to_vec())
     }
 
+    pub async fn download(&self, url: Url, offset: u64) -> Result<reqwest::Response, Error> {
+        let mut req = self.http.get(url);
+        if let Some(token) = &self.token {
+            req = req.bearer_auth(token);
+        }
+        if offset > 0 {
+            req = req.header(reqwest::header::RANGE, format!("bytes={offset}-"));
+        }
+        self.send(req).await
+    }
+
     pub(crate) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
         let req = self.http.request(method, self.url(path));
         match &self.token {
