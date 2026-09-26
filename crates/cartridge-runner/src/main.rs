@@ -54,6 +54,14 @@ fn main() -> anyhow::Result<()> {
         .init();
     let args = Args::parse();
     let mut frontend = Frontend::new();
+    let input = frontend.input.clone();
+    lr::set_input_source(Some(std::sync::Arc::new(move |port, device, index, id| {
+        input.state(port, device, index, id)
+    })));
+    let audio = frontend.audio.clone();
+    lr::set_audio_sink(Some(std::sync::Arc::new(move |samples: &[i16]| {
+        cartridge_runner::audio_pipe::push(&audio, samples)
+    })));
     let link = Link::connect(&args.socket, frontend.input.clone()).context("connect to app")?;
     let result = run(&args, &mut frontend, &link);
     let error = result.as_ref().err().map(|e| format!("{e:#}"));
@@ -111,7 +119,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     if let Some(reset) = lr::take_pending_hw_reset() {
         if let Some(ctx) = &hw_ctx {
             ctx.make_current();
-            unsafe { reset() };
+            lr::with_frontend_installed(frontend, || unsafe { reset() });
         }
     }
     for port in 0..4 {
@@ -132,8 +140,11 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let sample_rate = av.timing.sample_rate.round() as u32;
     let buffer_ms: usize = if cfg!(target_os = "macos") { 250 } else { 500 };
     let (_audio, producer) = audio::open(sample_rate, sample_rate as usize * 2 * buffer_ms / 1000)?;
-    frontend.audio = Some(producer);
-    frontend.volume = args.volume;
+    {
+        let mut pipe = frontend.audio.lock();
+        pipe.set_producer(producer);
+        pipe.set_volume(args.volume);
+    }
     link.send(&RunnerMsg::Started {
         core_name: sys.library_name.clone(),
         core_version: sys.library_version.clone(),
@@ -163,7 +174,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         for msg in link.drain() {
             match msg {
                 AppMsg::Pause(p) => paused = p,
-                AppMsg::Volume(v) => frontend.volume = v,
+                AppMsg::Volume(v) => frontend.audio.lock().set_volume(v),
                 AppMsg::Key {
                     code,
                     character,
@@ -226,11 +237,12 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     );
                 }
             }
+            let (audio_frames, audio_fill) = frontend.audio.lock().take_stats();
             stats.record(
                 run_time,
                 readback_started.elapsed(),
-                std::mem::take(&mut frontend.audio_frames),
-                frontend.audio_fill(),
+                audio_frames,
+                audio_fill,
             );
             if let Some(line) = stats.report(Instant::now()) {
                 info!("{line}");

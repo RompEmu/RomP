@@ -41,6 +41,17 @@ pub struct InputState {
 }
 
 impl InputState {
+    pub fn state(&self, port: u32, device: u32, index: u32, id: u32) -> i16 {
+        match device & lr::RETRO_DEVICE_MASK {
+            lr::RETRO_DEVICE_ANALOG => self.analog(port, index, id),
+            lr::RETRO_DEVICE_POINTER => self.pointer_state(id),
+            lr::RETRO_DEVICE_MOUSE => self.mouse_state(port, id),
+            lr::RETRO_DEVICE_LIGHTGUN => self.lightgun_state(port, id),
+            lr::RETRO_DEVICE_KEYBOARD => self.key_state(id),
+            _ => i16::from(self.is_pressed(port, id)),
+        }
+    }
+
     pub fn set_key(&self, code: u32, down: bool) {
         let mut keys = self.keys.lock();
         if down {

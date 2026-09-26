@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod audio;
+pub mod audio_pipe;
 pub mod frontend;
 pub mod hw_gl;
 pub mod input;

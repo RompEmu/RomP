@@ -460,12 +460,50 @@ impl Drop for FrontendGuard<'_> {
     }
 }
 
-fn with_frontend<R>(f: impl FnOnce(&mut dyn Frontend) -> R) -> R {
-    CURRENT_FRONTEND.with(|c| {
-        let ptr = c
-            .borrow()
-            .expect("libretro callback fired outside of a Core call");
-        unsafe { f(&mut *ptr) }
+pub type InputSource = std::sync::Arc<dyn Fn(u32, u32, u32, u32) -> i16 + Send + Sync>;
+
+static INPUT_SOURCE: std::sync::RwLock<Option<InputSource>> = std::sync::RwLock::new(None);
+
+pub type AudioSink = std::sync::Arc<dyn Fn(&[i16]) -> usize + Send + Sync>;
+
+static AUDIO_SINK: std::sync::RwLock<Option<AudioSink>> = std::sync::RwLock::new(None);
+
+/// Takes audio that cores produce from their own threads, outside any `Core` call.
+pub fn set_audio_sink(sink: Option<AudioSink>) {
+    *AUDIO_SINK.write().unwrap() = sink;
+}
+
+fn send_to_sink(samples: &[i16]) -> usize {
+    let sink = AUDIO_SINK.read().unwrap().clone();
+    sink.map_or(samples.len() / 2, |s| s(samples))
+}
+
+/// Answers input reads that cores make from their own threads, outside any `Core` call.
+pub fn set_input_source(source: Option<InputSource>) {
+    *INPUT_SOURCE.write().unwrap() = source;
+}
+
+/// Runs a call into the core outside the `Core` methods, such as a hardware context reset,
+/// with `frontend` receiving any callbacks the core makes during it.
+pub fn with_frontend_installed<F: Frontend, R>(frontend: &mut F, call: impl FnOnce() -> R) -> R {
+    let _g = FrontendGuard::install(frontend);
+    call()
+}
+
+fn try_frontend<R>(f: impl FnOnce(&mut dyn Frontend) -> R) -> Option<R> {
+    let ptr = CURRENT_FRONTEND.with(|c| *c.borrow())?;
+    Some(unsafe { f(&mut *ptr) })
+}
+
+#[track_caller]
+fn with_frontend<R: Default>(f: impl FnOnce(&mut dyn Frontend) -> R) -> R {
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let caller = std::panic::Location::caller();
+    try_frontend(f).unwrap_or_else(|| {
+        if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            log!("[libretro] ignoring a callback ({caller}) made outside a core call");
+        }
+        R::default()
     })
 }
 
@@ -1118,18 +1156,18 @@ unsafe extern "C" fn video_trampoline(
 
 unsafe extern "C" fn audio_sample_trampoline(left: i16, right: i16) {
     let buf = [left, right];
-    with_frontend(|f| {
-        let _ = f.audio_sample_batch(&buf);
-    });
+    if try_frontend(|f| f.audio_sample_batch(&buf)).is_none() {
+        send_to_sink(&buf);
+    }
 }
 
 unsafe extern "C" fn audio_sample_batch_trampoline(data: *const i16, frames: usize) -> usize {
     let slice = unsafe { std::slice::from_raw_parts(data, frames * 2) };
-    with_frontend(|f| f.audio_sample_batch(slice))
+    try_frontend(|f| f.audio_sample_batch(slice)).unwrap_or_else(|| send_to_sink(slice))
 }
 
 unsafe extern "C" fn input_poll_trampoline() {
-    with_frontend(|f| f.input_poll());
+    let _ = try_frontend(|f| f.input_poll());
 }
 
 unsafe extern "C" fn input_state_trampoline(
@@ -1138,7 +1176,10 @@ unsafe extern "C" fn input_state_trampoline(
     index: c_uint,
     id: c_uint,
 ) -> i16 {
-    with_frontend(|f| f.input_state(port, device, index, id))
+    try_frontend(|f| f.input_state(port, device, index, id)).unwrap_or_else(|| {
+        let source = INPUT_SOURCE.read().unwrap().clone();
+        source.map_or(0, |s| s(port, device, index, id))
+    })
 }
 
 #[cfg(test)]
@@ -1193,11 +1234,14 @@ mod tests {
     #[derive(Default)]
     struct Recorder {
         geometry: Option<Geometry>,
+        hw_frame: Option<(u32, u32)>,
     }
 
     impl Frontend for Recorder {
         fn video_refresh(&mut self, _: Option<VideoFrame<'_>>) {}
-        fn video_refresh_hw(&mut self, _: u32, _: u32) {}
+        fn video_refresh_hw(&mut self, width: u32, height: u32) {
+            self.hw_frame = Some((width, height));
+        }
         fn audio_sample_batch(&mut self, s: &[i16]) -> usize {
             s.len() / 2
         }
@@ -1222,6 +1266,68 @@ mod tests {
             max_height: 480,
             aspect_ratio,
         }
+    }
+
+    static GLOBAL_CALLBACKS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn input_read_from_a_core_thread_uses_the_input_source() {
+        let _serial = GLOBAL_CALLBACKS.lock().unwrap();
+        set_input_source(Some(std::sync::Arc::new(|port, device, _, id| {
+            (port * 100 + device * 10 + id) as i16
+        })));
+        let value = std::thread::spawn(|| unsafe {
+            input_state_trampoline(1, sys::RETRO_DEVICE_JOYPAD, 0, 8)
+        })
+        .join()
+        .unwrap();
+        assert_eq!(value, 118);
+        set_input_source(None);
+    }
+
+    #[test]
+    fn audio_from_a_core_thread_goes_to_the_audio_sink() {
+        let _serial = GLOBAL_CALLBACKS.lock().unwrap();
+        let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        set_audio_sink(Some(std::sync::Arc::new({
+            let heard = heard.clone();
+            move |samples: &[i16]| {
+                heard.lock().unwrap().extend_from_slice(samples);
+                samples.len() / 2
+            }
+        })));
+        let samples = [1i16, 2, 3, 4];
+        let accepted = std::thread::spawn(move || unsafe {
+            audio_sample_batch_trampoline(samples.as_ptr(), 2)
+        })
+        .join()
+        .unwrap();
+        set_audio_sink(None);
+        assert_eq!(accepted, 2);
+        assert_eq!(*heard.lock().unwrap(), [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn stray_callbacks_from_core_threads_are_ignored() {
+        let _serial = GLOBAL_CALLBACKS.lock().unwrap();
+        let samples = [0i16; 4];
+        let accepted = std::thread::spawn(move || unsafe {
+            video_trampoline(sys::RETRO_HW_FRAME_BUFFER_VALID, 640, 480, 0);
+            input_poll_trampoline();
+            audio_sample_batch_trampoline(samples.as_ptr(), 2)
+        })
+        .join()
+        .unwrap();
+        assert_eq!(accepted, 2);
+    }
+
+    #[test]
+    fn frames_presented_during_a_context_reset_reach_the_frontend() {
+        let mut recorder = Recorder::default();
+        with_frontend_installed(&mut recorder, || unsafe {
+            video_trampoline(sys::RETRO_HW_FRAME_BUFFER_VALID, 640, 528, 0)
+        });
+        assert_eq!(recorder.hw_frame, Some((640, 528)));
     }
 
     #[test]

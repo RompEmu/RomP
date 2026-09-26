@@ -1,9 +1,6 @@
-use crate::audio::AudioProducer;
+use crate::audio_pipe::{self, SharedAudio};
 use crate::input::InputState;
-use crate::resample::{apply_volume, RateControl, Resampler};
 use cartridge_libretro as lr;
-use ringbuf::traits::{Observer, Producer};
-use std::time::{Duration, Instant};
 
 pub struct VideoFrame {
     pub data: Vec<u8>,
@@ -17,17 +14,12 @@ pub struct Frontend {
     pub video_dirty: bool,
     pub video_format: lr::PixelFormat,
     pub aspect: f32,
-    pub audio: Option<AudioProducer>,
+    pub audio: SharedAudio,
     pub input: InputState,
     pub shutdown: bool,
     pub hw_frame_dirty: bool,
     pub hw_frame_width: u32,
     pub hw_frame_height: u32,
-    pub audio_frames: u64,
-    resampler: Resampler,
-    resampled: Vec<i16>,
-    rate: RateControl,
-    pub volume: u8,
 }
 
 impl Frontend {
@@ -37,24 +29,12 @@ impl Frontend {
             video_dirty: false,
             video_format: lr::PixelFormat::Xrgb8888,
             aspect: 0.0,
-            audio: None,
+            audio: SharedAudio::default(),
             input: InputState::default(),
             shutdown: false,
             hw_frame_dirty: false,
             hw_frame_width: 0,
             hw_frame_height: 0,
-            audio_frames: 0,
-            resampler: Resampler::default(),
-            resampled: Vec::new(),
-            rate: RateControl::default(),
-            volume: 100,
-        }
-    }
-
-    pub fn audio_fill(&self) -> f32 {
-        match &self.audio {
-            Some(a) => a.occupied_len() as f32 / a.capacity().get() as f32,
-            None => 1.0,
         }
     }
 }
@@ -90,31 +70,7 @@ impl lr::Frontend for Frontend {
     }
 
     fn audio_sample_batch(&mut self, samples: &[i16]) -> usize {
-        self.audio_frames += samples.len() as u64 / 2;
-        let fill = self.audio_fill();
-        let Self {
-            audio,
-            resampler,
-            resampled,
-            rate,
-            volume,
-            ..
-        } = self;
-        if let Some(a) = audio {
-            resampled.clear();
-            resampler.process(samples, rate.ratio(fill), resampled);
-            apply_volume(resampled, *volume);
-            // Blocking here paces cores that emulate on their own thread.
-            let deadline = Instant::now() + Duration::from_millis(500);
-            let mut pushed = 0;
-            while pushed < resampled.len() && Instant::now() < deadline {
-                pushed += a.push_slice(&resampled[pushed..]);
-                if pushed < resampled.len() {
-                    std::thread::sleep(Duration::from_millis(1));
-                }
-            }
-        }
-        samples.len() / 2
+        audio_pipe::push(&self.audio, samples)
     }
 
     fn input_poll(&mut self) {
@@ -122,14 +78,7 @@ impl lr::Frontend for Frontend {
     }
 
     fn input_state(&mut self, port: u32, device: u32, index: u32, id: u32) -> i16 {
-        match device & lr::RETRO_DEVICE_MASK {
-            lr::RETRO_DEVICE_ANALOG => self.input.analog(port, index, id),
-            lr::RETRO_DEVICE_POINTER => self.input.pointer_state(id),
-            lr::RETRO_DEVICE_MOUSE => self.input.mouse_state(port, id),
-            lr::RETRO_DEVICE_LIGHTGUN => self.input.lightgun_state(port, id),
-            lr::RETRO_DEVICE_KEYBOARD => self.input.key_state(id),
-            _ => i16::from(self.input.is_pressed(port, id)),
-        }
+        self.input.state(port, device, index, id)
     }
 
     fn set_pixel_format(&mut self, fmt: lr::PixelFormat) -> bool {
