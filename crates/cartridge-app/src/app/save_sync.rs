@@ -142,8 +142,16 @@ impl Controller {
                 .unwrap()
                 .set(&version_key(detail.id), version);
         }
-        let (Some(device), Some(game)) = (self.sync_device(), self.game_saves(&detail)) else {
+        let Some(game) = self.game_saves(&detail) else {
             return;
+        };
+        let Some(device) = self.sync_device() else {
+            self.shared.store.lock().unwrap().add_pending(detail.id);
+            return self.game_status(
+                detail.id,
+                "Save sync is off. Choose \"Pair again to turn on save sync\" in the library."
+                    .into(),
+            );
         };
         let client = self.client.borrow().clone();
         let Some(client) = client.filter(|_| !self.offline.get()) else {
