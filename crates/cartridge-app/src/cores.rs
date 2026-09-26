@@ -163,6 +163,22 @@ static CORES: &[(&[&str], CoreInfo)] = &[
     ),
     (&["ps2"], core("play", "Play!", "play_libretro", true)),
     (
+        &["ngc", "wii"],
+        core("dolphin", "Dolphin", "dolphin_libretro", true),
+    ),
+    (
+        &["msx", "msx2", "msx2plus"],
+        core("bluemsx", "blueMSX", "bluemsx_libretro", false),
+    ),
+    (
+        &["colecovision"],
+        core("gearcoleco", "Gearcoleco", "gearcoleco_libretro", false),
+    ),
+    (
+        &["philips-cd-i"],
+        core("same_cdi", "SAME CDi", "same_cdi_libretro", false),
+    ),
+    (
         &crate::bios::ARCADE,
         core("fbneo", "FinalBurn Neo", "fbneo_libretro", false),
     ),
@@ -261,6 +277,89 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
+}
+
+pub const SYSTEM_FILES: &str = "https://buildbot.libretro.com/assets/system";
+
+const SYSTEM_FILE_SETS: [(&str, &str, &str); 3] = [
+    ("dolphin", "Dolphin.zip", "dolphin-emu/Sys/codehandler.bin"),
+    ("bluemsx", "blueMSX.zip", "Databases/msxromdb.xml"),
+    ("ppsspp", "PPSSPP.zip", "PPSSPP/ppge_atlas.zim"),
+];
+
+fn system_file_set(core: &CoreInfo) -> Option<(&'static str, &'static str)> {
+    SYSTEM_FILE_SETS
+        .iter()
+        .find(|(id, _, _)| *id == core.id)
+        .map(|(_, zip, marker)| (*zip, *marker))
+}
+
+pub fn system_files_present(core: &CoreInfo, system_dir: &std::path::Path) -> bool {
+    system_file_set(core).is_none_or(|(_, marker)| system_dir.join(marker).exists())
+}
+
+pub async fn install_system_files(
+    http: &reqwest::Client,
+    base: &str,
+    core: &CoreInfo,
+    system_dir: &std::path::Path,
+) -> Result<(), String> {
+    let Some((zip_name, marker)) = system_file_set(core) else {
+        return Ok(());
+    };
+    if system_dir.join(marker).exists() {
+        return Ok(());
+    }
+    let resp = http
+        .get(format!("{base}/{zip_name}"))
+        .send()
+        .await
+        .map_err(|_| "Could not reach the download server".to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!(
+            "{}'s system files are not available ({})",
+            core.name,
+            resp.status()
+        ));
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    let system_dir = system_dir.to_path_buf();
+    let marker = PathBuf::from(marker);
+    tokio::task::spawn_blocking(move || extract_into(&bytes, &system_dir, &marker))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn extract_into(
+    bytes: &[u8],
+    dir: &std::path::Path,
+    marker: &std::path::Path,
+) -> Result<(), String> {
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    let mut entries = Vec::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i).map_err(|e| e.to_string())?;
+        let name = entry
+            .enclosed_name()
+            .ok_or_else(|| format!("unsafe path in download: {}", entry.name()))?;
+        entries.push((i, name, entry.is_dir()));
+    }
+    entries.sort_by_key(|(_, name, _)| name == marker);
+    for (i, name, is_dir) in entries {
+        let target = dir.join(&name);
+        if is_dir {
+            std::fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+        let mut out = std::fs::File::create(&target).map_err(|e| e.to_string())?;
+        std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 pub struct Cores {
@@ -375,6 +474,15 @@ mod tests {
         );
         assert!(core_for_platform("dc").unwrap().jit);
         assert!(core_for_platform("xbox").is_none());
+        for slug in ["ngc", "wii"] {
+            let core = core_for_platform(slug).unwrap();
+            assert_eq!((core.id, core.jit), ("dolphin", true));
+        }
+        for slug in ["msx", "msx2", "msx2plus"] {
+            assert_eq!(core_for_platform(slug).unwrap().id, "bluemsx");
+        }
+        assert_eq!(core_for_platform("colecovision").unwrap().id, "gearcoleco");
+        assert_eq!(core_for_platform("philips-cd-i").unwrap().id, "same_cdi");
         for slug in ["arcade", "neogeoaes", "cps2"] {
             assert_eq!(core_for_platform(slug).unwrap().id, "fbneo");
         }
@@ -391,6 +499,71 @@ mod tests {
                 "https://buildbot.libretro.com/nightly/linux/x86_64/latest/snes9x_libretro.so.zip"
             );
         }
+    }
+
+    fn zip_of(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut out = std::io::Cursor::new(Vec::new());
+        let mut zip = zip::ZipWriter::new(&mut out);
+        for (name, body) in entries {
+            zip.start_file(*name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(body).unwrap();
+        }
+        zip.finish().unwrap();
+        out.into_inner()
+    }
+
+    #[tokio::test]
+    async fn system_files_are_installed_once_into_the_system_folder() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/Dolphin.zip"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(zip_of(&[
+                ("dolphin-emu/Sys/codehandler.bin", b"code"),
+                ("dolphin-emu/Sys/GC/font.bin", b"font"),
+            ])))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let core = core_for_platform("ngc").unwrap();
+        assert!(!system_files_present(core, dir.path()));
+        let http = reqwest::Client::new();
+        install_system_files(&http, &server.uri(), core, dir.path())
+            .await
+            .unwrap();
+        assert!(system_files_present(core, dir.path()));
+        assert_eq!(
+            std::fs::read(dir.path().join("dolphin-emu/Sys/GC/font.bin")).unwrap(),
+            b"font"
+        );
+        install_system_files(&http, &server.uri(), core, dir.path())
+            .await
+            .unwrap();
+        let snes = core_for_platform("snes").unwrap();
+        assert!(system_files_present(snes, dir.path()));
+    }
+
+    #[tokio::test]
+    async fn system_files_that_escape_the_folder_are_refused() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/blueMSX.zip"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(zip_of(&[
+                ("Databases/msxromdb.xml", b"db"),
+                ("../evil.txt", b"x"),
+            ])))
+            .mount(&server)
+            .await;
+        let root = tempfile::tempdir().unwrap();
+        let system = root.path().join("system");
+        let core = core_for_platform("msx").unwrap();
+        let result =
+            install_system_files(&reqwest::Client::new(), &server.uri(), core, &system).await;
+        assert!(result.is_err());
+        assert!(!root.path().join("evil.txt").exists());
+        assert!(!system_files_present(core, &system));
     }
 
     #[tokio::test]

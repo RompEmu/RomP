@@ -28,6 +28,8 @@ static REQUIRED: &[(&str, &[&[&str]])] = &[
     ("3do", &[&["panafz1.bin", "panafz10.bin", "goldstar.bin"]]),
     ("lynx", &[&["lynxboot.img"]]),
     ("fds", &[&["disksys.rom"]]),
+    ("colecovision", &[&["colecovision.rom", "coleco.rom"]]),
+    ("philips-cd-i", &[&["cdimono1.zip"]]),
     ("neogeoaes", &[&["neogeo.zip"]]),
     ("neogeomvs", &[&["neogeo.zip"]]),
 ];
@@ -35,6 +37,8 @@ static REQUIRED: &[(&str, &[&[&str]])] = &[
 pub fn placement(platform_slug: &str, file_name: &str) -> PathBuf {
     if ARCADE.contains(&platform_slug) {
         Path::new("fbneo").join(file_name)
+    } else if platform_slug == "philips-cd-i" {
+        Path::new("same_cdi/bios").join(file_name)
     } else if DC_FILES.iter().any(|f| f.eq_ignore_ascii_case(file_name)) {
         Path::new("dc").join(file_name)
     } else {
@@ -172,6 +176,25 @@ mod tests {
             placement("psx", "scph5501.bin"),
             PathBuf::from("scph5501.bin")
         );
+    }
+
+    #[test]
+    fn coleco_and_cdi_bios_are_required_and_placed_for_their_cores() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            missing("colecovision", dir.path()),
+            ["colecovision.rom or coleco.rom"]
+        );
+        std::fs::write(dir.path().join("coleco.rom"), b"x").unwrap();
+        assert!(missing("colecovision", dir.path()).is_empty());
+        assert_eq!(
+            placement("philips-cd-i", "cdimono1.zip"),
+            PathBuf::from("same_cdi/bios/cdimono1.zip")
+        );
+        assert_eq!(missing("philips-cd-i", dir.path()), ["cdimono1.zip"]);
+        std::fs::create_dir_all(dir.path().join("same_cdi/bios")).unwrap();
+        std::fs::write(dir.path().join("same_cdi/bios/cdimono1.zip"), b"x").unwrap();
+        assert!(missing("philips-cd-i", dir.path()).is_empty());
     }
 
     #[test]

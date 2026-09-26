@@ -497,6 +497,21 @@ impl Controller {
                 }
             };
             let system = paths::system_dir();
+            let core_path = match core_path {
+                Ok(path) if !crate::cores::system_files_present(core, &system) => {
+                    let name = core.name;
+                    on_ui(move |c| c.game_status(id, format!("Installing {name}'s system files…")));
+                    crate::cores::install_system_files(
+                        &http,
+                        crate::cores::SYSTEM_FILES,
+                        core,
+                        &system,
+                    )
+                    .await
+                    .map(|()| path)
+                }
+                other => other,
+            };
             let mut missing = bios::missing(&detail.platform_slug, &system);
             if !missing.is_empty() && !offline {
                 if let Some(client) = &client {
