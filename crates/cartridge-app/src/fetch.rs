@@ -4,6 +4,17 @@ use crate::romm::client::Client;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
+const CONTENT_HASHED: [&str; 2] = ["zip", "7z"];
+
+// RomM hashes the ROM inside an archive, not the archive's own bytes.
+fn verifiable_sha1<'a>(file_name: &str, sha1: Option<&'a str>) -> Option<&'a str> {
+    let ext = Path::new(file_name)
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    sha1.filter(|_| !CONTENT_HASHED.contains(&ext.as_str()))
+}
+
 pub async fn download_game(
     client: &Client,
     rom_id: i64,
@@ -31,7 +42,7 @@ pub async fn download_game(
             client,
             client.rom_file_url(rom.id, &planned.file),
             &dir.join(&planned.rel_path),
-            planned.file.sha1_hash.as_deref(),
+            verifiable_sha1(&planned.file.file_name, planned.file.sha1_hash.as_deref()),
             Some(planned.file.file_size_bytes.max(0) as u64),
             &|n| progress(base + n, total),
             cancel,
@@ -145,5 +156,30 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, DownloadError::UnsafePath));
+    }
+
+    #[tokio::test]
+    async fn archives_are_checked_by_size_because_romm_hashes_their_contents() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/8"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 8, "platform_slug": "genesis", "fs_name": "Pool.zip", "fs_path": "roms/genesis",
+                "has_multiple_files": false,
+                "files": [{"id": 1, "file_name": "Pool.zip", "file_path": "roms/genesis", "file_size_bytes": 7,
+                           "sha1_hash": "443b96c518120078fb33f3ff9586a2b7ebc141c7"}]})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("file_ids", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("zipdata"))
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/"));
+        let launch = download_game(&client, 8, dir.path(), &|_, _| {}, &AtomicBool::new(false))
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(launch).unwrap(), b"zipdata");
     }
 }
