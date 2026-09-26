@@ -105,6 +105,7 @@ struct Controller {
     players: Rc<RefCell<crate::players::Assignments>>,
     settings_timer: RefCell<Option<Timer>>,
     dialog: RefCell<Option<collections::DialogAction>>,
+    prefs: Cell<crate::prefs::Preferences>,
 }
 
 thread_local! {
@@ -139,6 +140,8 @@ pub fn run() -> anyhow::Result<()> {
     let players = crate::players::Assignments::from_json(
         shared.store.lock().unwrap().get("players").as_deref(),
     );
+    let prefs =
+        crate::prefs::Preferences::from_json(shared.store.lock().unwrap().get("prefs").as_deref());
     let controller = Rc::new(Controller {
         shared,
         ui: ui.as_weak(),
@@ -170,6 +173,7 @@ pub fn run() -> anyhow::Result<()> {
         gamepads: Rc::new(RefCell::new(crate::gamepads::Gamepads::new())),
         players: Rc::new(RefCell::new(players)),
         settings_timer: RefCell::new(None),
+        prefs: Cell::new(prefs),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -198,6 +202,7 @@ impl Controller {
             with_controller(|c| c.assign_player(key.to_string(), player))
         });
         ui.on_clear_images(|| with_controller(|c| c.clear_images()));
+        ui.on_prefs_changed(|| with_controller(|c| c.prefs_changed()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));
         ui.on_select(|key| with_controller(|c| c.select(key.to_string())));
         ui.on_toggle_section(|key| with_controller(|c| c.toggle_section(key.to_string())));

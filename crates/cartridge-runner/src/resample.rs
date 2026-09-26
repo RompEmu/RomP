@@ -35,6 +35,16 @@ impl RateControl {
     }
 }
 
+pub fn apply_volume(samples: &mut [i16], volume: u8) {
+    if volume >= 100 {
+        return;
+    }
+    let scale = f32::from(volume) / 100.0;
+    for s in samples {
+        *s = (f32::from(*s) * scale).round() as i16;
+    }
+}
+
 pub struct Resampler {
     prev: [f32; 2],
     pos: f64,
@@ -159,6 +169,17 @@ mod tests {
             control.ratio(TARGET_FILL);
         }
         assert!((control.ratio(TARGET_FILL) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn volume_scales_samples_and_full_volume_is_untouched() {
+        let mut samples = [1000, -1000, i16::MAX, i16::MIN];
+        apply_volume(&mut samples, 100);
+        assert_eq!(samples, [1000, -1000, i16::MAX, i16::MIN]);
+        apply_volume(&mut samples, 50);
+        assert_eq!(samples, [500, -500, 16384, -16384]);
+        apply_volume(&mut samples, 0);
+        assert_eq!(samples, [0; 4]);
     }
 
     #[test]

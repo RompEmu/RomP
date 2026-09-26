@@ -40,6 +40,9 @@ Gamepads are picked up automatically: the first one joins the keyboard as player
 | Q, W, D, F | L, R, L2, R2 |
 | Enter, Backspace | Start, Select |
 | F5, F7 | Save, load state |
-| Esc | Quit |
+| F6 | Next save slot |
+| P | Pause |
+| F11 | Full screen |
+| Esc | Game menu |
 
 Your games, saves and library cache are stored in `~/Library/Application Support/Cartridge` on macOS and `~/.local/share/Cartridge` on Linux.

@@ -33,6 +33,8 @@ struct Args {
     load_slot: Option<u8>,
     #[arg(long)]
     jit: bool,
+    #[arg(long, default_value_t = 100)]
+    volume: u8,
     #[arg(long = "option", value_parser = parse_option)]
     options: Vec<(String, String)>,
 }
@@ -131,6 +133,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let buffer_ms: usize = if cfg!(target_os = "macos") { 250 } else { 500 };
     let (_audio, producer) = audio::open(sample_rate, sample_rate as usize * 2 * buffer_ms / 1000)?;
     frontend.audio = Some(producer);
+    frontend.volume = args.volume;
     link.send(&RunnerMsg::Started {
         core_name: sys.library_name.clone(),
         core_version: sys.library_version.clone(),
@@ -152,6 +155,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         for msg in link.drain() {
             match msg {
                 AppMsg::Pause(p) => paused = p,
+                AppMsg::Volume(v) => frontend.volume = v,
                 AppMsg::SaveSlot(slot) => {
                     let ok = saves.save_state(slot, &mut core, frontend);
                     link.send(&RunnerMsg::StateWritten { slot, ok });

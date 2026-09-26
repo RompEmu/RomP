@@ -1,6 +1,6 @@
 use crate::audio::AudioProducer;
 use crate::input::InputState;
-use crate::resample::{RateControl, Resampler};
+use crate::resample::{apply_volume, RateControl, Resampler};
 use cartridge_libretro as lr;
 use ringbuf::traits::{Observer, Producer};
 use std::time::{Duration, Instant};
@@ -27,6 +27,7 @@ pub struct Frontend {
     resampler: Resampler,
     resampled: Vec<i16>,
     rate: RateControl,
+    pub volume: u8,
 }
 
 impl Frontend {
@@ -46,6 +47,7 @@ impl Frontend {
             resampler: Resampler::default(),
             resampled: Vec::new(),
             rate: RateControl::default(),
+            volume: 100,
         }
     }
 
@@ -95,11 +97,13 @@ impl lr::Frontend for Frontend {
             resampler,
             resampled,
             rate,
+            volume,
             ..
         } = self;
         if let Some(a) = audio {
             resampled.clear();
             resampler.process(samples, rate.ratio(fill), resampled);
+            apply_volume(resampled, *volume);
             // Blocking here paces cores that emulate on their own thread.
             let deadline = Instant::now() + Duration::from_millis(500);
             let mut pushed = 0;

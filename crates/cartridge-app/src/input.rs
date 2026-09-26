@@ -20,10 +20,15 @@ pub const R2: u32 = 13;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {
     Button(u32),
-    SaveSlot(u8),
-    LoadSlot(u8),
-    Quit,
+    Save,
+    Load,
+    NextSlot,
+    Menu,
+    TogglePause,
+    ToggleFullscreen,
 }
+
+pub const SLOTS: u8 = 4;
 
 pub fn map_key(text: &str) -> Option<KeyAction> {
     let mut chars = text.chars();
@@ -45,11 +50,17 @@ pub fn map_key(text: &str) -> Option<KeyAction> {
     } else if is(Key::Backspace) {
         KeyAction::Button(SELECT)
     } else if is(Key::F5) {
-        KeyAction::SaveSlot(1)
+        KeyAction::Save
+    } else if is(Key::F6) {
+        KeyAction::NextSlot
     } else if is(Key::F7) {
-        KeyAction::LoadSlot(1)
+        KeyAction::Load
+    } else if is(Key::F11) {
+        KeyAction::ToggleFullscreen
     } else if is(Key::Escape) {
-        KeyAction::Quit
+        KeyAction::Menu
+    } else if c.eq_ignore_ascii_case(&'p') {
+        KeyAction::TogglePause
     } else {
         KeyAction::Button(match c.to_ascii_lowercase() {
             'z' => B,
@@ -131,7 +142,10 @@ pub fn pointer_coords(u: f32, v: f32, bottom_half: bool) -> (i16, i16) {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Send(AppMsg),
-    Quit,
+    Menu,
+    TogglePause,
+    ToggleFullscreen,
+    SlotChanged(u8),
 }
 
 pub struct Controls {
@@ -139,6 +153,7 @@ pub struct Controls {
     keyboard_player: Option<u8>,
     pads: Vec<(Option<u8>, PadState)>,
     sent: [PadState; PLAYERS as usize],
+    slot: u8,
 }
 
 impl Default for Controls {
@@ -148,6 +163,7 @@ impl Default for Controls {
             keyboard_player: Some(1),
             pads: Vec::new(),
             sent: [PadState::default(); PLAYERS as usize],
+            slot: 1,
         }
     }
 }
@@ -166,11 +182,25 @@ impl Controls {
                 self.push()
             }
             _ if !pressed || repeat => Vec::new(),
-            KeyAction::SaveSlot(slot) => vec![Command::Send(AppMsg::SaveSlot(slot))],
-            KeyAction::LoadSlot(slot) => vec![Command::Send(AppMsg::LoadSlot(slot))],
-            KeyAction::Quit => vec![Command::Quit],
+            KeyAction::Save => vec![Command::Send(AppMsg::SaveSlot(self.slot))],
+            KeyAction::Load => vec![Command::Send(AppMsg::LoadSlot(self.slot))],
+            KeyAction::NextSlot => {
+                self.slot = self.slot % SLOTS + 1;
+                vec![Command::SlotChanged(self.slot)]
+            }
+            KeyAction::Menu => vec![Command::Menu],
+            KeyAction::TogglePause => vec![Command::TogglePause],
+            KeyAction::ToggleFullscreen => vec![Command::ToggleFullscreen],
         };
         Some(commands)
+    }
+
+    pub fn slot(&self) -> u8 {
+        self.slot
+    }
+
+    pub fn set_slot(&mut self, slot: u8) {
+        self.slot = slot.clamp(1, SLOTS);
     }
 
     pub fn set_gamepads(&mut self, pads: Vec<(Option<u8>, PadState)>) -> Vec<Command> {
@@ -257,14 +287,17 @@ mod tests {
             map_key(&key(Key::Backspace)),
             Some(KeyAction::Button(SELECT))
         );
-        assert_eq!(map_key(&key(Key::F5)), Some(KeyAction::SaveSlot(1)));
-        assert_eq!(map_key(&key(Key::F7)), Some(KeyAction::LoadSlot(1)));
-        assert_eq!(map_key(&key(Key::Escape)), Some(KeyAction::Quit));
+        assert_eq!(map_key(&key(Key::F5)), Some(KeyAction::Save));
+        assert_eq!(map_key(&key(Key::F6)), Some(KeyAction::NextSlot));
+        assert_eq!(map_key(&key(Key::F7)), Some(KeyAction::Load));
+        assert_eq!(map_key(&key(Key::F11)), Some(KeyAction::ToggleFullscreen));
+        assert_eq!(map_key(&key(Key::Escape)), Some(KeyAction::Menu));
+        assert_eq!(map_key("P"), Some(KeyAction::TogglePause));
     }
 
     #[test]
     fn unknown_or_multi_char_is_none() {
-        assert_eq!(map_key("p"), None);
+        assert_eq!(map_key("k"), None);
         assert_eq!(map_key(""), None);
         assert_eq!(map_key("xz"), None);
     }
@@ -311,13 +344,35 @@ mod tests {
     }
 
     #[test]
-    fn escape_quits_and_unknown_keys_are_not_handled() {
+    fn escape_opens_the_menu_and_unknown_keys_are_not_handled() {
         let mut controls = Controls::default();
         assert_eq!(
             controls.key(&key(Key::Escape), true, false),
-            Some(vec![Command::Quit])
+            Some(vec![Command::Menu])
         );
-        assert_eq!(controls.key("p", true, false), None);
+        assert_eq!(controls.key("k", true, false), None);
+    }
+
+    #[test]
+    fn f6_cycles_the_slot_used_by_save_and_load() {
+        let mut controls = Controls::default();
+        assert_eq!(
+            controls.key(&key(Key::F6), true, false),
+            Some(vec![Command::SlotChanged(2)])
+        );
+        assert_eq!(
+            controls.key(&f5(), true, false),
+            Some(vec![Command::Send(AppMsg::SaveSlot(2))])
+        );
+        controls.set_slot(4);
+        assert_eq!(
+            controls.key(&key(Key::F6), true, false),
+            Some(vec![Command::SlotChanged(1)])
+        );
+        assert_eq!(
+            controls.key(&key(Key::F7), true, false),
+            Some(vec![Command::Send(AppMsg::LoadSlot(1))])
+        );
     }
 
     #[test]

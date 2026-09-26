@@ -15,6 +15,7 @@ mod layout;
 mod paths;
 mod play;
 mod players;
+mod prefs;
 mod qr;
 mod romm;
 mod saves;

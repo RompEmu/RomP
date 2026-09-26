@@ -11,6 +11,7 @@ pub enum AppMsg {
     Pad { port: u8, state: PadState },
     Pointer { x: i16, y: i16, pressed: bool },
     Pause(bool),
+    Volume(u8),
     SaveSlot(u8),
     LoadSlot(u8),
     Shutdown,

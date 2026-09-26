@@ -27,6 +27,7 @@ pub struct SessionConfig {
     pub save_dir: PathBuf,
     pub jit: bool,
     pub load_slot: Option<u8>,
+    pub volume: u8,
     pub options: Vec<(String, String)>,
 }
 
@@ -67,6 +68,10 @@ pub fn runner_args(cfg: &SessionConfig, socket: &Path, frames: &str) -> Vec<OsSt
     }
     if cfg.jit {
         args.push("--jit".into());
+    }
+    if cfg.volume < 100 {
+        args.push("--volume".into());
+        args.push(cfg.volume.to_string().into());
     }
     for (key, value) in &cfg.options {
         args.push("--option".into());
@@ -248,6 +253,7 @@ mod tests {
             save_dir: "/data/saves/7".into(),
             jit: false,
             load_slot: None,
+            volume: 100,
             options: Vec::new(),
         }
     }
@@ -282,6 +288,20 @@ mod tests {
         .map(OsString::from)
         .collect();
         assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn lowered_volume_is_passed_to_the_runner() {
+        let mut cfg = config("/bin/runner".into());
+        let volume = |cfg: &SessionConfig| {
+            let args = runner_args(cfg, Path::new("/tmp/c.sock"), "/cart-1");
+            args.iter()
+                .position(|a| a == "--volume")
+                .map(|i| args[i + 1].clone())
+        };
+        assert_eq!(volume(&cfg), None);
+        cfg.volume = 40;
+        assert_eq!(volume(&cfg), Some("40".into()));
     }
 
     #[test]

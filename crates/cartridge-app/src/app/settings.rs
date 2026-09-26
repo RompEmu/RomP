@@ -1,13 +1,14 @@
 use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY};
 use crate::details::human_size;
 use crate::players::KEYBOARD;
+use crate::prefs::Preferences;
 use crate::{paths, storage, DeviceRow, KeyHint, StorageRow};
-use slint::{Model, ModelRc, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::Duration;
 
 const SCREEN_SETTINGS: i32 = 4;
-const SECTION_PLAYERS: i32 = 1;
-const SECTION_STORAGE: i32 = 2;
+const SECTION_PLAYERS: i32 = 2;
+const SECTION_STORAGE: i32 = 3;
 
 const KEY_HINTS: [(&str, &str); 9] = [
     ("Arrow keys", "D-pad"),
@@ -39,8 +40,44 @@ impl Controller {
                 })
                 .collect::<Vec<_>>(),
         )));
+        let prefs = self.prefs.get();
+        ui.set_pref_pause_unfocused(prefs.pause_unfocused);
+        ui.set_pref_resume(prefs.resume);
+        ui.set_pref_fullscreen(prefs.fullscreen);
+        ui.set_pref_sharp(prefs.sharp_pixels);
+        ui.set_pref_volume(f32::from(prefs.volume));
         ui.set_screen(SCREEN_SETTINGS);
         self.settings_section_changed(ui.get_settings_section());
+    }
+
+    pub(super) fn open_players(&self) {
+        let Some(ui) = self.ui() else { return };
+        ui.set_settings_section(SECTION_PLAYERS);
+        let _ = ui.show();
+        self.open_settings();
+    }
+
+    pub(super) fn prefs_changed(&self) {
+        let Some(ui) = self.ui() else { return };
+        let prefs = Preferences {
+            pause_unfocused: ui.get_pref_pause_unfocused(),
+            resume: ui.get_pref_resume(),
+            fullscreen: ui.get_pref_fullscreen(),
+            sharp_pixels: ui.get_pref_sharp(),
+            volume: ui.get_pref_volume().round().clamp(0.0, 100.0) as u8,
+        };
+        if prefs == self.prefs.get() {
+            return;
+        }
+        self.prefs.set(prefs);
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .set("prefs", &prefs.to_json());
+        if let Some(running) = self.running.borrow().as_ref() {
+            running.apply_prefs(&prefs);
+        }
     }
 
     pub(super) fn settings_section_changed(&self, section: i32) {

@@ -1,4 +1,4 @@
-import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner, Switch } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
 export struct Membership { key: string, name: string, member: bool }
@@ -704,6 +704,12 @@ component SettingsPage inherits Rectangle {
     in property <[StorageRow]> storage;
     in property <string> storage-total;
     in property <bool> storage-busy;
+    in-out property <bool> pause-unfocused;
+    in-out property <bool> resume;
+    in-out property <bool> fullscreen;
+    in-out property <bool> sharp;
+    in-out property <float> volume;
+    callback prefs-changed();
     callback back();
     callback sign-out();
     callback pair-again();
@@ -733,7 +739,7 @@ component SettingsPage inherits Rectangle {
                 alignment: start;
                 Text { text: "Settings"; font-size: 13px; font-weight: 700; color: #7d8590; letter-spacing: 1px; }
                 Rectangle { height: 8px; }
-                for label[i] in ["Account", "Players", "Storage"]: NavItem {
+                for label[i] in ["General", "Account", "Players", "Storage"]: NavItem {
                     label: label;
                     selected: root.section == i;
                     clicked => { root.section = i; root.section-changed(i); }
@@ -751,6 +757,47 @@ component SettingsPage inherits Rectangle {
                     padding-bottom: 32px;
                     spacing: 16px;
                     if root.section == 0: VerticalLayout {
+                        spacing: 16px;
+                        SectionHeading { title: "General"; subtitle: "How games behave on this computer."; }
+                        Panel {
+                            SettingRow {
+                                label: "Pause when the game window isn't focused";
+                                detail: "Switching to another window pauses the game. Coming back resumes it.";
+                                Switch { checked <=> root.pause-unfocused; toggled => { root.prefs-changed(); } }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: "Resume where you left off";
+                                detail: "Starting a game continues from the automatic save made when you last quit it.";
+                                Switch { checked <=> root.resume; toggled => { root.prefs-changed(); } }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: "Start games in full screen";
+                                detail: "Press F11 in a game to switch at any time.";
+                                Switch { checked <=> root.fullscreen; toggled => { root.prefs-changed(); } }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: "Sharp pixels";
+                                detail: "Keeps pixel art crisp. Turn off for smoother scaling.";
+                                Switch { checked <=> root.sharp; toggled => { root.prefs-changed(); } }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: "Game volume";
+                                detail: round(root.volume) + "%";
+                                Slider {
+                                    width: 200px;
+                                    minimum: 0;
+                                    maximum: 100;
+                                    value <=> root.volume;
+                                    changed => { root.prefs-changed(); }
+                                }
+                            }
+                        }
+                    }
+                    if root.section == 1: VerticalLayout {
                         spacing: 16px;
                         SectionHeading { title: "Account"; subtitle: "Your RomM server and this device's access to it."; }
                         Panel {
@@ -774,7 +821,7 @@ component SettingsPage inherits Rectangle {
                             }
                         }
                     }
-                    if root.section == 1: VerticalLayout {
+                    if root.section == 2: VerticalLayout {
                         spacing: 16px;
                         SectionHeading {
                             title: "Players";
@@ -810,7 +857,7 @@ component SettingsPage inherits Rectangle {
                             }
                         }
                     }
-                    if root.section == 2: VerticalLayout {
+                    if root.section == 3: VerticalLayout {
                         spacing: 16px;
                         SectionHeading {
                             title: "Storage";
@@ -920,6 +967,12 @@ export component AppWindow inherits Window {
     callback clear-images();
     callback show-folder();
     callback settings-section-changed(int);
+    in-out property <bool> pref-pause-unfocused;
+    in-out property <bool> pref-resume;
+    in-out property <bool> pref-fullscreen;
+    in-out property <bool> pref-sharp;
+    in-out property <float> pref-volume;
+    callback prefs-changed();
 
     in property <[SidebarEntry]> sidebar;
     in property <string> selected-key: "all";
@@ -1040,6 +1093,12 @@ export component AppWindow inherits Window {
         storage: root.settings-storage;
         storage-total: root.settings-storage-total;
         storage-busy: root.settings-storage-busy;
+        pause-unfocused <=> root.pref-pause-unfocused;
+        resume <=> root.pref-resume;
+        fullscreen <=> root.pref-fullscreen;
+        sharp <=> root.pref-sharp;
+        volume <=> root.pref-volume;
+        prefs-changed => { root.prefs-changed(); }
         back => { root.back-to-library(); }
         sign-out => { root.sign-out(); }
         pair-again => { root.pair-again(); }

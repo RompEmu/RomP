@@ -1,5 +1,102 @@
+component MenuButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    callback clicked();
+    height: 40px;
+    border-radius: 8px;
+    background: root.primary
+        ? (touch.pressed ? #4a61e0 : touch.has-hover ? #6f86ff : #5b73f5)
+        : (touch.pressed ? #23272f : touch.has-hover ? #3a3f4b : #2c313a);
+    animate background { duration: 100ms; }
+    Text {
+        text: root.text;
+        color: white;
+        font-size: 15px;
+        font-weight: root.primary ? 600 : 500;
+    }
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+component GameMenu inherits Rectangle {
+    in property <string> name;
+    in property <bool> paused;
+    in property <int> slot;
+    in property <bool> fullscreen;
+    callback resume();
+    callback toggle-pause();
+    callback save-state();
+    callback load-state();
+    callback step-slot(int);
+    callback toggle-fullscreen();
+    callback open-controllers();
+    callback quit();
+
+    background: #000000b8;
+    TouchArea { }
+    Rectangle {
+        width: 340px;
+        height: menu.preferred-height;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: #1b1e24f2;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: #ffffff1c;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000090;
+        menu := VerticalLayout {
+            padding: 22px;
+            spacing: 10px;
+            Text { text: root.name; color: white; font-size: 18px; font-weight: 700; overflow: elide; }
+            Text { text: root.paused ? "Paused" : "Running behind this menu"; color: #9aa3b2; font-size: 13px; }
+            Rectangle { height: 4px; }
+            MenuButton { text: "Resume"; primary: true; clicked => { root.resume(); } }
+            MenuButton { text: root.paused ? "Play" : "Pause"; clicked => { root.toggle-pause(); } }
+            Rectangle { height: 1px; background: #ffffff14; }
+            HorizontalLayout {
+                spacing: 8px;
+                Text { text: "Save slot"; color: #b8bec8; vertical-alignment: center; horizontal-stretch: 1; }
+                MenuButton { width: 40px; text: "‹"; clicked => { root.step-slot(-1); } }
+                Text { text: root.slot; width: 28px; color: white; font-size: 16px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                MenuButton { width: 40px; text: "›"; clicked => { root.step-slot(1); } }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                MenuButton { text: "Save state"; clicked => { root.save-state(); } }
+                MenuButton { text: "Load state"; clicked => { root.load-state(); } }
+            }
+            Rectangle { height: 1px; background: #ffffff14; }
+            MenuButton { text: root.fullscreen ? "Exit full screen" : "Full screen"; clicked => { root.toggle-fullscreen(); } }
+            MenuButton { text: "Controllers…"; clicked => { root.open-controllers(); } }
+            MenuButton { text: "Quit game"; clicked => { root.quit(); } }
+            VerticalLayout {
+                padding-top: 4px;
+                spacing: 2px;
+                Text { text: "Esc resume  ·  P pause  ·  F11 full screen"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
+                Text { text: "F5 save  ·  F7 load  ·  F6 next slot"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
+            }
+        }
+    }
+}
+
 export component GameWindow inherits Window {
     in property <string> game-title: "Cartridge";
+    in property <string> game-name;
+    in property <bool> has-menu;
+    in property <bool> menu-open;
+    in property <bool> paused;
+    in property <int> slot: 1;
+    in property <bool> fullscreen;
+    in property <bool> sharp: true;
+    callback window-active(bool);
+    callback resume();
+    callback toggle-pause();
+    callback save-state();
+    callback load-state();
+    callback step-slot(int);
+    callback toggle-fullscreen();
+    callback open-controllers();
+    callback quit();
     in property <image> frame;
     in property <float> aspect: 4 / 3;
     in property <string> status;
@@ -19,6 +116,14 @@ export component GameWindow inherits Window {
         }
         focus-lost(reason) => {
             root.focus-lost();
+            if reason == FocusReason.window-activation {
+                root.window-active(false);
+            }
+        }
+        focus-gained(reason) => {
+            if reason == FocusReason.window-activation {
+                root.window-active(true);
+            }
         }
         key-released(event) => {
             return root.key-event(event.text, false, false) ? EventResult.accept : EventResult.reject;
@@ -27,7 +132,7 @@ export component GameWindow inherits Window {
         frame := Image {
             source: root.frame;
             image-fit: fill;
-            image-rendering: pixelated;
+            image-rendering: root.sharp ? ImageRendering.pixelated : ImageRendering.smooth;
             width: min(parent.width, parent.height * root.aspect);
             height: self.width / root.aspect;
             x: (parent.width - self.width) / 2;
@@ -49,6 +154,33 @@ export component GameWindow inherits Window {
                     root.pointer(self.mouse-x / self.width, self.mouse-y / self.height, true);
                 }
             }
+        }
+
+        if root.paused && !root.menu-open: Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: 16px;
+            width: paused-label.preferred-width + 28px;
+            height: 32px;
+            border-radius: 16px;
+            background: #000000c0;
+            paused-label := Text { text: "Paused  ·  P to resume"; color: white; font-size: 14px; }
+        }
+
+        if root.has-menu && root.menu-open: GameMenu {
+            width: parent.width;
+            height: parent.height;
+            name: root.game-name;
+            paused: root.paused;
+            slot: root.slot;
+            fullscreen: root.fullscreen;
+            resume => { root.resume(); }
+            toggle-pause => { root.toggle-pause(); }
+            save-state => { root.save-state(); }
+            load-state => { root.load-state(); }
+            step-slot(d) => { root.step-slot(d); }
+            toggle-fullscreen => { root.toggle-fullscreen(); }
+            open-controllers => { root.open-controllers(); }
+            quit => { root.quit(); }
         }
 
         if root.status != "": Rectangle {

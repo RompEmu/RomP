@@ -558,10 +558,13 @@ impl Controller {
 
     pub(super) fn start_game(&self, detail: GameDetail, rom: PathBuf, jit: bool, core: PathBuf) {
         self.preparing.set(false);
+        let save_dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
+        let prefs = self.prefs.get();
+        let load_slot = (prefs.resume && save_dir.join("auto.state").exists()).then_some(0);
         let options = GameOptions {
             core,
             rom,
-            save_dir: paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
+            save_dir,
             title: detail.title.clone(),
             jit,
             options: core_for_platform(&detail.platform_slug)
@@ -571,12 +574,17 @@ impl Controller {
                 .is_some_and(|core| core.id == "desmume"),
             gamepads: self.gamepads.clone(),
             players: self.players.clone(),
+            prefs,
+            load_slot,
         };
         let on_closed = move |identity| {
             let _ =
                 slint::invoke_from_event_loop(move || with_controller(|c| c.game_closed(identity)));
         };
-        match play::launch(options, on_closed) {
+        let open_controllers = || {
+            let _ = slint::invoke_from_event_loop(|| with_controller(|c| c.open_players()));
+        };
+        match play::launch(options, on_closed, open_controllers) {
             Ok(running) => {
                 *self.running.borrow_mut() = Some(running);
                 self.game_status(detail.id, String::new());
