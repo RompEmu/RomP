@@ -22,17 +22,22 @@ pub use sys::{
     RETRO_DEVICE_ID_JOYPAD_LEFT, RETRO_DEVICE_ID_JOYPAD_R, RETRO_DEVICE_ID_JOYPAD_R2,
     RETRO_DEVICE_ID_JOYPAD_R3, RETRO_DEVICE_ID_JOYPAD_RIGHT, RETRO_DEVICE_ID_JOYPAD_SELECT,
     RETRO_DEVICE_ID_JOYPAD_START, RETRO_DEVICE_ID_JOYPAD_UP, RETRO_DEVICE_ID_JOYPAD_X,
-    RETRO_DEVICE_ID_JOYPAD_Y, RETRO_DEVICE_ID_MOUSE_BUTTON_4, RETRO_DEVICE_ID_MOUSE_BUTTON_5,
+    RETRO_DEVICE_ID_JOYPAD_Y, RETRO_DEVICE_ID_LIGHTGUN_AUX_A, RETRO_DEVICE_ID_LIGHTGUN_AUX_B,
+    RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN, RETRO_DEVICE_ID_LIGHTGUN_PAUSE,
+    RETRO_DEVICE_ID_LIGHTGUN_RELOAD, RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X,
+    RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y, RETRO_DEVICE_ID_LIGHTGUN_SELECT,
+    RETRO_DEVICE_ID_LIGHTGUN_START, RETRO_DEVICE_ID_LIGHTGUN_TRIGGER, RETRO_DEVICE_ID_LIGHTGUN_X,
+    RETRO_DEVICE_ID_LIGHTGUN_Y, RETRO_DEVICE_ID_MOUSE_BUTTON_4, RETRO_DEVICE_ID_MOUSE_BUTTON_5,
     RETRO_DEVICE_ID_MOUSE_LEFT, RETRO_DEVICE_ID_MOUSE_MIDDLE, RETRO_DEVICE_ID_MOUSE_RIGHT,
     RETRO_DEVICE_ID_MOUSE_WHEELDOWN, RETRO_DEVICE_ID_MOUSE_WHEELUP, RETRO_DEVICE_ID_MOUSE_X,
     RETRO_DEVICE_ID_MOUSE_Y, RETRO_DEVICE_ID_POINTER_COUNT, RETRO_DEVICE_ID_POINTER_PRESSED,
     RETRO_DEVICE_ID_POINTER_X, RETRO_DEVICE_ID_POINTER_Y, RETRO_DEVICE_INDEX_ANALOG_BUTTON,
     RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_JOYPAD,
-    RETRO_DEVICE_KEYBOARD, RETRO_DEVICE_MOUSE, RETRO_DEVICE_NONE, RETRO_DEVICE_POINTER,
-    RETRO_HW_CONTEXT_NONE, RETRO_HW_CONTEXT_OPENGL, RETRO_HW_CONTEXT_OPENGLES2,
-    RETRO_HW_CONTEXT_OPENGLES3, RETRO_HW_CONTEXT_OPENGLES_VERSION, RETRO_HW_CONTEXT_OPENGL_CORE,
-    RETRO_HW_CONTEXT_VULKAN, RETRO_MEMORY_RTC, RETRO_MEMORY_SAVE_RAM, RETRO_MEMORY_SYSTEM_RAM,
-    RETRO_MEMORY_VIDEO_RAM,
+    RETRO_DEVICE_KEYBOARD, RETRO_DEVICE_LIGHTGUN, RETRO_DEVICE_MASK, RETRO_DEVICE_MOUSE,
+    RETRO_DEVICE_NONE, RETRO_DEVICE_POINTER, RETRO_HW_CONTEXT_NONE, RETRO_HW_CONTEXT_OPENGL,
+    RETRO_HW_CONTEXT_OPENGLES2, RETRO_HW_CONTEXT_OPENGLES3, RETRO_HW_CONTEXT_OPENGLES_VERSION,
+    RETRO_HW_CONTEXT_OPENGL_CORE, RETRO_HW_CONTEXT_VULKAN, RETRO_MEMORY_RTC, RETRO_MEMORY_SAVE_RAM,
+    RETRO_MEMORY_SYSTEM_RAM, RETRO_MEMORY_VIDEO_RAM,
 };
 
 pub trait HwContextProvider {
@@ -479,6 +484,47 @@ static HW_CONTEXT_RESET: std::sync::Mutex<Option<unsafe extern "C" fn()>> =
 static HW_CONTEXT_DESTROY: std::sync::Mutex<Option<unsafe extern "C" fn()>> =
     std::sync::Mutex::new(None);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ControllerType {
+    pub name: String,
+    pub id: u32,
+}
+
+static CONTROLLER_INFO: std::sync::Mutex<Vec<Vec<ControllerType>>> =
+    std::sync::Mutex::new(Vec::new());
+
+pub fn controller_info() -> Vec<Vec<ControllerType>> {
+    CONTROLLER_INFO.lock().unwrap().clone()
+}
+
+/// # Safety
+/// `info` must point to an array of `retro_controller_info` terminated by an entry with null
+/// `types`, as the libretro API requires.
+unsafe fn parse_controller_info(
+    info: *const sys::retro_controller_info,
+) -> Vec<Vec<ControllerType>> {
+    const MAX_PORTS: usize = 16;
+    let mut ports = Vec::new();
+    for i in 0..MAX_PORTS {
+        let port = unsafe { &*info.add(i) };
+        if port.types.is_null() {
+            break;
+        }
+        let types = unsafe { std::slice::from_raw_parts(port.types, port.num_types as usize) };
+        ports.push(
+            types
+                .iter()
+                .filter(|t| !t.desc.is_null())
+                .map(|t| ControllerType {
+                    name: unsafe { cstr_to_string(t.desc) },
+                    id: t.id,
+                })
+                .collect(),
+        );
+    }
+    ports
+}
+
 static KEYBOARD_CALLBACK: std::sync::Mutex<sys::retro_keyboard_event_t> =
     std::sync::Mutex::new(None);
 
@@ -915,7 +961,14 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             true
         }
         sys::RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME => true,
-        sys::RETRO_ENVIRONMENT_SET_CONTROLLER_INFO => true,
+        sys::RETRO_ENVIRONMENT_SET_CONTROLLER_INFO => {
+            if data.is_null() {
+                return false;
+            }
+            let ports = unsafe { parse_controller_info(data as *const sys::retro_controller_info) };
+            *CONTROLLER_INFO.lock().unwrap() = ports;
+            true
+        }
         sys::RETRO_ENVIRONMENT_GET_LANGUAGE => {
             if data.is_null() {
                 return false;
@@ -1077,6 +1130,51 @@ unsafe extern "C" fn input_state_trampoline(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn controller_info_lists_every_port_until_the_terminator() {
+        let pad = CString::new("RetroPad").unwrap();
+        let mouse = CString::new("SNES Mouse").unwrap();
+        let scope = CString::new("Super Scope").unwrap();
+        let port1 = [
+            sys::retro_controller_description {
+                desc: pad.as_ptr(),
+                id: 1,
+            },
+            sys::retro_controller_description {
+                desc: mouse.as_ptr(),
+                id: 0x102,
+            },
+        ];
+        let port2 = [sys::retro_controller_description {
+            desc: scope.as_ptr(),
+            id: 0x104,
+        }];
+        let info = [
+            sys::retro_controller_info {
+                types: port1.as_ptr(),
+                num_types: 2,
+            },
+            sys::retro_controller_info {
+                types: port2.as_ptr(),
+                num_types: 1,
+            },
+            sys::retro_controller_info {
+                types: ptr::null(),
+                num_types: 0,
+            },
+        ];
+        let ports = unsafe { parse_controller_info(info.as_ptr()) };
+        assert_eq!(ports.len(), 2);
+        assert_eq!(
+            ports[0][1],
+            ControllerType {
+                name: "SNES Mouse".into(),
+                id: 0x102
+            }
+        );
+        assert_eq!(ports[1][0].name, "Super Scope");
+    }
 
     #[derive(Default)]
     struct Recorder {

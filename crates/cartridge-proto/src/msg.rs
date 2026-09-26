@@ -11,6 +11,7 @@ pub enum AppMsg {
     Pad { port: u8, state: PadState },
     Pointer { x: i16, y: i16, pressed: bool },
     Mouse { dx: i16, dy: i16, buttons: u8 },
+    PortDevice { port: u8, device: u32 },
     Pause(bool),
     Volume(u8),
     SaveSlot(u8),
@@ -25,6 +26,9 @@ pub enum RunnerMsg {
         core_version: String,
         fps: f64,
         sample_rate: f64,
+    },
+    Controllers {
+        ports: Vec<Vec<(String, u32)>>,
     },
     SramWritten,
     StateWritten {

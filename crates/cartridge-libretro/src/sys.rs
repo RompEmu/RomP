@@ -115,6 +115,33 @@ pub struct retro_message {
     pub frames: c_uint,
 }
 
+pub const RETRO_DEVICE_LIGHTGUN: c_uint = 4;
+pub const RETRO_DEVICE_MASK: c_uint = 0xff;
+pub const RETRO_DEVICE_ID_LIGHTGUN_X: c_uint = 0;
+pub const RETRO_DEVICE_ID_LIGHTGUN_Y: c_uint = 1;
+pub const RETRO_DEVICE_ID_LIGHTGUN_TRIGGER: c_uint = 2;
+pub const RETRO_DEVICE_ID_LIGHTGUN_AUX_A: c_uint = 3;
+pub const RETRO_DEVICE_ID_LIGHTGUN_AUX_B: c_uint = 4;
+pub const RETRO_DEVICE_ID_LIGHTGUN_PAUSE: c_uint = 5;
+pub const RETRO_DEVICE_ID_LIGHTGUN_START: c_uint = 6;
+pub const RETRO_DEVICE_ID_LIGHTGUN_SELECT: c_uint = 7;
+pub const RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X: c_uint = 13;
+pub const RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y: c_uint = 14;
+pub const RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN: c_uint = 15;
+pub const RETRO_DEVICE_ID_LIGHTGUN_RELOAD: c_uint = 16;
+
+#[repr(C)]
+pub struct retro_controller_description {
+    pub desc: *const c_char,
+    pub id: c_uint,
+}
+
+#[repr(C)]
+pub struct retro_controller_info {
+    pub types: *const retro_controller_description,
+    pub num_types: c_uint,
+}
+
 #[repr(C)]
 pub struct retro_keyboard_callback {
     pub callback: retro_keyboard_event_t,

@@ -18,6 +18,7 @@ mod navigation;
 mod paths;
 mod play;
 mod players;
+mod ports;
 mod prefs;
 mod qr;
 mod romm;

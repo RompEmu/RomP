@@ -1,3 +1,5 @@
+export struct PortRow { label: string, device: string }
+
 component MenuButton inherits Rectangle {
     in property <string> text;
     in property <bool> primary;
@@ -26,6 +28,8 @@ component GameMenu inherits Rectangle {
     in property <int> slot;
     in property <bool> fullscreen;
     in property <int> focused-item: -1;
+    in property <[PortRow]> ports;
+    callback cycle-port(int, int);
     callback resume();
     callback toggle-pause();
     callback save-state();
@@ -78,7 +82,21 @@ component GameMenu inherits Rectangle {
             Rectangle { height: 1px; background: #ffffff14; }
             MenuButton { text: root.fullscreen ? "Exit full screen" : "Full screen"; focused: root.focused-item == 5; clicked => { root.toggle-fullscreen(); } }
             MenuButton { text: "Controllers…"; focused: root.focused-item == 6; clicked => { root.open-controllers(); } }
-            MenuButton { text: "Quit game"; focused: root.focused-item == 7; clicked => { root.quit(); } }
+            for port[i] in root.ports: HorizontalLayout {
+                spacing: 8px;
+                Text { text: port.label; color: #b8bec8; vertical-alignment: center; width: 56px; }
+                MenuButton { width: 40px; text: "‹"; clicked => { root.cycle-port(i, -1); } }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 8px;
+                    background: #2c313a;
+                    border-width: root.focused-item == 7 + i ? 2px : 0px;
+                    border-color: #c7d0ff;
+                    Text { text: port.device; color: white; font-size: 14px; overflow: elide; }
+                }
+                MenuButton { width: 40px; text: "›"; clicked => { root.cycle-port(i, 1); } }
+            }
+            MenuButton { text: "Quit game"; focused: root.focused-item == 7 + root.ports.length; clicked => { root.quit(); } }
             VerticalLayout {
                 padding-top: 4px;
                 spacing: 2px;
@@ -101,6 +119,9 @@ export component GameWindow inherits Window {
     in property <int> menu-focus: -1;
     in property <bool> mouse-mode;
     in property <bool> mouse-captured;
+    in property <bool> lightgun-mode;
+    in property <[PortRow]> ports;
+    callback cycle-port(int, int);
     callback capture-mouse();
     callback mouse-button(int, bool);
     callback window-active(bool);
@@ -159,7 +180,17 @@ export component GameWindow inherits Window {
             y: frame.y;
             width: frame.width;
             height: frame.height;
+            mouse-cursor: root.lightgun-mode ? MouseCursor.crosshair : MouseCursor.default;
             pointer-event(event) => {
+                if root.lightgun-mode {
+                    root.pointer(self.mouse-x / self.width, self.mouse-y / self.height, false);
+                    if event.kind != PointerEventKind.move {
+                        root.mouse-button(
+                            event.button == PointerEventButton.left ? 1 : event.button == PointerEventButton.right ? 2 : event.button == PointerEventButton.middle ? 4 : 0,
+                            event.kind == PointerEventKind.down);
+                    }
+                    return;
+                }
                 if root.mouse-mode {
                     if event.kind == PointerEventKind.move {
                         return;
@@ -204,6 +235,8 @@ export component GameWindow inherits Window {
             slot: root.slot;
             fullscreen: root.fullscreen;
             focused-item: root.menu-focus;
+            ports: root.ports;
+            cycle-port(i, step) => { root.cycle-port(i, step); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
             save-state => { root.save-state(); }

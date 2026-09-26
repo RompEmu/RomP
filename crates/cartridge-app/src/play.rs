@@ -3,17 +3,22 @@ use crate::input::{self, map_key, Command, Controls, KeyAction};
 use crate::mapping::Mappings;
 use crate::paths;
 use crate::players::{Assignments, KEYBOARD};
+use crate::ports;
 use crate::prefs::Preferences;
 use crate::session::{Session, SessionConfig, SessionEvent};
 use crate::GameWindow;
+use crate::PortRow;
 use anyhow::Context;
 use cartridge_proto::msg::{AppMsg, RunnerMsg};
 use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
+use slint::{ModelRc, VecModel};
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
+
+pub type SavePorts = Box<dyn Fn(Vec<(u8, u32)>)>;
 
 pub struct GameOptions {
     pub core: PathBuf,
@@ -30,6 +35,8 @@ pub struct GameOptions {
     pub mappings: Rc<RefCell<Mappings>>,
     pub nintendo: bool,
     pub mouse: bool,
+    pub port_devices: Vec<(u8, u32)>,
+    pub save_ports: SavePorts,
 }
 
 pub struct RunningGame {
@@ -74,6 +81,8 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             mappings: Rc::default(),
             nintendo: false,
             mouse: false,
+            port_devices: Vec::new(),
+            save_ports: Box::new(|_| {}),
         },
         |_| {},
         || {},
@@ -101,9 +110,14 @@ struct Game {
     menu_combo: Cell<bool>,
     mouse_captured: Cell<bool>,
     mouse_buttons: Cell<u8>,
+    always_mouse: bool,
+    port_options: RefCell<Vec<ports::Options>>,
+    port_devices: RefCell<Vec<u32>>,
+    saved_ports: Vec<(u8, u32)>,
+    save_ports: SavePorts,
 }
 
-const MENU_ITEMS: i32 = 8;
+const MENU_PORTS_START: i32 = 7;
 const MENU_SLOT: i32 = 2;
 const MENU_SAVE: i32 = 3;
 const MENU_LOAD: i32 = 4;
@@ -224,7 +238,109 @@ impl Game {
         self.primary().set_menu_focus(focus);
     }
 
+    fn menu_items(&self) -> i32 {
+        MENU_PORTS_START + self.pickable_ports().len() as i32 + 1
+    }
+
+    fn pickable_ports(&self) -> Vec<usize> {
+        ports::pickable(&self.port_options.borrow())
+    }
+
+    fn port_row(&self, item: i32) -> Option<usize> {
+        let row = usize::try_from(item - MENU_PORTS_START).ok()?;
+        self.pickable_ports().get(row).copied()
+    }
+
+    fn set_ports(&self, offered: Vec<ports::Options>) {
+        tracing::debug!(?offered, "controller ports");
+        let devices: Vec<u32> = offered
+            .iter()
+            .enumerate()
+            .map(|(port, options)| {
+                let saved = self
+                    .saved_ports
+                    .iter()
+                    .find(|(p, _)| usize::from(*p) == port)
+                    .map(|(_, d)| *d);
+                ports::choose(options, saved)
+            })
+            .collect();
+        for (port, device) in devices.iter().enumerate() {
+            if *device != ports::JOYPAD {
+                self.send(&AppMsg::PortDevice {
+                    port: port as u8,
+                    device: *device,
+                });
+            }
+        }
+        *self.port_options.borrow_mut() = offered;
+        *self.port_devices.borrow_mut() = devices;
+        self.refresh_ports();
+    }
+
+    fn cycle_port(&self, port: usize, step: i32) {
+        let device = {
+            let options = self.port_options.borrow();
+            let Some(options) = options.get(port) else {
+                return;
+            };
+            let current = self
+                .port_devices
+                .borrow()
+                .get(port)
+                .copied()
+                .unwrap_or(ports::JOYPAD);
+            ports::cycle(options, current, step)
+        };
+        if let Some(slot) = self.port_devices.borrow_mut().get_mut(port) {
+            *slot = device;
+        }
+        self.send(&AppMsg::PortDevice {
+            port: port as u8,
+            device,
+        });
+        let chosen = self
+            .port_devices
+            .borrow()
+            .iter()
+            .enumerate()
+            .map(|(p, d)| (p as u8, *d))
+            .collect();
+        (self.save_ports)(chosen);
+        self.refresh_ports();
+    }
+
+    fn refresh_ports(&self) {
+        let devices = self.port_devices.borrow().clone();
+        let mouse = self.always_mouse || ports::uses_mouse(&devices);
+        let gun = !mouse && ports::uses_lightgun(&devices);
+        if !mouse {
+            self.capture_mouse(false);
+        }
+        let rows: Vec<PortRow> = {
+            let options = self.port_options.borrow();
+            self.pickable_ports()
+                .into_iter()
+                .map(|port| PortRow {
+                    label: format!("Port {}", port + 1).into(),
+                    device: ports::name_of(&options[port], devices[port]).into(),
+                })
+                .collect()
+        };
+        for window in &self.windows {
+            window.set_mouse_mode(mouse);
+            window.set_lightgun_mode(gun);
+        }
+        self.primary().set_ports(ModelRc::new(VecModel::from(rows)));
+    }
+
     fn activate(&self, item: i32) {
+        if let Some(port) = self.port_row(item) {
+            return self.cycle_port(port, 1);
+        }
+        if item == self.menu_items() - 1 {
+            return (self.finish)();
+        }
         match item {
             0 => self.set_menu(false),
             1 => self.set_paused(!self.paused.get()),
@@ -233,7 +349,6 @@ impl Game {
             MENU_LOAD => self.send(&AppMsg::LoadSlot(self.controls.borrow().slot())),
             5 => self.toggle_fullscreen(),
             6 => (self.open_controllers)(),
-            7 => (self.finish)(),
             _ => {}
         }
     }
@@ -250,8 +365,12 @@ impl Game {
             }),
             input::DOWN => self.set_menu_focus(match focus {
                 MENU_SAVE => 5,
-                f => (f + 1).min(MENU_ITEMS - 1),
+                f => (f + 1).min(self.menu_items() - 1),
             }),
+            input::LEFT | input::RIGHT if self.port_row(focus).is_some() => {
+                let port = self.port_row(focus).expect("port row");
+                self.cycle_port(port, if button == input::LEFT { -1 } else { 1 });
+            }
             input::LEFT if focus == MENU_SLOT => self.step_slot(-1),
             input::RIGHT if focus == MENU_SLOT => self.step_slot(1),
             input::LEFT if focus == MENU_LOAD => self.set_menu_focus(MENU_SAVE),
@@ -399,6 +518,11 @@ pub fn launch(
             menu_combo: Cell::new(false),
             mouse_captured: Cell::new(false),
             mouse_buttons: Cell::new(0),
+            always_mouse: opts.mouse,
+            port_options: RefCell::default(),
+            port_devices: RefCell::default(),
+            saved_ports: opts.port_devices.clone(),
+            save_ports: opts.save_ports,
         }
     });
     let _ = game
@@ -482,6 +606,10 @@ pub fn launch(
                 session.poll_events()
             };
             for event in events {
+                if let SessionEvent::Runner(RunnerMsg::Controllers { ports }) = event {
+                    game.set_ports(ports);
+                    continue;
+                }
                 handle_event(ui, event, &game.finish, &started);
             }
         }
@@ -569,6 +697,19 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     window.on_mouse_button({
         let with = with.clone();
         move |bit, pressed| with(&|g| g.mouse_button(bit, pressed))
+    });
+    window.on_cycle_port({
+        let with = with.clone();
+        move |row, step| {
+            with(&|g| {
+                let port = usize::try_from(row)
+                    .ok()
+                    .and_then(|r| g.pickable_ports().get(r).copied());
+                if let Some(port) = port {
+                    g.cycle_port(port, step);
+                }
+            })
+        }
     });
     window.on_resume({
         let with = with.clone();

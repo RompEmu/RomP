@@ -140,6 +140,12 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         fps: av.timing.fps,
         sample_rate: av.timing.sample_rate,
     });
+    link.send(&RunnerMsg::Controllers {
+        ports: lr::controller_info()
+            .into_iter()
+            .map(|types| types.into_iter().map(|t| (t.name, t.id)).collect())
+            .collect(),
+    });
 
     frontend.aspect = av.geometry.aspect_ratio;
     let frame_duration = Duration::from_secs_f64(1.0 / av.timing.fps.max(1.0));
@@ -156,6 +162,10 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             match msg {
                 AppMsg::Pause(p) => paused = p,
                 AppMsg::Volume(v) => frontend.volume = v,
+                AppMsg::PortDevice { port, device } => {
+                    core.set_controller_port_device(u32::from(port), device, frontend);
+                    frontend.input.set_port_device(u32::from(port), device);
+                }
                 AppMsg::SaveSlot(slot) => {
                     let ok = saves.save_state(slot, &mut core, frontend);
                     link.send(&RunnerMsg::StateWritten { slot, ok });

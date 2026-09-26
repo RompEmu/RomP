@@ -36,9 +36,51 @@ pub struct InputState {
     ports: Arc<Mutex<[PadState; PORTS]>>,
     pointer: Arc<Mutex<Pointer>>,
     mouse: Arc<Mutex<Mouse>>,
+    devices: Arc<Mutex<[u32; PORTS]>>,
 }
 
 impl InputState {
+    pub fn set_port_device(&self, port: u32, device: u32) {
+        if let Some(slot) = self.devices.lock().get_mut(port as usize) {
+            *slot = device;
+        }
+    }
+
+    fn port_uses(&self, port: u32, base: u32) -> bool {
+        self.devices
+            .lock()
+            .get(port as usize)
+            .is_some_and(|d| d & lr::RETRO_DEVICE_MASK == base)
+    }
+
+    pub fn lightgun_state(&self, port: u32, id: u32) -> i16 {
+        let p = *self.pointer.lock();
+        let m = *self.mouse.lock();
+        let held = |bit: u8| m.buttons & bit != 0;
+        let offscreen = held(MOUSE_RIGHT);
+        match id {
+            lr::RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X => p.x,
+            lr::RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y => p.y,
+            lr::RETRO_DEVICE_ID_LIGHTGUN_X => m.frame.0,
+            lr::RETRO_DEVICE_ID_LIGHTGUN_Y => m.frame.1,
+            lr::RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN | lr::RETRO_DEVICE_ID_LIGHTGUN_RELOAD => {
+                i16::from(offscreen)
+            }
+            lr::RETRO_DEVICE_ID_LIGHTGUN_TRIGGER => i16::from(held(MOUSE_LEFT) || offscreen),
+            lr::RETRO_DEVICE_ID_LIGHTGUN_AUX_A => i16::from(held(MOUSE_MIDDLE)),
+            lr::RETRO_DEVICE_ID_LIGHTGUN_AUX_B => {
+                i16::from(self.is_pressed(port, lr::RETRO_DEVICE_ID_JOYPAD_A))
+            }
+            lr::RETRO_DEVICE_ID_LIGHTGUN_START | lr::RETRO_DEVICE_ID_LIGHTGUN_PAUSE => {
+                i16::from(self.is_pressed(port, lr::RETRO_DEVICE_ID_JOYPAD_START))
+            }
+            lr::RETRO_DEVICE_ID_LIGHTGUN_SELECT => {
+                i16::from(self.is_pressed(port, lr::RETRO_DEVICE_ID_JOYPAD_SELECT))
+            }
+            _ => 0,
+        }
+    }
+
     pub fn apply_mouse(&self, dx: i16, dy: i16, buttons: u8) {
         let mut m = self.mouse.lock();
         m.pending.0 += i32::from(dx);
@@ -54,7 +96,7 @@ impl InputState {
     }
 
     pub fn mouse_state(&self, port: u32, id: u32) -> i16 {
-        if port != 0 {
+        if port != 0 && !self.port_uses(port, lr::RETRO_DEVICE_MOUSE) {
             return 0;
         }
         let m = *self.mouse.lock();
@@ -261,5 +303,38 @@ mod tests {
         input.latch_mouse();
         assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_X), 0);
         assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_LEFT), 1);
+    }
+
+    #[test]
+    fn mouse_devices_on_other_ports_get_the_mouse() {
+        let input = InputState::default();
+        input.apply_mouse(5, 0, MOUSE_LEFT);
+        input.latch_mouse();
+        assert_eq!(input.mouse_state(1, lr::RETRO_DEVICE_ID_MOUSE_X), 0);
+        input.set_port_device(1, lr::RETRO_DEVICE_MOUSE | 0x100);
+        assert_eq!(input.mouse_state(1, lr::RETRO_DEVICE_ID_MOUSE_X), 5);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_X), 5);
+    }
+
+    #[test]
+    fn light_gun_aims_with_the_pointer_and_fires_with_mouse_buttons() {
+        let input = InputState::default();
+        input.apply_pointer(Pointer {
+            x: -1000,
+            y: 2000,
+            pressed: false,
+        });
+        input.apply_mouse(0, 0, MOUSE_LEFT);
+        input.apply_pad(0, pad(&[lr::RETRO_DEVICE_ID_JOYPAD_START], [0; 6]));
+        let gun = |id| input.lightgun_state(0, id);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X), -1000);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y), 2000);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_TRIGGER), 1);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN), 0);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_START), 1);
+        input.apply_mouse(0, 0, MOUSE_RIGHT);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN), 1);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_RELOAD), 1);
+        assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_TRIGGER), 1);
     }
 }

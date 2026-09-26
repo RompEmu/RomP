@@ -61,6 +61,16 @@ impl Controller {
             .unwrap_or_default()
     }
 
+    fn saved_ports(&self, id: i64) -> Vec<(u8, u32)> {
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .get(&format!("ports:{id}"))
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default()
+    }
+
     pub(super) fn current_game_id(&self) -> Option<i64> {
         self.game.borrow().as_ref().map(|g| g.detail.id)
     }
@@ -582,6 +592,15 @@ impl Controller {
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
             mouse: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| crate::cores::uses_mouse(core.id)),
+            port_devices: self.saved_ports(detail.id),
+            save_ports: {
+                let store = self.shared.store.clone();
+                let id = detail.id;
+                Box::new(move |ports| {
+                    let json = serde_json::to_string(&ports).expect("ports serialize");
+                    store.lock().unwrap().set(&format!("ports:{id}"), &json);
+                })
+            },
         };
         let on_closed = move |identity| {
             let _ =
