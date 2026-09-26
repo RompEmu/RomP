@@ -1,3 +1,4 @@
+use crate::players::PLAYERS;
 use cartridge_proto::msg::{AppMsg, PadState};
 use slint::platform::Key;
 
@@ -133,54 +134,91 @@ pub enum Command {
     Quit,
 }
 
-#[derive(Default)]
 pub struct Controls {
-    pad: Pad,
-    gamepad: PadState,
-    sent: PadState,
+    keyboard: Pad,
+    keyboard_player: Option<u8>,
+    pads: Vec<(Option<u8>, PadState)>,
+    sent: [PadState; PLAYERS as usize],
+}
+
+impl Default for Controls {
+    fn default() -> Self {
+        Self {
+            keyboard: Pad::default(),
+            keyboard_player: Some(1),
+            pads: Vec::new(),
+            sent: [PadState::default(); PLAYERS as usize],
+        }
+    }
 }
 
 impl Controls {
-    pub fn key(&mut self, text: &str, pressed: bool, repeat: bool) -> Option<Option<Command>> {
+    pub fn set_keyboard_player(&mut self, player: Option<u8>) -> Vec<Command> {
+        self.keyboard_player = player;
+        self.push()
+    }
+
+    pub fn key(&mut self, text: &str, pressed: bool, repeat: bool) -> Option<Vec<Command>> {
         let action = map_key(text)?;
-        let command = match action {
+        let commands = match action {
             KeyAction::Button(button) => {
-                self.pad.set(button, pressed);
+                self.keyboard.set(button, pressed);
                 self.push()
             }
-            _ if !pressed || repeat => None,
-            KeyAction::SaveSlot(slot) => Some(Command::Send(AppMsg::SaveSlot(slot))),
-            KeyAction::LoadSlot(slot) => Some(Command::Send(AppMsg::LoadSlot(slot))),
-            KeyAction::Quit => Some(Command::Quit),
+            _ if !pressed || repeat => Vec::new(),
+            KeyAction::SaveSlot(slot) => vec![Command::Send(AppMsg::SaveSlot(slot))],
+            KeyAction::LoadSlot(slot) => vec![Command::Send(AppMsg::LoadSlot(slot))],
+            KeyAction::Quit => vec![Command::Quit],
         };
-        Some(command)
+        Some(commands)
     }
 
-    pub fn set_gamepad(&mut self, state: PadState) -> Option<Command> {
-        self.gamepad = state;
+    pub fn set_gamepads(&mut self, pads: Vec<(Option<u8>, PadState)>) -> Vec<Command> {
+        self.pads = pads;
         self.push()
     }
 
-    pub fn release_all(&mut self) -> Option<Command> {
-        self.pad = Pad::default();
-        self.gamepad = PadState::default();
+    pub fn release_all(&mut self) -> Vec<Command> {
+        self.keyboard = Pad::default();
+        self.pads.clear();
         self.push()
     }
 
-    fn merged(&self) -> PadState {
+    fn merged(&self, player: u8) -> PadState {
+        let keyboard = (self.keyboard_player == Some(player)).then_some(self.keyboard.state);
+        let devices: Vec<PadState> = keyboard
+            .into_iter()
+            .chain(
+                self.pads
+                    .iter()
+                    .filter(|(p, _)| *p == Some(player))
+                    .map(|(_, s)| *s),
+            )
+            .collect();
         PadState {
-            buttons: self.pad.state.buttons | self.gamepad.buttons,
-            axes: self.gamepad.axes,
+            buttons: devices.iter().fold(0, |b, s| b | s.buttons),
+            axes: devices
+                .iter()
+                .map(|s| s.axes)
+                .find(|a| a.iter().any(|v| *v != 0))
+                .unwrap_or_default(),
         }
     }
 
-    fn push(&mut self) -> Option<Command> {
-        let state = self.merged();
-        if state == self.sent {
-            return None;
+    fn push(&mut self) -> Vec<Command> {
+        let mut commands = Vec::new();
+        for player in 1..=PLAYERS {
+            let state = self.merged(player);
+            let slot = &mut self.sent[player as usize - 1];
+            if *slot != state {
+                *slot = state;
+                commands.push(Command::Send(AppMsg::Pad {
+                    port: player - 1,
+                    state,
+                }));
+            }
         }
-        self.sent = state;
-        Some(Command::Send(AppMsg::Pad { port: 0, state }))
+        commands
     }
 }
 
@@ -249,10 +287,10 @@ mod tests {
         let mut controls = Controls::default();
         assert_eq!(
             controls.key(&f5(), true, false),
-            Some(Some(Command::Send(AppMsg::SaveSlot(1))))
+            Some(vec![Command::Send(AppMsg::SaveSlot(1))])
         );
-        assert_eq!(controls.key(&f5(), true, true), Some(None));
-        assert_eq!(controls.key(&f5(), false, false), Some(None));
+        assert_eq!(controls.key(&f5(), true, true), Some(vec![]));
+        assert_eq!(controls.key(&f5(), false, false), Some(vec![]));
     }
 
     #[test]
@@ -264,12 +302,12 @@ mod tests {
         };
         assert_eq!(
             controls.key("x", true, false),
-            Some(Some(Command::Send(AppMsg::Pad {
+            Some(vec![Command::Send(AppMsg::Pad {
                 port: 0,
                 state: pressed
-            })))
+            })])
         );
-        assert_eq!(controls.key("x", true, true), Some(None));
+        assert_eq!(controls.key("x", true, true), Some(vec![]));
     }
 
     #[test]
@@ -277,7 +315,7 @@ mod tests {
         let mut controls = Controls::default();
         assert_eq!(
             controls.key(&key(Key::Escape), true, false),
-            Some(Some(Command::Quit))
+            Some(vec![Command::Quit])
         );
         assert_eq!(controls.key("p", true, false), None);
     }
@@ -289,12 +327,12 @@ mod tests {
         controls.key(&key(Key::UpArrow), true, false);
         assert_eq!(
             controls.release_all(),
-            Some(Command::Send(AppMsg::Pad {
+            [Command::Send(AppMsg::Pad {
                 port: 0,
                 state: PadState::default()
-            }))
+            })]
         );
-        assert_eq!(controls.release_all(), None);
+        assert!(controls.release_all().is_empty());
     }
 
     #[test]
@@ -325,22 +363,71 @@ mod tests {
             axes: [100, 0, 0, 0, 0, 0],
         };
         assert_eq!(
-            controls.set_gamepad(pad),
-            Some(Command::Send(AppMsg::Pad {
+            controls.set_gamepads(vec![(Some(1), pad)]),
+            [Command::Send(AppMsg::Pad {
                 port: 0,
                 state: PadState {
                     buttons: 1 << A | 1 << B,
                     axes: [100, 0, 0, 0, 0, 0]
                 }
-            }))
+            })]
         );
-        assert_eq!(controls.set_gamepad(pad), None);
+        assert!(controls.set_gamepads(vec![(Some(1), pad)]).is_empty());
         assert_eq!(
             controls.release_all(),
-            Some(Command::Send(AppMsg::Pad {
+            [Command::Send(AppMsg::Pad {
                 port: 0,
                 state: PadState::default()
-            }))
+            })]
+        );
+    }
+
+    fn buttons(b: u16) -> PadState {
+        PadState {
+            buttons: b,
+            axes: [0; 6],
+        }
+    }
+
+    #[test]
+    fn each_player_gets_its_own_port() {
+        let mut controls = Controls::default();
+        let sent = controls.set_gamepads(vec![
+            (Some(1), buttons(1 << A)),
+            (Some(2), buttons(1 << B)),
+            (None, buttons(1 << X)),
+        ]);
+        assert_eq!(
+            sent,
+            [
+                Command::Send(AppMsg::Pad {
+                    port: 0,
+                    state: buttons(1 << A)
+                }),
+                Command::Send(AppMsg::Pad {
+                    port: 1,
+                    state: buttons(1 << B)
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn moving_the_keyboard_releases_its_old_player() {
+        let mut controls = Controls::default();
+        controls.key("x", true, false);
+        assert_eq!(
+            controls.set_keyboard_player(Some(3)),
+            [
+                Command::Send(AppMsg::Pad {
+                    port: 0,
+                    state: PadState::default()
+                }),
+                Command::Send(AppMsg::Pad {
+                    port: 2,
+                    state: buttons(1 << A)
+                }),
+            ]
         );
     }
 

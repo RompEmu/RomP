@@ -1,11 +1,14 @@
+use crate::gamepads::Gamepads;
 use crate::input::{self, Command, Controls};
 use crate::paths;
+use crate::players::{Assignments, KEYBOARD};
 use crate::session::{Session, SessionConfig, SessionEvent};
 use crate::GameWindow;
 use anyhow::Context;
-use cartridge_proto::msg::{PadState, RunnerMsg};
+use cartridge_proto::msg::RunnerMsg;
 use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
@@ -18,6 +21,8 @@ pub struct GameOptions {
     pub jit: bool,
     pub options: Vec<(String, String)>,
     pub split_screens: bool,
+    pub gamepads: Rc<RefCell<Gamepads>>,
+    pub players: Rc<RefCell<Assignments>>,
 }
 
 pub struct RunningGame {
@@ -52,6 +57,8 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             jit,
             options: Vec::new(),
             split_screens: false,
+            gamepads: Rc::new(RefCell::new(Gamepads::new())),
+            players: Rc::default(),
         },
         |_| {},
     )?;
@@ -110,6 +117,9 @@ pub fn launch(
     });
 
     let controls = Rc::new(RefCell::new(Controls::default()));
+    let _ = controls
+        .borrow_mut()
+        .set_keyboard_player(opts.players.borrow().player(KEYBOARD));
     wire(&ui, &session, &controls, &finish, false);
     if let Some(window) = &second {
         wire(window, &session, &controls, &finish, true);
@@ -122,15 +132,49 @@ pub fn launch(
         let session = session.clone();
         let mut buf = Vec::new();
         let mut last_seq = 0;
-        let mut gilrs = gilrs::Gilrs::new().ok();
+        let gamepads = opts.gamepads.clone();
+        let players = opts.players.clone();
+        let mut known: HashSet<String> = HashSet::new();
+        let mut first_poll = true;
         let finish = finish.clone();
         move || {
             let Some(ui) = ui.upgrade() else { return };
-            if let Some(gilrs) = gilrs.as_mut() {
-                let command = controls.borrow_mut().set_gamepad(read_gamepad(gilrs));
-                if let Some(command) = command {
-                    apply(&session, command, &finish);
+            let states = {
+                let mut pads = gamepads.borrow_mut();
+                pads.poll();
+                let connected = pads.connected();
+                let keys: Vec<String> = connected.iter().map(|p| p.key.clone()).collect();
+                let mut players = players.borrow_mut();
+                for pad in &connected {
+                    if !known.insert(pad.key.clone()) {
+                        continue;
+                    }
+                    let player = players.connect(&pad.key, &keys);
+                    if !first_poll {
+                        flash(
+                            &ui,
+                            match player {
+                                Some(p) => format!("{} → Player {p}", pad.name),
+                                None => format!(
+                                    "{} connected. Choose its player in Settings.",
+                                    pad.name
+                                ),
+                            },
+                        );
+                    }
                 }
+                known.retain(|k| keys.contains(k));
+                first_poll = false;
+                pads.states()
+                    .into_iter()
+                    .map(|(key, state)| (players.player(&key), state))
+                    .collect()
+            };
+            let keyboard = players.borrow().player(KEYBOARD);
+            let mut commands = controls.borrow_mut().set_keyboard_player(keyboard);
+            commands.extend(controls.borrow_mut().set_gamepads(states));
+            for command in commands {
+                apply(&session, command, &finish);
             }
             let events = {
                 let session = session.borrow();
@@ -212,8 +256,8 @@ fn wire(
             let result = controls.borrow_mut().key(&text, pressed, repeat);
             match result {
                 None => false,
-                Some(command) => {
-                    if let Some(command) = command {
+                Some(commands) => {
+                    for command in commands {
                         apply(&session, command, &finish);
                     }
                     true
@@ -226,55 +270,12 @@ fn wire(
         let finish = finish.clone();
         let controls = controls.clone();
         move || {
-            let command = controls.borrow_mut().release_all();
-            if let Some(command) = command {
+            let commands = controls.borrow_mut().release_all();
+            for command in commands {
                 apply(&session, command, &finish);
             }
         }
     });
-}
-
-fn read_gamepad(gilrs: &mut gilrs::Gilrs) -> PadState {
-    use gilrs::{Axis, Button};
-    while gilrs.next_event().is_some() {}
-    let Some((_, pad)) = gilrs.gamepads().find(|(_, g)| g.is_connected()) else {
-        return PadState::default();
-    };
-    let mut state = PadState::default();
-    for button in [
-        Button::South,
-        Button::East,
-        Button::West,
-        Button::North,
-        Button::LeftTrigger,
-        Button::RightTrigger,
-        Button::LeftTrigger2,
-        Button::RightTrigger2,
-        Button::Select,
-        Button::Start,
-        Button::DPadUp,
-        Button::DPadDown,
-        Button::DPadLeft,
-        Button::DPadRight,
-        Button::LeftThumb,
-        Button::RightThumb,
-    ] {
-        if pad.is_pressed(button) {
-            if let Some(bit) = input::retro_button(button) {
-                state.buttons |= 1 << bit;
-            }
-        }
-    }
-    let trigger = |b: Button| (pad.button_data(b).map_or(0.0, |d| d.value()) * 32767.0) as i16;
-    state.axes = [
-        input::stick(pad.value(Axis::LeftStickX), false),
-        input::stick(pad.value(Axis::LeftStickY), true),
-        input::stick(pad.value(Axis::RightStickX), false),
-        input::stick(pad.value(Axis::RightStickY), true),
-        trigger(Button::LeftTrigger2),
-        trigger(Button::RightTrigger2),
-    ];
-    state
 }
 
 fn apply(session: &RefCell<Session>, command: Command, finish: &Rc<dyn Fn()>) {

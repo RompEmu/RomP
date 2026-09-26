@@ -331,6 +331,7 @@ impl Controller {
 
     pub(super) fn back_to_library(&self) {
         self.clear_conflict();
+        self.close_settings();
         if let Some(ui) = self.ui() {
             ui.set_screen(SCREEN_LIBRARY);
         }
@@ -568,6 +569,8 @@ impl Controller {
                 .unwrap_or_default(),
             split_screens: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| core.id == "desmume"),
+            gamepads: self.gamepads.clone(),
+            players: self.players.clone(),
         };
         let on_closed = move |identity| {
             let _ =
@@ -585,6 +588,7 @@ impl Controller {
 
     fn game_closed(&self, identity: Option<CoreIdentity>) {
         self.running.borrow_mut().take();
+        self.save_players();
         let playing = self.playing.borrow_mut().take();
         if let Some(detail) = playing {
             self.after_play(detail, identity);

@@ -1,7 +1,10 @@
-import { Button, CheckBox, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner, Switch } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
 export struct Membership { key: string, name: string, member: bool }
+export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
+export struct StorageRow { label: string, size: string }
+export struct KeyHint { keys: string, action: string }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool }
 export struct GameRow { cards: [GameCard] }
 export struct Fact { label: string, value: string }
@@ -244,7 +247,7 @@ component Library inherits Rectangle {
     callback columns-changed(int);
     callback row-shown(int);
     callback refresh();
-    callback sign-out();
+    callback open-settings();
     callback open-game(int);
     in property <bool> needs-pairing;
     in property <string> pair-prompt;
@@ -301,8 +304,11 @@ component Library inherits Rectangle {
                         }
                     }
                 }
-                Text { text: root.user-label; color: #888; overflow: elide; }
-                Button { text: "Sign out"; clicked => { root.sign-out(); } }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: root.user-label; color: #888; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
+                    Button { text: "Settings"; clicked => { root.open-settings(); } }
+                }
             }
         }
         VerticalLayout {
@@ -624,6 +630,212 @@ component GamePage inherits Rectangle {
     }
 }
 
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked();
+    height: 34px;
+    border-radius: 6px;
+    background: root.selected ? #3a3f4b : touch.has-hover ? #2a2e36 : transparent;
+    touch := TouchArea { clicked => { root.clicked(); } }
+    HorizontalLayout {
+        padding-left: 12px;
+        Text { text: root.label; vertical-alignment: center; font-weight: root.selected ? 600 : 400; }
+    }
+}
+
+component Panel inherits Rectangle {
+    clip: true;
+    background: #23272f;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: #2f343d;
+    VerticalLayout {
+        padding-top: 4px;
+        padding-bottom: 4px;
+        @children
+    }
+}
+
+component SettingRow inherits Rectangle {
+    in property <string> label;
+    in property <string> detail;
+    in property <bool> divider;
+    in property <bool> highlight;
+    in property <color> detail-color: #8a8f98;
+    background: root.highlight ? #2b3a55 : transparent;
+    animate background { duration: 150ms; }
+    VerticalLayout {
+        if root.divider: Rectangle { height: 1px; background: #2f343d; }
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 12px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            spacing: 12px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                Text { text: root.label; font-size: 14px; overflow: elide; }
+                if root.detail != "": Text { text: root.detail; font-size: 12px; color: root.detail-color; wrap: word-wrap; }
+            }
+            @children
+        }
+    }
+}
+
+component SectionHeading inherits VerticalLayout {
+    in property <string> title;
+    in property <string> subtitle;
+    spacing: 4px;
+    padding-bottom: 4px;
+    Text { text: root.title; font-size: 22px; font-weight: 700; }
+    if root.subtitle != "": Text { text: root.subtitle; color: #8a8f98; wrap: word-wrap; }
+}
+
+component SettingsPage inherits Rectangle {
+    in-out property <int> section;
+    in property <string> user;
+    in property <string> server;
+    in property <bool> offline;
+    in property <[DeviceRow]> devices;
+    in property <[KeyHint]> keys;
+    in property <[StorageRow]> storage;
+    in property <string> storage-total;
+    in property <bool> storage-busy;
+    callback back();
+    callback sign-out();
+    callback pair-again();
+    callback assign(string, int);
+    callback clear-images();
+    callback show-folder();
+    callback section-changed(int);
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 24px;
+            padding-right: 24px;
+            padding-top: 16px;
+            padding-bottom: 8px;
+            alignment: start;
+            Button { text: "← Library"; clicked => { root.back(); } }
+        }
+        HorizontalLayout {
+            vertical-stretch: 1;
+            VerticalLayout {
+                width: 220px;
+                padding-left: 24px;
+                padding-right: 16px;
+                padding-top: 16px;
+                spacing: 2px;
+                alignment: start;
+                Text { text: "Settings"; font-size: 13px; font-weight: 700; color: #7d8590; letter-spacing: 1px; }
+                Rectangle { height: 8px; }
+                for label[i] in ["Account", "Players", "Storage"]: NavItem {
+                    label: label;
+                    selected: root.section == i;
+                    clicked => { root.section = i; root.section-changed(i); }
+                }
+            }
+            content := ScrollView {
+                horizontal-stretch: 1;
+                content-width: self.visible-width;
+                content-height: body.preferred-height;
+                body := VerticalLayout {
+                    width: min(content.visible-width, 760px);
+                    padding-left: 8px;
+                    padding-right: 24px;
+                    padding-top: 16px;
+                    padding-bottom: 32px;
+                    spacing: 16px;
+                    if root.section == 0: VerticalLayout {
+                        spacing: 16px;
+                        SectionHeading { title: "Account"; subtitle: "Your RomM server and this device's access to it."; }
+                        Panel {
+                            SettingRow { label: "Signed in as"; detail: root.user != "" ? root.user : "Unknown"; }
+                            SettingRow {
+                                divider: true;
+                                label: "Server";
+                                detail: root.server + (root.offline ? "  ·  Offline" : "");
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: "Device access";
+                                detail: "Approve this device again, for example after an update that needs new permissions.";
+                                Button { text: "Pair again"; enabled: !root.offline; clicked => { root.pair-again(); } }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: "Sign out";
+                                detail: "Signs this device out and clears the library list. Downloaded files stay on disk.";
+                                Button { text: "Sign out"; clicked => { root.sign-out(); } }
+                            }
+                        }
+                    }
+                    if root.section == 1: VerticalLayout {
+                        spacing: 16px;
+                        SectionHeading {
+                            title: "Players";
+                            subtitle: "Choose which player each controller plays as. Press a button on a controller to find it here.";
+                        }
+                        Panel {
+                            for device[i] in root.devices: SettingRow {
+                                divider: i > 0;
+                                label: device.name;
+                                detail: device.active ? "Button pressed" : device.detail;
+                                detail-color: device.active ? #8b9cff : #8a8f98;
+                                highlight: device.active;
+                                ComboBox {
+                                    width: 150px;
+                                    model: ["Off", "Player 1", "Player 2", "Player 3", "Player 4"];
+                                    current-index: device.player;
+                                    selected => { root.assign(device.key, self.current-index); }
+                                }
+                            }
+                        }
+                        Text { text: "Keyboard controls"; font-size: 15px; font-weight: 700; }
+                        Panel {
+                            for hint[i] in root.keys: SettingRow {
+                                divider: i > 0;
+                                label: hint.action;
+                                Rectangle {
+                                    width: key-text.preferred-width + 16px;
+                                    height: 24px;
+                                    border-radius: 5px;
+                                    background: #2f343d;
+                                    key-text := Text { text: hint.keys; font-size: 12px; color: #d0d4da; }
+                                }
+                            }
+                        }
+                    }
+                    if root.section == 2: VerticalLayout {
+                        spacing: 16px;
+                        SectionHeading {
+                            title: "Storage";
+                            subtitle: root.storage-busy ? "Measuring…" : "Space used on this computer: " + root.storage-total + ".";
+                        }
+                        Panel {
+                            for row[i] in root.storage: SettingRow {
+                                divider: i > 0;
+                                label: row.label;
+                                Text { text: row.size; color: #b8bec8; vertical-alignment: center; }
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: 10px;
+                            Button { text: "Clear image cache"; clicked => { root.clear-images(); } }
+                            Button { text: "Show folder"; clicked => { root.show-folder(); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 component Dialog inherits Rectangle {
     in property <string> title;
     in property <string> message;
@@ -696,6 +908,18 @@ export component AppWindow inherits Window {
 
     in property <string> user-label;
     callback sign-out();
+    callback open-settings();
+    in-out property <int> settings-section;
+    in property <string> settings-server;
+    in property <[DeviceRow]> settings-devices;
+    in property <[KeyHint]> settings-keys;
+    in property <[StorageRow]> settings-storage;
+    in property <string> settings-storage-total;
+    in property <bool> settings-storage-busy;
+    callback assign-player(string, int);
+    callback clear-images();
+    callback show-folder();
+    callback settings-section-changed(int);
 
     in property <[SidebarEntry]> sidebar;
     in property <string> selected-key: "all";
@@ -804,7 +1028,25 @@ export component AppWindow inherits Window {
         downloaded-only <=> root.downloaded-only;
         offline: root.offline;
         downloaded-only-toggled(on) => { root.downloaded-only-toggled(on); }
+        open-settings => { root.open-settings(); }
+    }
+    if root.screen == 4: SettingsPage {
+        section <=> root.settings-section;
+        user: root.user-label;
+        server: root.settings-server;
+        offline: root.offline;
+        devices: root.settings-devices;
+        keys: root.settings-keys;
+        storage: root.settings-storage;
+        storage-total: root.settings-storage-total;
+        storage-busy: root.settings-storage-busy;
+        back => { root.back-to-library(); }
         sign-out => { root.sign-out(); }
+        pair-again => { root.pair-again(); }
+        assign(key, player) => { root.assign-player(key, player); }
+        clear-images => { root.clear-images(); }
+        show-folder => { root.show-folder(); }
+        section-changed(i) => { root.settings-section-changed(i); }
     }
     if root.screen == 3: GamePage {
         title: root.game-title;

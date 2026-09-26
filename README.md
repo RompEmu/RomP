@@ -31,7 +31,7 @@ Add `--jit` for cores that use a dynamic recompiler. Cores are available from th
 
 ## Controls
 
-A connected gamepad controls player 1. On the keyboard:
+Gamepads are picked up automatically: the first one joins the keyboard as player 1, and each new one becomes the next player. Change who plays as which player in **Settings → Players**. On the keyboard:
 
 | Key | Action |
 |---|---|

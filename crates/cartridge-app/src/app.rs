@@ -1,6 +1,7 @@
 mod collections;
 mod game;
 mod save_sync;
+mod settings;
 
 use crate::cores::Cores;
 use crate::covers::Covers;
@@ -100,6 +101,9 @@ struct Controller {
     offline_retry: RefCell<Option<Timer>>,
     selected: RefCell<String>,
     expanded: RefCell<HashSet<String>>,
+    gamepads: Rc<RefCell<crate::gamepads::Gamepads>>,
+    players: Rc<RefCell<crate::players::Assignments>>,
+    settings_timer: RefCell<Option<Timer>>,
     dialog: RefCell<Option<collections::DialogAction>>,
 }
 
@@ -132,6 +136,9 @@ pub fn run() -> anyhow::Result<()> {
             .build()?,
     };
     let ui = AppWindow::new()?;
+    let players = crate::players::Assignments::from_json(
+        shared.store.lock().unwrap().get("players").as_deref(),
+    );
     let controller = Rc::new(Controller {
         shared,
         ui: ui.as_weak(),
@@ -160,6 +167,9 @@ pub fn run() -> anyhow::Result<()> {
                 .collect(),
         ),
         dialog: RefCell::new(None),
+        gamepads: Rc::new(RefCell::new(crate::gamepads::Gamepads::new())),
+        players: Rc::new(RefCell::new(players)),
+        settings_timer: RefCell::new(None),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -182,6 +192,13 @@ impl Controller {
         ui.on_cancel_pairing(|| with_controller(|c| c.cancel_pairing()));
         ui.on_retry_pairing(|| with_controller(|c| c.connect()));
         ui.on_sign_out(|| with_controller(|c| c.sign_out()));
+        ui.on_open_settings(|| with_controller(|c| c.open_settings()));
+        ui.on_settings_section_changed(|i| with_controller(|c| c.settings_section_changed(i)));
+        ui.on_assign_player(|key, player| {
+            with_controller(|c| c.assign_player(key.to_string(), player))
+        });
+        ui.on_clear_images(|| with_controller(|c| c.clear_images()));
+        ui.on_show_folder(|| with_controller(|c| c.show_folder()));
         ui.on_select(|key| with_controller(|c| c.select(key.to_string())));
         ui.on_toggle_section(|key| with_controller(|c| c.toggle_section(key.to_string())));
         ui.on_new_collection(|| with_controller(|c| c.new_collection(None)));
