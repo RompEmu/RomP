@@ -32,6 +32,7 @@ pub async fn download_game(
             client.rom_file_url(rom.id, &planned.file),
             &dir.join(&planned.rel_path),
             planned.file.sha1_hash.as_deref(),
+            Some(planned.file.file_size_bytes.max(0) as u64),
             &|n| progress(base + n, total),
             cancel,
         )

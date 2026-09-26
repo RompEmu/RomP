@@ -50,9 +50,10 @@ pub fn sha1_file(path: &Path) -> std::io::Result<String> {
         .collect())
 }
 
-async fn matches(path: &Path, sha1: Option<&str>) -> bool {
+async fn matches(path: &Path, sha1: Option<&str>, size: Option<u64>) -> bool {
     let Some(expected) = sha1 else {
-        return true;
+        let len = tokio::fs::metadata(path).await.map(|m| m.len()).ok();
+        return size.is_none() || len == size;
     };
     let path = path.to_path_buf();
     let expected = expected.to_ascii_lowercase();
@@ -66,11 +67,12 @@ pub async fn download_file(
     url: Url,
     dest: &Path,
     sha1: Option<&str>,
+    size: Option<u64>,
     progress: &(dyn Fn(u64) + Send + Sync),
     cancel: &AtomicBool,
 ) -> Result<(), DownloadError> {
     if let Ok(meta) = tokio::fs::metadata(dest).await {
-        if matches(dest, sha1).await {
+        if matches(dest, sha1, size).await {
             progress(meta.len());
             return Ok(());
         }
@@ -91,7 +93,7 @@ pub async fn download_file(
     }
     let mut resp = match client.download(url.clone(), offset).await {
         Err(Error::Status(416)) if offset > 0 => {
-            if matches(&part, sha1).await {
+            if matches(&part, sha1, size).await {
                 progress(offset);
                 return tokio::fs::rename(&part, dest).await.map_err(io);
             }
@@ -130,7 +132,7 @@ pub async fn download_file(
     }
     file.flush().await.map_err(io)?;
     drop(file);
-    if !matches(&part, sha1).await {
+    if !matches(&part, sha1, size).await {
         let _ = tokio::fs::remove_file(&part).await;
         return Err(DownloadError::HashMismatch);
     }
@@ -188,6 +190,7 @@ mod tests {
             url,
             &dest,
             Some(&sha1_hex(BODY)),
+            None,
             &|n| *seen.lock().unwrap() = n,
             &AtomicBool::new(false),
         )
@@ -210,6 +213,7 @@ mod tests {
             url,
             &dest,
             Some(&sha1_hex(BODY)),
+            None,
             &|_| {},
             &AtomicBool::new(false),
         )
@@ -229,6 +233,7 @@ mod tests {
             url,
             &dest,
             Some("00"),
+            None,
             &|_| {},
             &AtomicBool::new(false),
         )
@@ -245,9 +250,17 @@ mod tests {
         serve(&server).await;
         let (client, url, dir) = setup(&server);
         let dest = dir.path().join("game.bin");
-        let err = download_file(&client, url, &dest, None, &|_| {}, &AtomicBool::new(true))
-            .await
-            .unwrap_err();
+        let err = download_file(
+            &client,
+            url,
+            &dest,
+            None,
+            None,
+            &|_| {},
+            &AtomicBool::new(true),
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, DownloadError::Cancelled));
         assert!(!dest.exists());
     }
@@ -263,6 +276,7 @@ mod tests {
             url,
             &dest,
             Some(&sha1_hex(BODY)),
+            None,
             &|_| {},
             &AtomicBool::new(false),
         )
@@ -287,6 +301,7 @@ mod tests {
             url,
             &dest,
             Some(&sha1_hex(BODY)),
+            None,
             &|_| {},
             &AtomicBool::new(false),
         )
@@ -319,11 +334,45 @@ mod tests {
             url,
             &dest,
             Some(&sha1_hex(BODY)),
+            None,
             &|_| {},
             &AtomicBool::new(false),
         )
         .await
         .unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), BODY);
+    }
+
+    #[tokio::test]
+    async fn without_a_hash_the_size_must_match() {
+        let server = MockServer::start().await;
+        serve(&server).await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.bin");
+        std::fs::write(&dest, b"truncated").unwrap();
+        download_file(
+            &client,
+            url.clone(),
+            &dest,
+            None,
+            Some(BODY.len() as u64),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), BODY);
+        let err = download_file(
+            &client,
+            url,
+            &dir.path().join("other.bin"),
+            None,
+            Some(999),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, DownloadError::HashMismatch));
     }
 }

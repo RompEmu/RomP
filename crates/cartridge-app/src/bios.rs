@@ -90,6 +90,7 @@ pub async fn fetch_firmware(
             client.firmware_url(&fw),
             &dest,
             fw.sha1_hash.as_deref(),
+            None,
             &|_| {},
             cancel,
         )
