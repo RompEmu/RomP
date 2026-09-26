@@ -228,7 +228,7 @@ mod tests {
             s.get("last_sync_at").as_deref(),
             Some("2026-01-03T00:00:00+00:00")
         );
-        assert_eq!(s.platforms()[0].count, 5);
+        assert_eq!(s.platforms(false)[0].count, 5);
     }
 
     #[tokio::test]
@@ -346,7 +346,7 @@ mod tests {
         eprintln!(
             "live: {} games, {} platforms",
             first.updated,
-            store.lock().unwrap().platforms().len()
+            store.lock().unwrap().platforms(false).len()
         );
     }
 
@@ -435,7 +435,7 @@ mod tests {
         assert!(matches!(result, Err(Error::Cancelled)));
         let s = store.lock().unwrap();
         assert_eq!(s.game_count(), 0);
-        assert!(s.platforms().is_empty());
+        assert!(s.platforms(false).is_empty());
         assert_eq!(s.get("last_sync_at"), None);
     }
 }

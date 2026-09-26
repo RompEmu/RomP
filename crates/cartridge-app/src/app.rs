@@ -410,7 +410,12 @@ impl Controller {
 
     fn reload_sidebar(&self) {
         let Some(ui) = self.ui() else { return };
-        let platforms = self.shared.store.lock().unwrap().platforms();
+        let platforms = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .platforms(self.offline.get());
         let total: i64 = platforms.iter().map(|p| p.count).sum();
         let entries: Vec<PlatformEntry> = platforms
             .into_iter()

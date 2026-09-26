@@ -81,7 +81,7 @@ impl Store {
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version < 1 {
             conn.execute_batch(
-                "ALTER TABLE games ADD COLUMN local_path TEXT; PRAGMA user_version = 1;",
+                "BEGIN; ALTER TABLE games ADD COLUMN local_path TEXT; PRAGMA user_version = 1; COMMIT;",
             )?;
         }
         Ok(Self { conn })
@@ -173,16 +173,17 @@ impl Store {
         removed
     }
 
-    pub fn platforms(&self) -> Vec<PlatformItem> {
+    pub fn platforms(&self, downloaded_only: bool) -> Vec<PlatformItem> {
         let mut stmt = self
             .conn
             .prepare(
                 "SELECT p.id, p.name, COUNT(g.id) FROM platforms p
                  JOIN games g ON g.platform_id = p.id
+                 WHERE ?1 = 0 OR g.local_path IS NOT NULL
                  GROUP BY p.id ORDER BY p.name COLLATE NOCASE",
             )
             .expect("prepare");
-        stmt.query_map([], |r| {
+        stmt.query_map([downloaded_only], |r| {
             Ok(PlatformItem {
                 id: r.get(0)?,
                 name: r.get(1)?,
@@ -377,7 +378,7 @@ mod tests {
     #[test]
     fn platforms_list_only_non_empty_with_counts() {
         assert_eq!(
-            seeded().platforms(),
+            seeded().platforms(false),
             [
                 PlatformItem {
                     id: 2,
@@ -415,7 +416,7 @@ mod tests {
         s.set("device_id", "x");
         s.clear_library();
         assert!(s.games(&GameFilter::default()).is_empty());
-        assert!(s.platforms().is_empty());
+        assert!(s.platforms(false).is_empty());
         assert_eq!(s.get("device_id").as_deref(), Some("x"));
     }
 
@@ -503,5 +504,19 @@ mod tests {
         assert_eq!(s.game(1).unwrap().local_path.as_deref(), Some("/x"));
         drop(s);
         Store::open(&path).unwrap();
+    }
+
+    #[test]
+    fn downloaded_only_platform_counts() {
+        let mut s = seeded();
+        s.set_local_path(10, Some("/x"));
+        assert_eq!(
+            s.platforms(true),
+            [PlatformItem {
+                id: 1,
+                name: "SNES".into(),
+                count: 1
+            }]
+        );
     }
 }
