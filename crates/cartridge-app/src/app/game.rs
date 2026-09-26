@@ -122,8 +122,7 @@ impl Controller {
         let Some(cover) = detail.cover_large.clone() else {
             return;
         };
-        let cached = self.shared.covers.large_path_for(detail.id, &cover);
-        if cached.exists() {
+        if let Some(cached) = self.shared.covers.cached_large(detail.id, &cover) {
             self.show_game_cover(detail.id, &cached);
             return;
         }

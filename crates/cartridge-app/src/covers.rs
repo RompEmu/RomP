@@ -1,5 +1,6 @@
 use crate::romm::client::Client;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub const THUMB_WIDTH: u32 = 200;
 
@@ -18,6 +19,26 @@ pub fn make_thumbnail(bytes: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out.into_inner())
 }
 
+const IMAGE_EXTENSIONS: [&str; 4] = ["png", "jpg", "webp", "gif"];
+
+async fn write_atomic(dir: &Path, path: &Path, bytes: &[u8]) -> Result<(), String> {
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    tokio::fs::create_dir_all(dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    let tmp = path.with_extension(format!(
+        "{}-{}.tmp",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    tokio::fs::write(&tmp, bytes)
+        .await
+        .map_err(|e| e.to_string())?;
+    tokio::fs::rename(&tmp, path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub struct Covers {
     dir: PathBuf,
 }
@@ -34,18 +55,19 @@ impl Covers {
         ))
     }
 
-    pub fn large_path_for(&self, game_id: i64, cover: &str) -> PathBuf {
-        let ext = cover
-            .split('?')
-            .next()
-            .and_then(|p| p.rsplit_once('.'))
-            .map(|(_, e)| e.to_ascii_lowercase())
-            .filter(|e| matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp"))
-            .unwrap_or_else(|| "png".into());
+    fn large_base(&self, game_id: i64, cover: &str) -> PathBuf {
         self.dir.join(format!(
-            "large-{game_id}-{:016x}.{ext}",
+            "large-{game_id}-{:016x}",
             crate::paths::fnv1a(cover.as_bytes())
         ))
+    }
+
+    pub fn cached_large(&self, game_id: i64, cover: &str) -> Option<PathBuf> {
+        let base = self.large_base(game_id, cover);
+        IMAGE_EXTENSIONS
+            .iter()
+            .map(|ext| base.with_extension(ext))
+            .find(|p| p.exists())
     }
 
     pub async fn ensure_large(
@@ -54,21 +76,18 @@ impl Covers {
         game_id: i64,
         cover: &str,
     ) -> Result<PathBuf, String> {
-        let path = self.large_path_for(game_id, cover);
-        if tokio::fs::try_exists(&path).await.unwrap_or(false) {
+        if let Some(path) = self.cached_large(game_id, cover) {
             return Ok(path);
         }
         let bytes = client.fetch_bytes(cover).await.map_err(|e| e.to_string())?;
-        tokio::fs::create_dir_all(&self.dir)
-            .await
-            .map_err(|e| e.to_string())?;
-        let tmp = path.with_extension("tmp");
-        tokio::fs::write(&tmp, bytes)
-            .await
-            .map_err(|e| e.to_string())?;
-        tokio::fs::rename(&tmp, &path)
-            .await
-            .map_err(|e| e.to_string())?;
+        let ext = match image::guess_format(&bytes) {
+            Ok(image::ImageFormat::Jpeg) => "jpg",
+            Ok(image::ImageFormat::WebP) => "webp",
+            Ok(image::ImageFormat::Gif) => "gif",
+            _ => "png",
+        };
+        let path = self.large_base(game_id, cover).with_extension(ext);
+        write_atomic(&self.dir, &path, &bytes).await?;
         Ok(path)
     }
 
@@ -86,16 +105,7 @@ impl Covers {
         let thumb = tokio::task::spawn_blocking(move || make_thumbnail(&bytes))
             .await
             .map_err(|e| e.to_string())??;
-        tokio::fs::create_dir_all(&self.dir)
-            .await
-            .map_err(|e| e.to_string())?;
-        let tmp = path.with_extension("tmp");
-        tokio::fs::write(&tmp, thumb)
-            .await
-            .map_err(|e| e.to_string())?;
-        tokio::fs::rename(&tmp, &path)
-            .await
-            .map_err(|e| e.to_string())?;
+        write_atomic(&self.dir, &path, &thumb).await?;
         Ok(path)
     }
 }
@@ -182,5 +192,34 @@ mod tests {
             .unwrap()
             .starts_with("large-7-"));
         assert_eq!(first.extension().unwrap(), "png");
+    }
+
+    fn jpeg() -> Vec<u8> {
+        let img = image::RgbImage::from_pixel(8, 8, image::Rgb([1, 2, 3]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageFormat::Jpeg).unwrap();
+        out.into_inner()
+    }
+
+    #[tokio::test]
+    async fn large_cover_extension_follows_the_image_and_parallel_calls_agree() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/cover"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(jpeg()))
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let covers = Covers::new(dir.path().to_path_buf());
+        let client = Client::new(base_of(&server, "/"));
+        let (a, b) = tokio::join!(
+            covers.ensure_large(&client, 9, "/cover"),
+            covers.ensure_large(&client, 9, "/cover")
+        );
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert_eq!(a, b);
+        assert_eq!(a.extension().unwrap(), "jpg");
+        assert_eq!(covers.cached_large(9, "/cover"), Some(a));
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 }
