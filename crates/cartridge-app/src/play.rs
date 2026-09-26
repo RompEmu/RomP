@@ -17,10 +17,11 @@ pub struct GameOptions {
     pub title: String,
     pub jit: bool,
     pub options: Vec<(String, String)>,
+    pub split_screens: bool,
 }
 
 pub struct RunningGame {
-    _ui: GameWindow,
+    _windows: Vec<GameWindow>,
     _timer: Timer,
     session: Rc<RefCell<Session>>,
 }
@@ -50,6 +51,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             title,
             jit,
             options: Vec::new(),
+            split_screens: false,
         },
         |_| {},
     )?;
@@ -79,65 +81,43 @@ pub fn launch(
     let ui = GameWindow::new()?;
     ui.set_game_title(format!("{} — Cartridge", opts.title).into());
     ui.set_status("Starting…".into());
+    let second = if opts.split_screens {
+        let window = GameWindow::new()?;
+        window.set_game_title(format!("{} — Touch screen", opts.title).into());
+        Some(window)
+    } else {
+        None
+    };
+    let windows: Vec<_> = std::iter::once(ui.as_weak())
+        .chain(second.as_ref().map(|w| w.as_weak()))
+        .collect();
 
     let finished = Rc::new(Cell::new(false));
     let started: Rc<RefCell<Option<CoreIdentity>>> = Rc::default();
     let finish: Rc<dyn Fn()> = Rc::new({
         let session = session.clone();
-        let ui = ui.as_weak();
         let started = started.clone();
         move || {
             if finished.replace(true) {
                 return;
             }
             session.borrow_mut().request_stop();
-            if let Some(ui) = ui.upgrade() {
-                let _ = ui.hide();
+            for window in windows.iter().filter_map(|w| w.upgrade()) {
+                let _ = window.hide();
             }
             on_closed(started.borrow().clone());
         }
     });
-    ui.window().on_close_requested({
-        let finish = finish.clone();
-        move || {
-            finish();
-            slint::CloseRequestResponse::HideWindow
-        }
-    });
 
     let controls = Rc::new(RefCell::new(Controls::default()));
-    ui.on_key_event({
-        let session = session.clone();
-        let controls = controls.clone();
-        let finish = finish.clone();
-        move |text, pressed, repeat| {
-            let result = controls.borrow_mut().key(&text, pressed, repeat);
-            match result {
-                None => false,
-                Some(command) => {
-                    if let Some(command) = command {
-                        apply(&session, command, &finish);
-                    }
-                    true
-                }
-            }
-        }
-    });
-    ui.on_focus_lost({
-        let session = session.clone();
-        let finish = finish.clone();
-        let controls = controls.clone();
-        move || {
-            let command = controls.borrow_mut().release_all();
-            if let Some(command) = command {
-                apply(&session, command, &finish);
-            }
-        }
-    });
+    for window in std::iter::once(&ui).chain(second.as_ref()) {
+        wire(window, &session, &controls, &finish);
+    }
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_millis(4), {
         let ui = ui.as_weak();
+        let second = second.as_ref().map(|w| w.as_weak());
         let session = session.clone();
         let mut buf = Vec::new();
         let mut last_seq = 0;
@@ -155,18 +135,14 @@ pub fn launch(
                 let session = session.borrow();
                 if let Some(info) = session.frames.read_into(last_seq, &mut buf) {
                     last_seq = info.seq;
-                    let pixels = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
-                        &buf,
-                        info.width,
-                        info.height,
-                    );
-                    ui.set_frame(Image::from_rgba8(pixels));
-                    let aspect = if info.aspect > 0.0 {
-                        info.aspect
-                    } else {
-                        info.width as f32 / info.height as f32
-                    };
-                    ui.set_aspect(aspect);
+                    let bottom = second.as_ref().and_then(|w| w.upgrade());
+                    match (bottom, split_frame(&buf, info.width, info.height)) {
+                        (Some(bottom), Some((top_half, bottom_half, half))) => {
+                            show_frame(&ui, top_half, info.width, half, 0.0);
+                            show_frame(&bottom, bottom_half, info.width, half, 0.0);
+                        }
+                        _ => show_frame(&ui, &buf, info.width, info.height, info.aspect),
+                    }
                 }
                 session.poll_events()
             };
@@ -177,11 +153,74 @@ pub fn launch(
     });
 
     ui.show()?;
+    if let Some(window) = &second {
+        window.show()?;
+        let position = ui.window().position();
+        let width = ui.window().size().width as i32;
+        window.window().set_position(slint::PhysicalPosition::new(
+            position.x + width + 16,
+            position.y,
+        ));
+    }
     Ok(RunningGame {
-        _ui: ui,
+        _windows: std::iter::once(ui).chain(second).collect(),
         _timer: timer,
         session,
     })
+}
+
+fn show_frame(window: &GameWindow, rgba: &[u8], width: u32, height: u32, aspect: f32) {
+    let pixels = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba, width, height);
+    window.set_frame(Image::from_rgba8(pixels));
+    let aspect = if aspect > 0.0 {
+        aspect
+    } else {
+        width as f32 / height.max(1) as f32
+    };
+    window.set_aspect(aspect);
+}
+
+fn wire(
+    window: &GameWindow,
+    session: &Rc<RefCell<Session>>,
+    controls: &Rc<RefCell<Controls>>,
+    finish: &Rc<dyn Fn()>,
+) {
+    window.window().on_close_requested({
+        let finish = finish.clone();
+        move || {
+            finish();
+            slint::CloseRequestResponse::HideWindow
+        }
+    });
+    window.on_key_event({
+        let session = session.clone();
+        let controls = controls.clone();
+        let finish = finish.clone();
+        move |text, pressed, repeat| {
+            let result = controls.borrow_mut().key(&text, pressed, repeat);
+            match result {
+                None => false,
+                Some(command) => {
+                    if let Some(command) = command {
+                        apply(&session, command, &finish);
+                    }
+                    true
+                }
+            }
+        }
+    });
+    window.on_focus_lost({
+        let session = session.clone();
+        let finish = finish.clone();
+        let controls = controls.clone();
+        move || {
+            let command = controls.borrow_mut().release_all();
+            if let Some(command) = command {
+                apply(&session, command, &finish);
+            }
+        }
+    });
 }
 
 fn read_gamepad(gilrs: &mut gilrs::Gilrs) -> PadState {
@@ -297,4 +336,30 @@ fn flash(ui: &GameWindow, text: String) {
             ui.set_status("".into());
         }
     });
+}
+
+pub fn split_frame(rgba: &[u8], width: u32, height: u32) -> Option<(&[u8], &[u8], u32)> {
+    let half = height / 2;
+    let split = (width * half * 4) as usize;
+    if half == 0 || rgba.len() < split * 2 {
+        return None;
+    }
+    let (top, bottom) = rgba.split_at(split);
+    Some((top, &bottom[..split], half))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stacked_screens_split_at_half_height() {
+        let (w, h) = (2u32, 4u32);
+        let rgba: Vec<u8> = (0..(w * h * 4) as u8).collect();
+        let (top, bottom, half) = split_frame(&rgba, w, h).unwrap();
+        assert_eq!(half, 2);
+        assert_eq!(top, &rgba[..16]);
+        assert_eq!(bottom, &rgba[16..]);
+        assert!(split_frame(&rgba[..4], 1, 1).is_none());
+    }
 }

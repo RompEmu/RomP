@@ -382,6 +382,8 @@ impl Controller {
             options: core_for_platform(&detail.platform_slug)
                 .map(|core| crate::cores::default_options(core.id))
                 .unwrap_or_default(),
+            split_screens: core_for_platform(&detail.platform_slug)
+                .is_some_and(|core| core.id == "desmume"),
         };
         let on_closed = move |identity| {
             let _ =
