@@ -51,6 +51,30 @@ pub(crate) fn fnv1a(bytes: &[u8]) -> u64 {
     })
 }
 
+pub fn server_key(server: &str) -> String {
+    format!(
+        "server-{:08x}",
+        fnv1a(server.trim_end_matches('/').as_bytes()) as u32
+    )
+}
+
+pub fn server_roms_dir(server: &str) -> PathBuf {
+    roms_dir().join(server_key(server))
+}
+
+pub fn game_save_dir(data: &std::path::Path, server: &str, rom_id: i64) -> PathBuf {
+    let saves = data.join("saves");
+    let dir = saves.join(server_key(server)).join(rom_id.to_string());
+    let legacy = saves.join(rom_id.to_string());
+    if !dir.exists() && legacy.is_dir() {
+        if let Some(parent) = dir.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::rename(&legacy, &dir);
+    }
+    dir
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,5 +98,38 @@ mod tests {
     #[test]
     fn missing_stem_still_gives_a_usable_name() {
         assert!(local_save_dir_name(Path::new("/")).starts_with("local-game-"));
+    }
+
+    #[test]
+    fn server_keys_are_stable_and_ignore_trailing_slash() {
+        let key = server_key("http://romm.tvpc.home/");
+        assert_eq!(key, server_key("http://romm.tvpc.home"));
+        assert!(key.starts_with("server-") && key.len() == "server-".len() + 8);
+        assert_ne!(key, server_key("http://other/"));
+    }
+
+    #[test]
+    fn legacy_saves_move_into_the_server_folder() {
+        let data = tempfile::tempdir().unwrap();
+        let legacy = data.path().join("saves/7");
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("game.srm"), b"s").unwrap();
+        let dir = game_save_dir(data.path(), "http://a/", 7);
+        assert_eq!(
+            dir,
+            data.path()
+                .join("saves")
+                .join(server_key("http://a/"))
+                .join("7")
+        );
+        assert_eq!(std::fs::read(dir.join("game.srm")).unwrap(), b"s");
+        assert!(!legacy.exists());
+        assert_eq!(
+            game_save_dir(data.path(), "http://b/", 7),
+            data.path()
+                .join("saves")
+                .join(server_key("http://b/"))
+                .join("7")
+        );
     }
 }

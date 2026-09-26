@@ -43,15 +43,23 @@ fn download_dir(detail: &GameDetail) -> Option<PathBuf> {
     let file = PathBuf::from(detail.local_path.as_deref()?)
         .canonicalize()
         .ok()?;
-    let rel = file.strip_prefix(&roms).ok()?;
-    let mut parts = rel.components();
-    let (slug, id) = (parts.next()?, parts.next()?);
-    (id.as_os_str() == detail.id.to_string().as_str()).then(|| roms.join(slug).join(id))
+    let parts: Vec<_> = file.strip_prefix(&roms).ok()?.components().collect();
+    let id = detail.id.to_string();
+    let depth = (1..=2).find(|&i| parts.get(i).is_some_and(|c| c.as_os_str() == id.as_str()))?;
+    Some(parts[..=depth].iter().fold(roms, |dir, c| dir.join(c)))
 }
 
 impl Controller {
     fn downloading_id(&self) -> Option<i64> {
         self.downloading.borrow().as_ref().map(|(id, _)| *id)
+    }
+
+    fn server(&self) -> String {
+        self.client
+            .borrow()
+            .as_ref()
+            .map(|c| c.base().to_string())
+            .unwrap_or_default()
     }
 
     fn current_game(&self) -> Option<GameDetail> {
@@ -183,7 +191,8 @@ impl Controller {
                     on_ui(move |c| c.download_progress(id, permille as f32 / 1000.0));
                 }
             };
-            let result = download_game(&client, id, &paths::roms_dir(), &progress, &cancel).await;
+            let roms = paths::server_roms_dir(client.base().as_str());
+            let result = download_game(&client, id, &roms, &progress, &cancel).await;
             if result.is_ok() {
                 if let Some(cover) = detail.cover_large.as_deref() {
                     let _ = covers.ensure_large(&client, id, cover).await;
@@ -320,7 +329,7 @@ impl Controller {
         let options = GameOptions {
             core,
             rom,
-            save_dir: paths::data_dir().join("saves").join(detail.id.to_string()),
+            save_dir: paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
             title: detail.title.clone(),
             jit,
         };
