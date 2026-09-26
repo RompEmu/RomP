@@ -15,6 +15,8 @@ Enter your RomM server address (RomM 5.0 or newer). Approve Cartridge in RomM by
 
 Open a game from your library to download and play it. Cartridge installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
 
+In-game saves and save states sync with RomM before and after you play, so you can continue on another device. If a save changed in both places, Cartridge asks which to keep and backs up the other. If you paired Cartridge before save sync existed, choose **Pair again to turn on save sync** in the library.
+
 To play a game file directly with a libretro core:
 
 ```sh
