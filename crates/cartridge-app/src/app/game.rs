@@ -102,6 +102,9 @@ impl Controller {
         ui.set_game_size(human_size(detail.size_bytes).into());
         ui.set_game_downloaded(downloaded_path(&detail).is_some());
         ui.set_game_busy(busy);
+        if busy {
+            ui.set_game_progress(self.download_fraction.get());
+        }
         ui.set_game_playable(playable);
         ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
@@ -176,6 +179,7 @@ impl Controller {
         }
         let cancel = Arc::new(AtomicBool::new(false));
         *self.downloading.borrow_mut() = Some((detail.id, cancel.clone()));
+        self.download_fraction.set(0.0);
         if let Some(ui) = self.ui() {
             ui.set_game_progress(0.0);
             ui.set_game_status("Downloading…".into());
@@ -210,6 +214,7 @@ impl Controller {
     }
 
     fn download_progress(&self, id: i64, fraction: f32) {
+        self.download_fraction.set(fraction);
         if self.current_game().map(|g| g.id) == Some(id) {
             if let Some(ui) = self.ui() {
                 ui.set_game_progress(fraction);
