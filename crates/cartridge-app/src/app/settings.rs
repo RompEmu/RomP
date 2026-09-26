@@ -1,7 +1,9 @@
 use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY};
 use crate::details::human_size;
+use crate::mapping::{self, BUTTONS};
 use crate::players::KEYBOARD;
 use crate::prefs::Preferences;
+use crate::RemapRow;
 use crate::{paths, storage, DeviceRow, KeyHint, StorageRow};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::Duration;
@@ -10,17 +12,17 @@ const SCREEN_SETTINGS: i32 = 4;
 const SECTION_PLAYERS: i32 = 2;
 const SECTION_STORAGE: i32 = 3;
 
-const KEY_HINTS: [(&str, &str); 9] = [
-    ("Arrow keys", "D-pad"),
-    ("X  Z  S  A", "A, B, X, Y"),
-    ("Q  W", "L, R"),
-    ("D  F", "L2, R2"),
-    ("Enter", "Start"),
-    ("Backspace", "Select"),
+const KEY_HINTS: [(&str, &str); 6] = [
+    ("Esc", "Game menu"),
+    ("P", "Pause"),
     ("F5", "Save state"),
     ("F7", "Load state"),
-    ("Esc", "Quit the game"),
+    ("F6", "Next save slot"),
+    ("F11", "Full screen"),
 ];
+
+const KEYBOARD_HINT: &str = "Choose a button, then press the key you want for it.";
+const PAD_HINT: &str = "Choose a button, then press the controller button you want for it.";
 
 impl Controller {
     pub(super) fn save_players(&self) {
@@ -46,6 +48,10 @@ impl Controller {
         ui.set_pref_fullscreen(prefs.fullscreen);
         ui.set_pref_sharp(prefs.sharp_pixels);
         ui.set_pref_volume(f32::from(prefs.volume));
+        let mappings = self.mappings.borrow();
+        ui.set_pref_nintendo_labels(mappings.nintendo_labels);
+        ui.set_pref_stick_dpad(mappings.stick_dpad);
+        drop(mappings);
         ui.set_screen(SCREEN_SETTINGS);
         self.settings_section_changed(ui.get_settings_section());
     }
@@ -98,6 +104,7 @@ impl Controller {
     }
 
     pub(super) fn close_settings(&self) {
+        self.remap_close();
         self.settings_timer.borrow_mut().take();
         if let Some(ui) = self.ui() {
             ui.set_screen(SCREEN_LIBRARY);
@@ -140,6 +147,7 @@ impl Controller {
 
     fn refresh_devices(&self) {
         let Some(ui) = self.ui() else { return };
+        self.capture_pad_press();
         let rows = self.device_rows();
         let current = ui.get_settings_devices();
         let same_devices = current.row_count() == rows.len()
@@ -163,6 +171,146 @@ impl Controller {
         self.players.borrow_mut().set(&key, player);
         self.save_players();
         self.refresh_devices();
+    }
+
+    fn save_mappings(&self) {
+        let json = self.mappings.borrow().to_json();
+        self.shared.store.lock().unwrap().set("mappings", &json);
+    }
+
+    pub(super) fn controller_options_changed(&self) {
+        let Some(ui) = self.ui() else { return };
+        {
+            let mut mappings = self.mappings.borrow_mut();
+            mappings.nintendo_labels = ui.get_pref_nintendo_labels();
+            mappings.stick_dpad = ui.get_pref_stick_dpad();
+        }
+        self.save_mappings();
+    }
+
+    pub(super) fn customize(&self, device: String) {
+        let Some(ui) = self.ui() else { return };
+        let title = if device == KEYBOARD {
+            "Keyboard".to_string()
+        } else {
+            let pads = self.gamepads.borrow().connected();
+            pads.into_iter()
+                .find(|p| p.key == device)
+                .map_or("Controller".into(), |p| p.name)
+        };
+        ui.set_remap_title(title.into());
+        *self.remap_device.borrow_mut() = Some(device);
+        self.remap_waiting.set(None);
+        self.show_remap(None);
+        ui.set_remap_open(true);
+    }
+
+    fn show_remap(&self, notice: Option<&str>) {
+        let Some(ui) = self.ui() else { return };
+        let Some(device) = self.remap_device.borrow().clone() else {
+            return;
+        };
+        let keyboard = device == KEYBOARD;
+        let waiting = self.remap_waiting.get();
+        let mappings = self.mappings.borrow();
+        let rows: Vec<RemapRow> = BUTTONS
+            .iter()
+            .map(|(button, name)| RemapRow {
+                name: (*name).into(),
+                binding: if keyboard {
+                    mapping::key_label(&mappings.key_for(*button))
+                } else {
+                    mapping::physical_label(
+                        mappings.pad_button(mapping::model_of(&device), *button),
+                    )
+                    .to_string()
+                }
+                .into(),
+                waiting: waiting == Some(*button),
+            })
+            .collect();
+        ui.set_remap_rows(ModelRc::new(VecModel::from(rows)));
+        ui.set_remap_waiting(waiting.is_some());
+        let hint = notice.unwrap_or(if keyboard { KEYBOARD_HINT } else { PAD_HINT });
+        ui.set_remap_hint(hint.into());
+    }
+
+    pub(super) fn remap_pick(&self, index: i32) {
+        let button = usize::try_from(index)
+            .ok()
+            .and_then(|i| BUTTONS.get(i))
+            .map(|(b, _)| *b);
+        self.remap_waiting.set(button);
+        self.gamepads.borrow_mut().take_presses();
+        self.show_remap(None);
+    }
+
+    pub(super) fn remap_key(&self, text: String) {
+        let (Some(button), Some(device)) =
+            (self.remap_waiting.get(), self.remap_device.borrow().clone())
+        else {
+            return;
+        };
+        if device != KEYBOARD {
+            return;
+        }
+        if !self.mappings.borrow_mut().set_key(button, &text) {
+            return self.show_remap(Some(
+                "That key is a shortcut. Choose a different key for this button.",
+            ));
+        }
+        self.remap_waiting.set(None);
+        self.save_mappings();
+        self.show_remap(None);
+    }
+
+    fn capture_pad_press(&self) {
+        let (Some(button), Some(device)) =
+            (self.remap_waiting.get(), self.remap_device.borrow().clone())
+        else {
+            return;
+        };
+        if device == KEYBOARD {
+            return;
+        }
+        let model = mapping::model_of(&device).to_string();
+        let presses = self.gamepads.borrow_mut().take_presses();
+        let Some((_, physical)) = presses
+            .into_iter()
+            .find(|(key, _)| mapping::model_of(key) == model)
+        else {
+            return;
+        };
+        self.mappings
+            .borrow_mut()
+            .set_pad_button(&model, button, physical);
+        self.remap_waiting.set(None);
+        self.save_mappings();
+        self.show_remap(None);
+    }
+
+    pub(super) fn remap_reset(&self) {
+        let Some(device) = self.remap_device.borrow().clone() else {
+            return;
+        };
+        if device == KEYBOARD {
+            self.mappings.borrow_mut().reset_keyboard();
+        } else {
+            self.mappings
+                .borrow_mut()
+                .reset_pad(mapping::model_of(&device));
+        }
+        self.remap_waiting.set(None);
+        self.save_mappings();
+        self.show_remap(None);
+    }
+
+    pub(super) fn remap_close(&self) {
+        self.remap_device.borrow_mut().take();
+        self.remap_waiting.set(None);
+        if let Some(ui) = self.ui() {
+            ui.set_remap_open(false);
+        }
     }
 
     fn measure_storage(&self) {

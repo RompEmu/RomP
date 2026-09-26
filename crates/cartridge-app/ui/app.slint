@@ -5,6 +5,7 @@ export struct Membership { key: string, name: string, member: bool }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
 export struct KeyHint { keys: string, action: string }
+export struct RemapRow { name: string, binding: string, waiting: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool }
 export struct GameRow { cards: [GameCard] }
 export struct Fact { label: string, value: string }
@@ -710,6 +711,19 @@ component SettingsPage inherits Rectangle {
     in-out property <bool> sharp;
     in-out property <float> volume;
     callback prefs-changed();
+    in-out property <bool> nintendo-labels;
+    in-out property <bool> stick-dpad;
+    callback controller-options-changed();
+    in property <bool> remap-open;
+    in property <string> remap-title;
+    in property <string> remap-hint;
+    in property <bool> remap-waiting;
+    in property <[RemapRow]> remap-rows;
+    callback customize(string);
+    callback remap-pick(int);
+    callback remap-key(string);
+    callback remap-reset();
+    callback remap-close();
     callback back();
     callback sign-out();
     callback pair-again();
@@ -834,6 +848,7 @@ component SettingsPage inherits Rectangle {
                                 detail: device.active ? "Button pressed" : device.detail;
                                 detail-color: device.active ? #8b9cff : #8a8f98;
                                 highlight: device.active;
+                                Button { text: "Customize…"; clicked => { root.customize(device.key); } }
                                 ComboBox {
                                     width: 150px;
                                     model: ["Off", "Player 1", "Player 2", "Player 3", "Player 4"];
@@ -842,7 +857,21 @@ component SettingsPage inherits Rectangle {
                                 }
                             }
                         }
-                        Text { text: "Keyboard controls"; font-size: 15px; font-weight: 700; }
+                        Text { text: "Controller options"; font-size: 15px; font-weight: 700; }
+                        Panel {
+                            SettingRow {
+                                label: "Match button labels on Nintendo systems";
+                                detail: "On other controllers, the button labelled A presses A instead of the one in its place on a Nintendo pad.";
+                                Switch { checked <=> root.nintendo-labels; toggled => { root.controller-options-changed(); } }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: "Left stick also moves the D-pad";
+                                detail: "Handy for games made for a D-pad.";
+                                Switch { checked <=> root.stick-dpad; toggled => { root.controller-options-changed(); } }
+                            }
+                        }
+                        Text { text: "Shortcuts"; font-size: 15px; font-weight: 700; }
                         Panel {
                             for hint[i] in root.keys: SettingRow {
                                 divider: i > 0;
@@ -876,6 +905,66 @@ component SettingsPage inherits Rectangle {
                             Button { text: "Clear image cache"; clicked => { root.clear-images(); } }
                             Button { text: "Show folder"; clicked => { root.show-folder(); } }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.remap-open: Rectangle {
+        background: #000000a0;
+        TouchArea { }
+        Rectangle {
+            width: 480px;
+            height: min(parent.height - 64px, remap-box.preferred-height);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: #23272f;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: #3a3f4b;
+            clip: true;
+            remap-keys := FocusScope {
+                key-pressed(event) => {
+                    if root.remap-waiting {
+                        root.remap-key(event.text);
+                        return accept;
+                    }
+                    return reject;
+                }
+                remap-box := VerticalLayout {
+                    padding: 20px;
+                    spacing: 12px;
+                    Text { text: root.remap-title; font-size: 17px; font-weight: 700; }
+                    Text { text: root.remap-hint; color: #b8bec8; wrap: word-wrap; }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        min-height: 200px;
+                        preferred-height: remap-list.preferred-height;
+                        content-width: self.visible-width;
+                        content-height: remap-list.preferred-height;
+                        remap-list := VerticalLayout {
+                            width: parent.width;
+                            for row[i] in root.remap-rows: SettingRow {
+                                divider: i > 0;
+                                label: row.name;
+                                highlight: row.waiting;
+                                Button {
+                                    width: 190px;
+                                    text: row.waiting ? "Press…" : row.binding;
+                                    clicked => {
+                                        root.remap-pick(i);
+                                        remap-keys.focus();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Button { text: "Reset to default"; clicked => { root.remap-reset(); } }
+                        Rectangle { horizontal-stretch: 1; }
+                        Button { text: "Done"; primary: true; clicked => { root.remap-close(); } }
                     }
                 }
             }
@@ -973,6 +1062,19 @@ export component AppWindow inherits Window {
     in-out property <bool> pref-sharp;
     in-out property <float> pref-volume;
     callback prefs-changed();
+    in-out property <bool> pref-nintendo-labels;
+    in-out property <bool> pref-stick-dpad;
+    callback controller-options-changed();
+    in property <bool> remap-open;
+    in property <string> remap-title;
+    in property <string> remap-hint;
+    in property <bool> remap-waiting;
+    in property <[RemapRow]> remap-rows;
+    callback customize(string);
+    callback remap-pick(int);
+    callback remap-key(string);
+    callback remap-reset();
+    callback remap-close();
 
     in property <[SidebarEntry]> sidebar;
     in property <string> selected-key: "all";
@@ -1099,6 +1201,19 @@ export component AppWindow inherits Window {
         sharp <=> root.pref-sharp;
         volume <=> root.pref-volume;
         prefs-changed => { root.prefs-changed(); }
+        nintendo-labels <=> root.pref-nintendo-labels;
+        stick-dpad <=> root.pref-stick-dpad;
+        controller-options-changed => { root.controller-options-changed(); }
+        remap-open: root.remap-open;
+        remap-title: root.remap-title;
+        remap-hint: root.remap-hint;
+        remap-waiting: root.remap-waiting;
+        remap-rows: root.remap-rows;
+        customize(key) => { root.customize(key); }
+        remap-pick(i) => { root.remap-pick(i); }
+        remap-key(text) => { root.remap-key(text); }
+        remap-reset => { root.remap-reset(); }
+        remap-close => { root.remap-close(); }
         back => { root.back-to-library(); }
         sign-out => { root.sign-out(); }
         pair-again => { root.pair-again(); }

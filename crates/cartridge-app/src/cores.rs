@@ -175,6 +175,24 @@ pub fn core_for_platform(slug: &str) -> Option<&'static CoreInfo> {
         .map(|(_, c)| c)
 }
 
+const NINTENDO: [&str; 11] = [
+    "nes",
+    "famicom",
+    "fds",
+    "snes",
+    "sfam",
+    "n64",
+    "gb",
+    "gbc",
+    "gba",
+    "nds",
+    "virtualboy",
+];
+
+pub fn is_nintendo(platform_slug: &str) -> bool {
+    NINTENDO.contains(&platform_slug)
+}
+
 pub fn lib_file(core: &CoreInfo) -> String {
     let ext = if cfg!(target_os = "macos") {
         "dylib"

@@ -1,9 +1,12 @@
 component MenuButton inherits Rectangle {
     in property <string> text;
     in property <bool> primary;
+    in property <bool> focused;
     callback clicked();
     height: 40px;
     border-radius: 8px;
+    border-width: root.focused ? 2px : 0px;
+    border-color: #c7d0ff;
     background: root.primary
         ? (touch.pressed ? #4a61e0 : touch.has-hover ? #6f86ff : #5b73f5)
         : (touch.pressed ? #23272f : touch.has-hover ? #3a3f4b : #2c313a);
@@ -22,6 +25,7 @@ component GameMenu inherits Rectangle {
     in property <bool> paused;
     in property <int> slot;
     in property <bool> fullscreen;
+    in property <int> focused-item: -1;
     callback resume();
     callback toggle-pause();
     callback save-state();
@@ -50,29 +54,35 @@ component GameMenu inherits Rectangle {
             Text { text: root.name; color: white; font-size: 18px; font-weight: 700; overflow: elide; }
             Text { text: root.paused ? "Paused" : "Running behind this menu"; color: #9aa3b2; font-size: 13px; }
             Rectangle { height: 4px; }
-            MenuButton { text: "Resume"; primary: true; clicked => { root.resume(); } }
-            MenuButton { text: root.paused ? "Play" : "Pause"; clicked => { root.toggle-pause(); } }
+            MenuButton { text: "Resume"; primary: true; focused: root.focused-item == 0; clicked => { root.resume(); } }
+            MenuButton { text: root.paused ? "Play" : "Pause"; focused: root.focused-item == 1; clicked => { root.toggle-pause(); } }
             Rectangle { height: 1px; background: #ffffff14; }
             HorizontalLayout {
                 spacing: 8px;
                 Text { text: "Save slot"; color: #b8bec8; vertical-alignment: center; horizontal-stretch: 1; }
                 MenuButton { width: 40px; text: "‹"; clicked => { root.step-slot(-1); } }
-                Text { text: root.slot; width: 28px; color: white; font-size: 16px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                Rectangle {
+                    width: 36px;
+                    border-radius: 8px;
+                    border-width: root.focused-item == 2 ? 2px : 0px;
+                    border-color: #c7d0ff;
+                    Text { text: root.slot; color: white; font-size: 16px; font-weight: 700; }
+                }
                 MenuButton { width: 40px; text: "›"; clicked => { root.step-slot(1); } }
             }
             HorizontalLayout {
                 spacing: 8px;
-                MenuButton { text: "Save state"; clicked => { root.save-state(); } }
-                MenuButton { text: "Load state"; clicked => { root.load-state(); } }
+                MenuButton { text: "Save state"; focused: root.focused-item == 3; clicked => { root.save-state(); } }
+                MenuButton { text: "Load state"; focused: root.focused-item == 4; clicked => { root.load-state(); } }
             }
             Rectangle { height: 1px; background: #ffffff14; }
-            MenuButton { text: root.fullscreen ? "Exit full screen" : "Full screen"; clicked => { root.toggle-fullscreen(); } }
-            MenuButton { text: "Controllers…"; clicked => { root.open-controllers(); } }
-            MenuButton { text: "Quit game"; clicked => { root.quit(); } }
+            MenuButton { text: root.fullscreen ? "Exit full screen" : "Full screen"; focused: root.focused-item == 5; clicked => { root.toggle-fullscreen(); } }
+            MenuButton { text: "Controllers…"; focused: root.focused-item == 6; clicked => { root.open-controllers(); } }
+            MenuButton { text: "Quit game"; focused: root.focused-item == 7; clicked => { root.quit(); } }
             VerticalLayout {
                 padding-top: 4px;
                 spacing: 2px;
-                Text { text: "Esc resume  ·  P pause  ·  F11 full screen"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
+                Text { text: "Esc or Guide resume  ·  P pause  ·  F11 full screen"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
                 Text { text: "F5 save  ·  F7 load  ·  F6 next slot"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
             }
         }
@@ -88,6 +98,7 @@ export component GameWindow inherits Window {
     in property <int> slot: 1;
     in property <bool> fullscreen;
     in property <bool> sharp: true;
+    in property <int> menu-focus: -1;
     callback window-active(bool);
     callback resume();
     callback toggle-pause();
@@ -173,6 +184,7 @@ export component GameWindow inherits Window {
             paused: root.paused;
             slot: root.slot;
             fullscreen: root.fullscreen;
+            focused-item: root.menu-focus;
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
             save-state => { root.save-state(); }

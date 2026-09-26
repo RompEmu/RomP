@@ -106,6 +106,9 @@ struct Controller {
     settings_timer: RefCell<Option<Timer>>,
     dialog: RefCell<Option<collections::DialogAction>>,
     prefs: Cell<crate::prefs::Preferences>,
+    mappings: Rc<RefCell<crate::mapping::Mappings>>,
+    remap_device: RefCell<Option<String>>,
+    remap_waiting: Cell<Option<u32>>,
 }
 
 thread_local! {
@@ -142,6 +145,9 @@ pub fn run() -> anyhow::Result<()> {
     );
     let prefs =
         crate::prefs::Preferences::from_json(shared.store.lock().unwrap().get("prefs").as_deref());
+    let mappings = crate::mapping::Mappings::from_json(
+        shared.store.lock().unwrap().get("mappings").as_deref(),
+    );
     let controller = Rc::new(Controller {
         shared,
         ui: ui.as_weak(),
@@ -174,6 +180,9 @@ pub fn run() -> anyhow::Result<()> {
         players: Rc::new(RefCell::new(players)),
         settings_timer: RefCell::new(None),
         prefs: Cell::new(prefs),
+        mappings: Rc::new(RefCell::new(mappings)),
+        remap_device: RefCell::new(None),
+        remap_waiting: Cell::new(None),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -203,6 +212,12 @@ impl Controller {
         });
         ui.on_clear_images(|| with_controller(|c| c.clear_images()));
         ui.on_prefs_changed(|| with_controller(|c| c.prefs_changed()));
+        ui.on_controller_options_changed(|| with_controller(|c| c.controller_options_changed()));
+        ui.on_customize(|device| with_controller(|c| c.customize(device.to_string())));
+        ui.on_remap_pick(|i| with_controller(|c| c.remap_pick(i)));
+        ui.on_remap_key(|text| with_controller(|c| c.remap_key(text.to_string())));
+        ui.on_remap_reset(|| with_controller(|c| c.remap_reset()));
+        ui.on_remap_close(|| with_controller(|c| c.remap_close()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));
         ui.on_select(|key| with_controller(|c| c.select(key.to_string())));
         ui.on_toggle_section(|key| with_controller(|c| c.toggle_section(key.to_string())));

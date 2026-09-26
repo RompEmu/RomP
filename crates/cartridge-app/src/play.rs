@@ -1,5 +1,6 @@
 use crate::gamepads::Gamepads;
 use crate::input::{self, map_key, Command, Controls, KeyAction};
+use crate::mapping::Mappings;
 use crate::paths;
 use crate::players::{Assignments, KEYBOARD};
 use crate::prefs::Preferences;
@@ -26,6 +27,8 @@ pub struct GameOptions {
     pub players: Rc<RefCell<Assignments>>,
     pub prefs: Preferences,
     pub load_slot: Option<u8>,
+    pub mappings: Rc<RefCell<Mappings>>,
+    pub nintendo: bool,
 }
 
 pub struct RunningGame {
@@ -67,6 +70,8 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             players: Rc::default(),
             prefs: Preferences::default(),
             load_slot: None,
+            mappings: Rc::default(),
+            nintendo: false,
         },
         |_| {},
         || {},
@@ -88,7 +93,16 @@ struct Game {
     pause_unfocused: Cell<bool>,
     finish: Rc<dyn Fn()>,
     open_controllers: Box<dyn Fn()>,
+    mappings: Rc<RefCell<Mappings>>,
+    menu_focus: Cell<i32>,
+    pad_buttons: Cell<u16>,
+    menu_combo: Cell<bool>,
 }
+
+const MENU_ITEMS: i32 = 8;
+const MENU_SLOT: i32 = 2;
+const MENU_SAVE: i32 = 3;
+const MENU_LOAD: i32 = 4;
 
 impl Game {
     fn primary(&self) -> &GameWindow {
@@ -125,6 +139,7 @@ impl Game {
 
     fn set_menu(&self, open: bool) {
         self.menu_open.set(open);
+        self.set_menu_focus(-1);
         self.primary().set_menu_open(open);
         self.focus_paused.set(false);
         self.set_paused(open);
@@ -150,12 +165,84 @@ impl Game {
         self.primary().set_slot(slot);
     }
 
-    fn key(&self, text: &str, pressed: bool, repeat: bool) -> bool {
-        let action = map_key(text);
-        if self.menu_open.get() && matches!(action, Some(KeyAction::Button(_))) {
-            return true;
+    fn set_menu_focus(&self, focus: i32) {
+        self.menu_focus.set(focus);
+        self.primary().set_menu_focus(focus);
+    }
+
+    fn activate(&self, item: i32) {
+        match item {
+            0 => self.set_menu(false),
+            1 => self.set_paused(!self.paused.get()),
+            MENU_SLOT => self.step_slot(1),
+            MENU_SAVE => self.send(&AppMsg::SaveSlot(self.controls.borrow().slot())),
+            MENU_LOAD => self.send(&AppMsg::LoadSlot(self.controls.borrow().slot())),
+            5 => self.toggle_fullscreen(),
+            6 => (self.open_controllers)(),
+            7 => (self.finish)(),
+            _ => {}
         }
-        let result = self.controls.borrow_mut().key(text, pressed, repeat);
+    }
+
+    fn menu_button(&self, button: u32) {
+        let focus = self.menu_focus.get();
+        if focus < 0 && matches!(button, input::UP | input::DOWN | input::LEFT | input::RIGHT) {
+            return self.set_menu_focus(0);
+        }
+        match button {
+            input::UP => self.set_menu_focus(match focus {
+                MENU_LOAD => MENU_SLOT,
+                f => (f - 1).max(0),
+            }),
+            input::DOWN => self.set_menu_focus(match focus {
+                MENU_SAVE => 5,
+                f => (f + 1).min(MENU_ITEMS - 1),
+            }),
+            input::LEFT if focus == MENU_SLOT => self.step_slot(-1),
+            input::RIGHT if focus == MENU_SLOT => self.step_slot(1),
+            input::LEFT if focus == MENU_LOAD => self.set_menu_focus(MENU_SAVE),
+            input::RIGHT if focus == MENU_SAVE => self.set_menu_focus(MENU_LOAD),
+            input::A | input::START => self.activate(focus.max(0)),
+            input::B => self.set_menu(false),
+            _ => {}
+        }
+    }
+
+    fn pads(&self, inputs: &[crate::gamepads::PadInput]) {
+        let combo = inputs.iter().any(|p| {
+            let held = |b: u32| p.state.buttons & 1 << b != 0;
+            p.guide || (held(input::SELECT) && held(input::START))
+        });
+        if combo && !self.menu_combo.get() {
+            self.set_menu(!self.menu_open.get());
+        }
+        self.menu_combo.set(combo);
+        let buttons = inputs.iter().fold(0u16, |b, p| b | p.state.buttons);
+        let pressed = buttons & !self.pad_buttons.replace(buttons);
+        if self.menu_open.get() {
+            for (button, _) in crate::mapping::BUTTONS {
+                if pressed & 1 << button != 0 {
+                    self.menu_button(button);
+                }
+            }
+        }
+    }
+
+    fn key(&self, text: &str, pressed: bool, repeat: bool) -> bool {
+        let mappings = self.mappings.borrow();
+        let action = map_key(text, &mappings);
+        if self.menu_open.get() {
+            if let Some(KeyAction::Button(button)) = action {
+                if pressed {
+                    self.menu_button(button);
+                }
+                return true;
+            }
+        }
+        let result = self
+            .controls
+            .borrow_mut()
+            .key(text, pressed, repeat, &mappings);
         match result {
             None => false,
             Some(commands) => {
@@ -247,6 +334,10 @@ pub fn launch(
             pause_unfocused: Cell::new(opts.prefs.pause_unfocused),
             finish,
             open_controllers: Box::new(open_controllers),
+            mappings: opts.mappings.clone(),
+            menu_focus: Cell::new(-1),
+            pad_buttons: Cell::new(0),
+            menu_combo: Cell::new(false),
         }
     });
     let _ = game
@@ -264,12 +355,14 @@ pub fn launch(
         let mut last_seq = 0;
         let gamepads = opts.gamepads.clone();
         let players = opts.players.clone();
+        let mappings = opts.mappings.clone();
+        let nintendo = opts.nintendo;
         let mut known: HashSet<String> = HashSet::new();
         let mut first_poll = true;
         move || {
             let Some(game) = weak.upgrade() else { return };
             let ui = game.primary();
-            let states: Vec<_> = {
+            let (inputs, states): (Vec<_>, Vec<_>) = {
                 let mut pads = gamepads.borrow_mut();
                 pads.poll();
                 let connected = pads.connected();
@@ -295,12 +388,15 @@ pub fn launch(
                 }
                 known.retain(|k| keys.contains(k));
                 first_poll = false;
-                pads.states()
-                    .into_iter()
-                    .map(|(key, state)| (players.player(&key), state))
-                    .collect()
+                let inputs = pads.states(&mappings.borrow(), nintendo);
+                let states = inputs
+                    .iter()
+                    .map(|p| (players.player(&p.key), p.state))
+                    .collect();
+                (inputs, states)
             };
-            if !game.paused.get() {
+            game.pads(&inputs);
+            if !game.paused.get() && !game.menu_open.get() {
                 let keyboard = players.borrow().player(KEYBOARD);
                 let mut commands = game.controls.borrow_mut().set_keyboard_player(keyboard);
                 commands.extend(game.controls.borrow_mut().set_gamepads(states));

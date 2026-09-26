@@ -1,4 +1,5 @@
-use crate::input::{self, retro_button};
+use crate::input;
+use crate::mapping::{self, Mappings, BUTTONS};
 use cartridge_proto::msg::PadState;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -29,9 +30,17 @@ pub fn pad_keys(uuids: &[[u8; 16]], names: &[&str]) -> Vec<String> {
         .collect()
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PadInput {
+    pub key: String,
+    pub state: PadState,
+    pub guide: bool,
+}
+
 pub struct Gamepads {
     gilrs: Option<gilrs::Gilrs>,
     active: HashMap<gilrs::GamepadId, Instant>,
+    presses: Vec<(gilrs::GamepadId, gilrs::Button)>,
 }
 
 impl Gamepads {
@@ -42,6 +51,7 @@ impl Gamepads {
         Self {
             gilrs,
             active: HashMap::new(),
+            presses: Vec::new(),
         }
     }
 
@@ -50,8 +60,12 @@ impl Gamepads {
             return;
         };
         while let Some(event) = gilrs.next_event() {
-            if matches!(event.event, gilrs::EventType::ButtonPressed(..)) {
+            if let gilrs::EventType::ButtonPressed(button, _) = event.event {
                 self.active.insert(event.id, Instant::now());
+                self.presses.push((event.id, button));
+                if self.presses.len() > 32 {
+                    self.presses.remove(0);
+                }
             }
         }
     }
@@ -79,12 +93,38 @@ impl Gamepads {
             .collect()
     }
 
-    pub fn states(&self) -> Vec<(String, PadState)> {
+    pub fn states(&self, mappings: &Mappings, nintendo: bool) -> Vec<PadInput> {
         let pads = self.pads();
         self.connected()
             .into_iter()
             .zip(pads)
-            .map(|(info, (_, pad))| (info.key, pad_state(&pad)))
+            .map(|(info, (_, pad))| {
+                let mut state = pad_state(&pad, mappings, mapping::model_of(&info.key));
+                if mappings.stick_dpad {
+                    state = mapping::stick_to_dpad(state);
+                }
+                if nintendo && mappings.nintendo_labels {
+                    state = mapping::swap_face(state);
+                }
+                PadInput {
+                    key: info.key,
+                    state,
+                    guide: pad.is_pressed(gilrs::Button::Mode),
+                }
+            })
+            .collect()
+    }
+
+    pub fn take_presses(&mut self) -> Vec<(String, gilrs::Button)> {
+        let keys: HashMap<gilrs::GamepadId, String> = self
+            .pads()
+            .iter()
+            .map(|(id, _)| *id)
+            .zip(self.connected().into_iter().map(|p| p.key))
+            .collect();
+        std::mem::take(&mut self.presses)
+            .into_iter()
+            .filter_map(|(id, button)| Some((keys.get(&id)?.clone(), button)))
             .collect()
     }
 
@@ -103,31 +143,12 @@ impl Gamepads {
     }
 }
 
-fn pad_state(pad: &gilrs::Gamepad<'_>) -> PadState {
+fn pad_state(pad: &gilrs::Gamepad<'_>, mappings: &Mappings, model: &str) -> PadState {
     use gilrs::{Axis, Button};
     let mut state = PadState::default();
-    for button in [
-        Button::South,
-        Button::East,
-        Button::West,
-        Button::North,
-        Button::LeftTrigger,
-        Button::RightTrigger,
-        Button::LeftTrigger2,
-        Button::RightTrigger2,
-        Button::Select,
-        Button::Start,
-        Button::DPadUp,
-        Button::DPadDown,
-        Button::DPadLeft,
-        Button::DPadRight,
-        Button::LeftThumb,
-        Button::RightThumb,
-    ] {
-        if pad.is_pressed(button) {
-            if let Some(bit) = retro_button(button) {
-                state.buttons |= 1 << bit;
-            }
+    for (button, _) in BUTTONS {
+        if pad.is_pressed(mappings.pad_button(model, button)) {
+            state.buttons |= 1 << button;
         }
     }
     let trigger = |b: Button| (pad.button_data(b).map_or(0.0, |d| d.value()) * 32767.0) as i16;
@@ -136,8 +157,8 @@ fn pad_state(pad: &gilrs::Gamepad<'_>) -> PadState {
         input::stick(pad.value(Axis::LeftStickY), true),
         input::stick(pad.value(Axis::RightStickX), false),
         input::stick(pad.value(Axis::RightStickY), true),
-        trigger(Button::LeftTrigger2),
-        trigger(Button::RightTrigger2),
+        trigger(mappings.pad_button(model, input::L2)),
+        trigger(mappings.pad_button(model, input::R2)),
     ];
     state
 }

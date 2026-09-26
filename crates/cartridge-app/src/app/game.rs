@@ -576,6 +576,8 @@ impl Controller {
             players: self.players.clone(),
             prefs,
             load_slot,
+            mappings: self.mappings.clone(),
+            nintendo: crate::cores::is_nintendo(&detail.platform_slug),
         };
         let on_closed = move |identity| {
             let _ =
