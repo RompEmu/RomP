@@ -18,20 +18,70 @@ pub fn file_iso_mtime(path: &Path) -> Option<String> {
     Some(crate::sync::iso_utc(modified))
 }
 
+pub const BACKUPS_KEPT: usize = 10;
+
+fn new_backup_dir(dir: &Path) -> io::Result<PathBuf> {
+    let root = dir.join("backup");
+    let mut stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    while root.join(format!("{stamp:015}")).exists() {
+        stamp += 1;
+    }
+    let target = root.join(format!("{stamp:015}"));
+    std::fs::create_dir_all(&target)?;
+    Ok(target)
+}
+
+fn prune_backups(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir.join("backup")) else {
+        return;
+    };
+    let mut stamped: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_dir()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.chars().all(|c| c.is_ascii_digit()))
+        })
+        .collect();
+    stamped.sort_by_key(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.parse::<u128>().ok())
+            .unwrap_or(0)
+    });
+    let excess = stamped.len().saturating_sub(BACKUPS_KEPT);
+    for old in &stamped[..excess] {
+        let _ = std::fs::remove_dir_all(old);
+    }
+}
+
+pub fn backup_bytes(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
+    let target = new_backup_dir(dir)?.join(name);
+    std::fs::write(&target, bytes)?;
+    prune_backups(dir);
+    Ok(target)
+}
+
 pub fn backup(dir: &Path, file: &str) -> io::Result<Option<PathBuf>> {
     let source = dir.join(file);
     if !source.exists() {
         return Ok(None);
     }
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let target_dir = dir.join("backup").join(stamp.to_string());
-    std::fs::create_dir_all(&target_dir)?;
-    let target = target_dir.join(file);
+    let target = new_backup_dir(dir)?.join(file);
     std::fs::copy(&source, &target)?;
+    prune_backups(dir);
     Ok(Some(target))
+}
+
+fn newest(saves: Vec<crate::romm::types::RemoteSave>) -> Option<crate::romm::types::RemoteSave> {
+    saves
+        .into_iter()
+        .max_by_key(|s| crate::sync::parse_iso(&s.updated_at).unwrap_or(i64::MIN))
 }
 
 pub fn replace_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -183,11 +233,18 @@ pub async fn sync_sram(
         (Some("upload"), Some(bytes)) => {
             match upload_sram(client, device_id, game, bytes, Some(session), false).await {
                 Ok(()) => Ok(SramOutcome::Uploaded),
-                Err(Error::Conflict) => Ok(SramOutcome::Conflict(SramConflict {
-                    save_id: None,
-                    server_updated_at: None,
-                    local_updated_at,
-                })),
+                Err(Error::Conflict) => {
+                    let latest = client
+                        .list_saves(game.rom_id, SRAM_SLOT, device_id)
+                        .await
+                        .ok()
+                        .and_then(newest);
+                    Ok(SramOutcome::Conflict(SramConflict {
+                        save_id: latest.as_ref().map(|s| s.id),
+                        server_updated_at: latest.map(|s| s.updated_at),
+                        local_updated_at,
+                    }))
+                }
                 Err(e) => Err(e),
             }
         }
@@ -210,15 +267,12 @@ pub async fn sync_sram(
         }
         _ => Ok(SramOutcome::InSync),
     };
-    match &result {
-        Ok(SramOutcome::Conflict(_)) => {}
-        Ok(_) => {
-            let _ = client.complete_session(session, 1, 0).await;
-        }
-        Err(_) => {
-            let _ = client.complete_session(session, 0, 1).await;
-        }
-    }
+    let (completed, failed) = match &result {
+        Ok(SramOutcome::Uploaded | SramOutcome::Downloaded { .. }) => (1, 0),
+        Ok(SramOutcome::InSync | SramOutcome::Conflict(_)) => (0, 0),
+        Err(_) => (0, 1),
+    };
+    let _ = client.complete_session(session, completed, failed).await;
     result
 }
 
@@ -239,11 +293,7 @@ pub async fn resolve_sram(
         Keep::Server => {
             let save_id = match conflict.save_id {
                 Some(id) => id,
-                None => client
-                    .list_saves(game.rom_id, SRAM_SLOT, device_id)
-                    .await?
-                    .into_iter()
-                    .max_by(|a, b| a.updated_at.cmp(&b.updated_at))
+                None => newest(client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?)
                     .map(|s| s.id)
                     .ok_or_else(|| Error::Decode("no server save to use".into()))?,
             };
@@ -306,16 +356,16 @@ pub async fn sync_states(
             (true, false) => true,
             (false, true) => false,
             (true, true) => {
-                file_iso_mtime(&path).unwrap_or_default()
-                    > server.map(|s| s.updated_at.clone()).unwrap_or_default()
+                let local_time = file_iso_mtime(&path).and_then(|t| crate::sync::parse_iso(&t));
+                let server_time = server.and_then(|s| crate::sync::parse_iso(&s.updated_at));
+                local_time.unwrap_or(i64::MIN) > server_time.unwrap_or(i64::MIN)
             }
             (false, false) => continue,
         };
         let recorded = if upload {
             if let Some(srv) = server.filter(|_| remote_changed) {
                 let bytes = client.download_state(srv.id).await?;
-                let keep = game.dir.join("backup").join(format!("server-{file}"));
-                replace_file(&keep, &bytes).map_err(io_err)?;
+                backup_bytes(&game.dir, &format!("server-{file}"), &bytes).map_err(io_err)?;
             }
             let bytes = local.expect("local state to upload");
             let md5 = md5_hex(&bytes);
@@ -369,6 +419,40 @@ mod tests {
     }
 
     #[test]
+    fn only_the_newest_backups_are_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 0..(BACKUPS_KEPT + 3) {
+            std::fs::write(dir.path().join("game.srm"), format!("v{i}")).unwrap();
+            backup(dir.path(), "game.srm").unwrap();
+        }
+        let kept: Vec<_> = std::fs::read_dir(dir.path().join("backup"))
+            .unwrap()
+            .flatten()
+            .collect();
+        assert_eq!(kept.len(), BACKUPS_KEPT);
+        let newest = std::fs::read_dir(dir.path().join("backup"))
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .max()
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(newest.join("game.srm")).unwrap(),
+            format!("v{}", BACKUPS_KEPT + 2)
+        );
+    }
+
+    #[test]
+    fn server_copies_are_backed_up_without_overwriting() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = backup_bytes(dir.path(), "server-slot-1.state", b"one").unwrap();
+        let b = backup_bytes(dir.path(), "server-slot-1.state", b"two").unwrap();
+        assert_ne!(a, b);
+        assert_eq!(std::fs::read(a).unwrap(), b"one");
+        assert_eq!(std::fs::read(b).unwrap(), b"two");
+    }
+
+    #[test]
     fn backup_copies_existing_file_only() {
         let dir = tempfile::tempdir().unwrap();
         assert!(backup(dir.path(), "game.srm").unwrap().is_none());
@@ -406,7 +490,7 @@ mod tests {
         use super::super::*;
         use crate::romm::client::tests::base_of;
         use serde_json::json;
-        use wiremock::matchers::{method, path, query_param};
+        use wiremock::matchers::{body_json, method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
         fn game(dir: &Path) -> GameSaves {
@@ -425,6 +509,19 @@ mod tests {
                     ResponseTemplate::new(200)
                         .set_body_json(json!({"session_id": 9, "operations": ops})),
                 )
+                .mount(server)
+                .await;
+        }
+
+        async fn completion_counts(server: &MockServer, completed: u32, failed: u32) {
+            Mock::given(method("POST"))
+                .and(path("/api/sync/sessions/9/complete"))
+                .and(body_json(json!({
+                    "operations_completed": completed,
+                    "operations_failed": failed
+                })))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+                .expect(1)
                 .mount(server)
                 .await;
         }
@@ -451,7 +548,7 @@ mod tests {
         async fn nothing_to_sync() {
             let server = MockServer::start().await;
             negotiation(&server, json!([])).await;
-            completion(&server, 1).await;
+            completion_counts(&server, 0, 0).await;
             Mock::given(method("POST"))
                 .and(path("/api/saves"))
                 .respond_with(ResponseTemplate::new(500))
@@ -543,7 +640,7 @@ mod tests {
                 "server_updated_at": "2026-09-26T10:00:00+00:00"}]),
             )
             .await;
-            completion(&server, 0).await;
+            completion_counts(&server, 0, 0).await;
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
             let outcome = sync_sram(&client(&server), "dev", &game(dir.path()))
@@ -574,15 +671,29 @@ mod tests {
                 .respond_with(ResponseTemplate::new(409).set_body_json(json!({"detail": "newer"})))
                 .mount(&server)
                 .await;
+            Mock::given(method("GET"))
+                .and(path("/api/saves"))
+                .and(query_param("slot", "autosave"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    save_json(7, "2026-09-26T10:00:00.5Z"),
+                    save_json(6, "2026-09-26T10:00:00+00:00")
+                ])))
+                .mount(&server)
+                .await;
+            completion_counts(&server, 0, 0).await;
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
             let outcome = sync_sram(&client(&server), "dev", &game(dir.path()))
                 .await
                 .unwrap();
-            assert!(matches!(
-                outcome,
-                SramOutcome::Conflict(SramConflict { save_id: None, .. })
-            ));
+            let SramOutcome::Conflict(conflict) = outcome else {
+                panic!("expected a conflict");
+            };
+            assert_eq!(conflict.save_id, Some(7));
+            assert_eq!(
+                conflict.server_updated_at.as_deref(),
+                Some("2026-09-26T10:00:00.5Z")
+            );
         }
 
         #[tokio::test]

@@ -19,7 +19,14 @@ pub(super) struct PendingLaunch {
 pub(super) fn conflict_text(conflict: &SramConflict) -> String {
     let when = |t: &Option<String>| {
         t.as_deref()
-            .map(|t| t.replace('T', " ").replace("+00:00", " UTC"))
+            .and_then(crate::sync::parse_iso)
+            .map(|ms| {
+                let time =
+                    std::time::UNIX_EPOCH + std::time::Duration::from_millis(ms.max(0) as u64);
+                crate::sync::iso_utc(time)
+                    .replace('T', " ")
+                    .replace("+00:00", " UTC")
+            })
             .unwrap_or_else(|| "unknown".into())
     };
     format!(
@@ -256,5 +263,11 @@ mod tests {
         });
         assert!(text.contains("Server: 2026-09-26 10:00:00 UTC"));
         assert!(text.contains("This computer: unknown"));
+        let text = conflict_text(&SramConflict {
+            save_id: Some(1),
+            server_updated_at: Some("2026-09-26T12:00:00.5+02:00".into()),
+            local_updated_at: None,
+        });
+        assert!(text.contains("Server: 2026-09-26 10:00:00 UTC"));
     }
 }
