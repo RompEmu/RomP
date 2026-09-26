@@ -212,6 +212,7 @@ component Library inherits Rectangle {
             padding: 12px;
             spacing: 10px;
             HorizontalLayout {
+                vertical-stretch: 0;
                 spacing: 10px;
                 LineEdit {
                     placeholder-text: "Search";
@@ -276,24 +277,31 @@ component GamePage inherits Rectangle {
         padding: 24px;
         spacing: 16px;
         HorizontalLayout {
+            vertical-stretch: 0;
             alignment: start;
             Button { text: "← Library"; clicked => { root.back(); } }
         }
         HorizontalLayout {
+            vertical-stretch: 1;
             spacing: 24px;
-            Rectangle {
-                width: 300px;
-                height: 400px;
-                border-radius: 10px;
-                clip: true;
-                background: #2a2e36;
-                if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: contain; }
+            VerticalLayout {
+                alignment: start;
+                Rectangle {
+                    width: 300px;
+                    height: 400px;
+                    border-radius: 10px;
+                    clip: true;
+                    background: #2a2e36;
+                    if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: contain; }
+                }
             }
             VerticalLayout {
                 spacing: 10px;
+                horizontal-stretch: 1;
                 Text { text: root.title; font-size: 28px; font-weight: 700; wrap: word-wrap; }
                 Text { text: root.platform + (root.size != "" ? "  ·  " + root.size : ""); color: #888; }
                 HorizontalLayout {
+                    vertical-stretch: 0;
                     alignment: start;
                     spacing: 10px;
                     if !root.downloaded && !root.busy && root.playable: Button {
