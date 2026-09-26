@@ -1,4 +1,4 @@
-use crate::romm::types::{Platform, Rom};
+use crate::romm::types::{Platform, Rom, RomMetadata};
 use rusqlite::{params, Connection};
 use std::path::Path;
 
@@ -19,18 +19,21 @@ pub struct GameItem {
     pub downloaded: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GameDetail {
     pub id: i64,
     pub title: String,
     pub platform_id: i64,
     pub platform_slug: String,
     pub platform: String,
+    pub platform_category: Option<String>,
     pub summary: Option<String>,
     pub size_bytes: i64,
     pub cover_small: Option<String>,
     pub cover_large: Option<String>,
     pub local_path: Option<String>,
+    pub meta: RomMetadata,
+    pub screenshots: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +69,11 @@ CREATE TABLE IF NOT EXISTS games (
 );
 CREATE INDEX IF NOT EXISTS games_platform ON games(platform_id);
 ";
+
+fn json_column<T: serde::de::DeserializeOwned + Default>(text: Option<String>) -> T {
+    text.and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
 
 fn non_empty(s: &Option<String>) -> Option<&str> {
     s.as_deref().filter(|s| !s.is_empty())
@@ -103,6 +111,17 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 3 {
+            conn.execute_batch(
+                "BEGIN;
+                 ALTER TABLE games ADD COLUMN meta TEXT;
+                 ALTER TABLE games ADD COLUMN screenshots TEXT;
+                 ALTER TABLE platforms ADD COLUMN category TEXT;
+                 DELETE FROM kv WHERE key = 'last_sync_at';
+                 PRAGMA user_version = 3;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -134,8 +153,8 @@ impl Store {
             .expect("clear platforms");
         for p in platforms {
             tx.execute(
-                "INSERT INTO platforms (id, slug, name) VALUES (?1, ?2, ?3)",
-                params![p.id, p.slug, p.display_name],
+                "INSERT INTO platforms (id, slug, name, category) VALUES (?1, ?2, ?3, ?4)",
+                params![p.id, p.slug, p.display_name, p.category],
             )
             .expect("insert platform");
         }
@@ -147,13 +166,15 @@ impl Store {
         for r in roms {
             tx.execute(
                 "INSERT INTO games
-                 (id, platform_id, title, summary, updated_at, cover_small, cover_large, size_bytes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 (id, platform_id, title, summary, updated_at, cover_small, cover_large, size_bytes,
+                  meta, screenshots)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(id) DO UPDATE SET
                    platform_id = excluded.platform_id, title = excluded.title,
                    summary = excluded.summary, updated_at = excluded.updated_at,
                    cover_small = excluded.cover_small, cover_large = excluded.cover_large,
-                   size_bytes = excluded.size_bytes",
+                   size_bytes = excluded.size_bytes, meta = excluded.meta,
+                   screenshots = excluded.screenshots",
                 params![
                     r.id,
                     r.platform_id,
@@ -162,7 +183,11 @@ impl Store {
                     r.updated_at,
                     non_empty(&r.path_cover_small),
                     non_empty(&r.path_cover_large),
-                    r.fs_size_bytes
+                    r.fs_size_bytes,
+                    r.metadatum
+                        .as_ref()
+                        .and_then(|m| serde_json::to_string(m).ok()),
+                    serde_json::to_string(&r.merged_screenshots).ok()
                 ],
             )
             .expect("upsert game");
@@ -256,7 +281,8 @@ impl Store {
         self.conn
             .query_row(
                 "SELECT g.id, g.title, g.platform_id, COALESCE(p.slug, ''), COALESCE(p.name, ''),
-                        g.summary, g.size_bytes, g.cover_small, g.cover_large, g.local_path
+                        g.summary, g.size_bytes, g.cover_small, g.cover_large, g.local_path,
+                        p.category, g.meta, g.screenshots
                  FROM games g LEFT JOIN platforms p ON p.id = g.platform_id WHERE g.id = ?1",
                 [id],
                 |r| {
@@ -271,6 +297,9 @@ impl Store {
                         cover_small: r.get(7)?,
                         cover_large: r.get(8)?,
                         local_path: r.get(9)?,
+                        platform_category: r.get(10)?,
+                        meta: json_column(r.get(11)?),
+                        screenshots: json_column(r.get(12)?),
                     })
                 },
             )
@@ -381,6 +410,7 @@ mod tests {
             slug: name.to_lowercase(),
             display_name: name.into(),
             rom_count: 0,
+            category: None,
         }
     }
 
@@ -640,6 +670,57 @@ mod tests {
         assert_eq!(s.pending(), [7]);
         s.clear_library();
         assert!(s.pending().is_empty());
+    }
+
+    #[test]
+    fn game_detail_carries_metadata_screenshots_and_category() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.replace_platforms(&[Platform {
+            category: Some("Console".into()),
+            ..platform(1, "SNES")
+        }]);
+        let mut r = rom(5, 1, "Chrono Trigger", "t");
+        r.metadatum = Some(RomMetadata {
+            genres: vec!["Role-playing (RPG)".into()],
+            player_count: Some("1".into()),
+            first_release_date: Some(795_052_800_000),
+            ..RomMetadata::default()
+        });
+        r.merged_screenshots = vec!["/a.jpg".into(), "/b.jpg".into()];
+        s.upsert_games(&[r]);
+        let g = s.game(5).unwrap();
+        assert_eq!(g.platform_category.as_deref(), Some("Console"));
+        assert_eq!(g.meta.genres, ["Role-playing (RPG)"]);
+        assert_eq!(g.meta.first_release_date, Some(795_052_800_000));
+        assert_eq!(g.screenshots, ["/a.jpg", "/b.jpg"]);
+        s.upsert_games(&[rom(6, 1, "Plain", "t")]);
+        let plain = s.game(6).unwrap();
+        assert_eq!(plain.meta, RomMetadata::default());
+        assert!(plain.screenshots.is_empty());
+    }
+
+    #[test]
+    fn v2_database_migrates_to_v3_and_forgets_the_sync_cursor() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v2.db");
+        {
+            let s = Store::open(&path).unwrap();
+            s.set("last_sync_at", "t");
+            s.conn
+                .execute_batch(
+                    "ALTER TABLE games DROP COLUMN meta; ALTER TABLE games DROP COLUMN screenshots;
+                     ALTER TABLE platforms DROP COLUMN category; PRAGMA user_version = 2;",
+                )
+                .unwrap();
+        }
+        let s = Store::open(&path).unwrap();
+        assert_eq!(s.get("last_sync_at"), None);
+        s.set("last_sync_at", "u");
+        drop(s);
+        assert_eq!(
+            Store::open(&path).unwrap().get("last_sync_at").as_deref(),
+            Some("u")
+        );
     }
 
     #[test]

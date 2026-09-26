@@ -3,6 +3,8 @@ import { Button, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner, Swi
 export struct PlatformEntry { id: int, name: string, count: int, icon: image, has-icon: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool }
 export struct GameRow { cards: [GameCard] }
+export struct Fact { label: string, value: string }
+export struct Shot { image: image, loaded: bool }
 
 component Connect inherits Rectangle {
     in-out property <string> server-url;
@@ -133,6 +135,7 @@ component Card inherits Rectangle {
     height: 290px;
     touch := TouchArea { clicked => { root.clicked(); } }
     VerticalLayout {
+        alignment: start;
         spacing: 6px;
         Rectangle {
             height: 230px;
@@ -290,11 +293,20 @@ component Library inherits Rectangle {
 }
 
 
+component SectionTitle inherits Text {
+    font-size: 17px;
+    font-weight: 700;
+    color: #e6e8eb;
+}
+
 component GamePage inherits Rectangle {
     in property <string> title;
-    in property <string> platform;
+    in property <string> category;
+    in property <string> subtitle;
     in property <string> summary;
-    in property <string> size;
+    in property <[Fact]> facts;
+    in property <[Shot]> shots;
+    in property <[GameCard]> similar;
     in property <image> cover;
     in property <bool> has-cover;
     in property <bool> downloaded;
@@ -312,75 +324,181 @@ component GamePage inherits Rectangle {
     callback cancel();
     callback play();
     callback delete();
+    callback open-game(int);
+
+    property <int> viewing: -1;
+    changed title => { self.viewing = -1; page.content-y = 0; }
 
     VerticalLayout {
-        padding: 24px;
-        spacing: 16px;
         HorizontalLayout {
             vertical-stretch: 0;
+            padding-left: 24px;
+            padding-right: 24px;
+            padding-top: 16px;
+            padding-bottom: 8px;
             alignment: start;
             Button { text: "← Library"; clicked => { root.back(); } }
         }
-        HorizontalLayout {
+        page := ScrollView {
             vertical-stretch: 1;
-            spacing: 24px;
-            VerticalLayout {
-                alignment: start;
-                Rectangle {
-                    width: 300px;
-                    height: 400px;
-                    border-radius: 10px;
-                    clip: true;
-                    background: #2a2e36;
-                    if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: contain; }
-                }
-            }
-            VerticalLayout {
-                spacing: 10px;
-                horizontal-stretch: 1;
-                Text { text: root.title; font-size: 28px; font-weight: 700; wrap: word-wrap; }
-                Text { text: root.platform + (root.size != "" ? "  ·  " + root.size : ""); color: #888; }
+            content-width: self.visible-width;
+            content-height: body.preferred-height;
+            body := VerticalLayout {
+                width: page.visible-width;
+                padding-left: 24px;
+                padding-right: 24px;
+                padding-top: 8px;
+                padding-bottom: 32px;
+                spacing: 32px;
                 HorizontalLayout {
-                    vertical-stretch: 0;
-                    alignment: start;
-                    spacing: 10px;
-                    if !root.downloaded && !root.busy && root.playable: Button {
-                        text: "Download";
-                        primary: true;
-                        enabled: root.can-download;
-                        clicked => { root.download(); }
-                    }
-                    if root.busy: ProgressIndicator { width: 220px; progress: root.progress; }
-                    if root.busy: Button { text: "Cancel"; clicked => { root.cancel(); } }
-                    if root.downloaded && !root.busy: Button { text: "Play"; primary: true; clicked => { root.play(); } }
-                    if root.downloaded && !root.busy: Button { text: "Delete download"; clicked => { root.delete(); } }
-                }
-                if root.status != "": Text { text: root.status; color: #bbb; wrap: word-wrap; }
-                if root.conflict: Rectangle {
-                    vertical-stretch: 0;
-                    border-radius: 8px;
-                    background: #3b2f1e;
+                    spacing: 28px;
                     VerticalLayout {
-                        padding: 14px;
+                        alignment: start;
+                        Rectangle {
+                            width: 260px;
+                            height: 347px;
+                            border-radius: 10px;
+                            clip: true;
+                            background: #2a2e36;
+                            if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: contain; }
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: start;
                         spacing: 10px;
-                        Text { text: "Your save changed on this computer and on the server."; font-weight: 700; wrap: word-wrap; }
-                        Text { text: root.conflict-text; color: #ccc; wrap: word-wrap; }
+                        if root.category != "": Text {
+                            text: root.category;
+                            font-size: 11px;
+                            font-weight: 700;
+                            letter-spacing: 1.5px;
+                            color: #8b9cff;
+                        }
+                        Text { text: root.title; font-size: 30px; font-weight: 800; wrap: word-wrap; }
+                        Text { text: root.subtitle; font-size: 15px; color: #9aa3b2; wrap: word-wrap; }
                         HorizontalLayout {
+                            padding-top: 8px;
                             alignment: start;
                             spacing: 10px;
-                            Button { text: "Use this computer's save"; clicked => { root.keep-local(); } }
-                            Button { text: "Use the server's save"; clicked => { root.keep-server(); } }
+                            if !root.downloaded && !root.busy && root.playable: Button {
+                                text: "Download";
+                                primary: true;
+                                enabled: root.can-download;
+                                clicked => { root.download(); }
+                            }
+                            if root.busy: ProgressIndicator { width: 220px; progress: root.progress; }
+                            if root.busy: Button { text: "Cancel"; clicked => { root.cancel(); } }
+                            if root.downloaded && !root.busy: Button { text: "Play"; primary: true; clicked => { root.play(); } }
+                            if root.downloaded && !root.busy: Button { text: "Delete download"; clicked => { root.delete(); } }
+                        }
+                        if root.status != "": Text { text: root.status; color: #bbb; wrap: word-wrap; }
+                        if root.conflict: Rectangle {
+                            border-radius: 8px;
+                            background: #3b2f1e;
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 10px;
+                                Text { text: "Your save changed on this computer and on the server."; font-weight: 700; wrap: word-wrap; }
+                                Text { text: root.conflict-text; color: #ccc; wrap: word-wrap; }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    spacing: 10px;
+                                    Button { text: "Use this computer's save"; clicked => { root.keep-local(); } }
+                                    Button { text: "Use the server's save"; clicked => { root.keep-server(); } }
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            padding-top: 14px;
+                            spacing: 9px;
+                            for fact in root.facts: HorizontalLayout {
+                                spacing: 16px;
+                                Text { text: fact.label; width: 96px; font-size: 13px; color: #8a8f98; }
+                                Text { text: fact.value; font-size: 13px; wrap: word-wrap; horizontal-stretch: 1; }
+                            }
                         }
                     }
                 }
-                ScrollView {
-                    vertical-stretch: 1;
-                    VerticalLayout {
+                if root.summary != "": VerticalLayout {
+                    spacing: 10px;
+                    SectionTitle { text: "Overview"; }
+                    HorizontalLayout {
                         alignment: start;
-                        Text { text: root.summary; wrap: word-wrap; color: #ccc; }
+                        Text { text: root.summary; max-width: 780px; wrap: word-wrap; font-size: 14px; color: #cfd3da; }
+                    }
+                }
+                if root.shots.length > 0: VerticalLayout {
+                    spacing: 10px;
+                    SectionTitle { text: "Screenshots"; }
+                    shots-view := ScrollView {
+                        height: 214px;
+                        content-width: shot-row.preferred-width;
+                        content-height: self.visible-height;
+                        shot-row := HorizontalLayout {
+                            spacing: 12px;
+                            padding-bottom: 14px;
+                            for shot[i] in root.shots: Rectangle {
+                                width: 266px;
+                                height: 200px;
+                                border-radius: 8px;
+                                clip: true;
+                                background: #2a2e36;
+                                if shot.loaded: Image { source: shot.image; width: parent.width; height: parent.height; image-fit: ImageFit.cover; }
+                                shot-touch := TouchArea { clicked => { root.viewing = i; } }
+                                if shot-touch.has-hover: Rectangle { background: #ffffff14; }
+                            }
+                        }
+                    }
+                }
+                if root.similar.length > 0: VerticalLayout {
+                    spacing: 10px;
+                    SectionTitle { text: "Similar in your library"; }
+                    ScrollView {
+                        height: 304px;
+                        content-width: similar-row.preferred-width;
+                        content-height: self.visible-height;
+                        similar-row := HorizontalLayout {
+                            spacing: 16px;
+                            padding-bottom: 14px;
+                            for game in root.similar: Card {
+                                game: game;
+                                clicked => { root.open-game(game.id); }
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+
+    if root.viewing >= 0 && root.viewing < root.shots.length: Rectangle {
+        background: #000000e6;
+        TouchArea { clicked => { root.viewing = -1; } }
+        Image {
+            x: 72px;
+            y: 48px;
+            width: parent.width - 144px;
+            height: parent.height - 96px;
+            source: root.shots[root.viewing].image;
+            image-fit: contain;
+        }
+        if root.viewing > 0: Button {
+            x: 16px;
+            y: (parent.height - self.height) / 2;
+            text: "‹";
+            clicked => { root.viewing -= 1; }
+        }
+        if root.viewing < root.shots.length - 1: Button {
+            x: parent.width - self.width - 16px;
+            y: (parent.height - self.height) / 2;
+            text: "›";
+            clicked => { root.viewing += 1; }
+        }
+        Button {
+            x: parent.width - self.width - 16px;
+            y: 12px;
+            text: "Close";
+            clicked => { root.viewing = -1; }
         }
     }
 }
@@ -428,9 +546,12 @@ export component AppWindow inherits Window {
     callback open-game(int);
 
     in property <string> game-title;
-    in property <string> game-platform;
+    in property <string> game-category;
+    in property <string> game-subtitle;
     in property <string> game-summary;
-    in property <string> game-size;
+    in property <[Fact]> game-facts;
+    in property <[Shot]> game-shots;
+    in property <[GameCard]> game-similar;
     in property <image> game-cover;
     in property <bool> has-game-cover;
     in property <bool> game-downloaded;
@@ -496,9 +617,13 @@ export component AppWindow inherits Window {
     }
     if root.screen == 3: GamePage {
         title: root.game-title;
-        platform: root.game-platform;
+        category: root.game-category;
+        subtitle: root.game-subtitle;
         summary: root.game-summary;
-        size: root.game-size;
+        facts: root.game-facts;
+        shots: root.game-shots;
+        similar: root.game-similar;
+        open-game(id) => { root.open-game(id); }
         cover: root.game-cover;
         has-cover: root.has-game-cover;
         downloaded: root.game-downloaded;

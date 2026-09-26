@@ -42,6 +42,21 @@ pub struct Platform {
     pub slug: String,
     pub display_name: String,
     pub rom_count: i64,
+    #[serde(default)]
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RomMetadata {
+    pub genres: Vec<String>,
+    pub franchises: Vec<String>,
+    pub companies: Vec<String>,
+    pub publishers: Vec<String>,
+    pub developers: Vec<String>,
+    pub player_count: Option<String>,
+    pub first_release_date: Option<i64>,
+    pub average_rating: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -55,6 +70,10 @@ pub struct Rom {
     pub path_cover_small: Option<String>,
     pub path_cover_large: Option<String>,
     pub fs_size_bytes: i64,
+    #[serde(default)]
+    pub metadatum: Option<RomMetadata>,
+    #[serde(default)]
+    pub merged_screenshots: Vec<String>,
 }
 
 impl Rom {
@@ -161,12 +180,48 @@ pub(crate) fn rom(id: i64, platform_id: i64, name: &str, updated_at: &str) -> Ro
         )),
         path_cover_large: None,
         fs_size_bytes: 1024,
+        metadatum: None,
+        merged_screenshots: Vec::new(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rom_metadata_and_screenshots_parse() {
+        let rom: Rom = serde_json::from_value(serde_json::json!({
+            "id": 1, "platform_id": 2, "name": "Alien Soldier", "fs_name": "a.md",
+            "summary": null, "updated_at": "t", "path_cover_small": null,
+            "path_cover_large": null, "fs_size_bytes": 5,
+            "metadatum": {"rom_id": 1, "genres": ["Shooter"], "developers": ["Treasure"],
+                "player_count": "1", "first_release_date": 761961600000_i64,
+                "average_rating": 81.5, "age_ratings": []},
+            "merged_screenshots": ["/assets/romm/resources/roms/2/1/screenshots/0.jpg"]
+        }))
+        .unwrap();
+        let meta = rom.metadatum.unwrap();
+        assert_eq!(meta.genres, ["Shooter"]);
+        assert_eq!(meta.first_release_date, Some(761_961_600_000));
+        assert_eq!(meta.average_rating, Some(81.5));
+        assert!(meta.publishers.is_empty());
+        assert_eq!(rom.merged_screenshots.len(), 1);
+    }
+
+    #[test]
+    fn platform_category_is_optional() {
+        let p: Platform = serde_json::from_value(serde_json::json!({
+            "id": 1, "slug": "snes", "display_name": "SNES", "rom_count": 3, "category": "Console"
+        }))
+        .unwrap();
+        assert_eq!(p.category.as_deref(), Some("Console"));
+        let p: Platform = serde_json::from_value(serde_json::json!({
+            "id": 1, "slug": "snes", "display_name": "SNES", "rom_count": 3
+        }))
+        .unwrap();
+        assert_eq!(p.category, None);
+    }
 
     #[test]
     fn title_falls_back_to_file_name_without_extension() {

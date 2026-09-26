@@ -3,6 +3,7 @@ mod bios;
 mod cores;
 mod covers;
 mod credentials;
+mod details;
 mod download;
 mod fetch;
 mod grid;

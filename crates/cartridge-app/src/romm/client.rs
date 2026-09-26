@@ -222,6 +222,24 @@ impl Client {
         self.get_json("/api/roms", &query).await
     }
 
+    pub async fn similar(&self, id: i64, limit: u32) -> Result<Vec<i64>, Error> {
+        #[derive(serde::Deserialize)]
+        struct Similar {
+            rom: RomRef,
+        }
+        #[derive(serde::Deserialize)]
+        struct RomRef {
+            id: i64,
+        }
+        let found: Vec<Similar> = self
+            .get_json(
+                &format!("/api/roms/{id}/similar"),
+                &[("limit", limit.to_string())],
+            )
+            .await?;
+        Ok(found.into_iter().map(|s| s.rom.id).collect())
+    }
+
     pub async fn rom_ids(&self) -> Result<Vec<i64>, Error> {
         self.get_json("/api/roms/identifiers", &[]).await
     }
@@ -708,6 +726,21 @@ pub(crate) mod tests {
             "ZX Spectrum"
         );
         assert_eq!(client.rom_ids().await.unwrap(), vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn similar_returns_library_rom_ids_in_order() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/7/similar"))
+            .and(query_param("limit", "12"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"rom": {"id": 9, "name": "A"}, "score": 3.5, "reasons": [{"facet": "genre", "value": "Shooter"}]},
+                {"rom": {"id": 4, "name": "B"}, "score": 1.0, "reasons": []}
+            ])))
+            .mount(&server)
+            .await;
+        assert_eq!(authed(&server).similar(7, 12).await.unwrap(), [9, 4]);
     }
 
     #[test]

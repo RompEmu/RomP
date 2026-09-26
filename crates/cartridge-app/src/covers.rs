@@ -55,10 +55,10 @@ impl Covers {
         ))
     }
 
-    fn large_base(&self, game_id: i64, cover: &str) -> PathBuf {
+    fn original_base(&self, kind: &str, game_id: i64, url: &str) -> PathBuf {
         self.dir.join(format!(
-            "large-{game_id}-{:016x}",
-            crate::paths::fnv1a(cover.as_bytes())
+            "{kind}-{game_id}-{:016x}",
+            crate::paths::fnv1a(url.as_bytes())
         ))
     }
 
@@ -108,12 +108,39 @@ impl Covers {
         }
     }
 
-    pub fn cached_large(&self, game_id: i64, cover: &str) -> Option<PathBuf> {
-        let base = self.large_base(game_id, cover);
+    fn cached_original(&self, kind: &str, game_id: i64, url: &str) -> Option<PathBuf> {
+        let base = self.original_base(kind, game_id, url);
         IMAGE_EXTENSIONS
             .iter()
             .map(|ext| base.with_extension(ext))
             .find(|p| p.exists())
+    }
+
+    async fn ensure_original(
+        &self,
+        client: &Client,
+        kind: &str,
+        game_id: i64,
+        url: &str,
+    ) -> Result<PathBuf, String> {
+        if let Some(path) = self.cached_original(kind, game_id, url) {
+            return Ok(path);
+        }
+        let bytes = client.fetch_bytes(url).await.map_err(|e| e.to_string())?;
+        let ext = match image::guess_format(&bytes) {
+            Ok(image::ImageFormat::Jpeg) => "jpg",
+            Ok(image::ImageFormat::WebP) => "webp",
+            Ok(image::ImageFormat::Gif) => "gif",
+            Ok(image::ImageFormat::Png) => "png",
+            _ => return Err(format!("{url} is not an image")),
+        };
+        let path = self.original_base(kind, game_id, url).with_extension(ext);
+        write_atomic(&self.dir, &path, &bytes).await?;
+        Ok(path)
+    }
+
+    pub fn cached_large(&self, game_id: i64, cover: &str) -> Option<PathBuf> {
+        self.cached_original("large", game_id, cover)
     }
 
     pub async fn ensure_large(
@@ -122,19 +149,20 @@ impl Covers {
         game_id: i64,
         cover: &str,
     ) -> Result<PathBuf, String> {
-        if let Some(path) = self.cached_large(game_id, cover) {
-            return Ok(path);
-        }
-        let bytes = client.fetch_bytes(cover).await.map_err(|e| e.to_string())?;
-        let ext = match image::guess_format(&bytes) {
-            Ok(image::ImageFormat::Jpeg) => "jpg",
-            Ok(image::ImageFormat::WebP) => "webp",
-            Ok(image::ImageFormat::Gif) => "gif",
-            _ => "png",
-        };
-        let path = self.large_base(game_id, cover).with_extension(ext);
-        write_atomic(&self.dir, &path, &bytes).await?;
-        Ok(path)
+        self.ensure_original(client, "large", game_id, cover).await
+    }
+
+    pub fn cached_screenshot(&self, game_id: i64, url: &str) -> Option<PathBuf> {
+        self.cached_original("shot", game_id, url)
+    }
+
+    pub async fn ensure_screenshot(
+        &self,
+        client: &Client,
+        game_id: i64,
+        url: &str,
+    ) -> Result<PathBuf, String> {
+        self.ensure_original(client, "shot", game_id, url).await
     }
 
     pub async fn ensure(
@@ -267,6 +295,43 @@ mod tests {
         assert_eq!(a.extension().unwrap(), "jpg");
         assert_eq!(covers.cached_large(9, "/cover"), Some(a));
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn screenshots_are_cached_apart_from_covers_and_html_is_rejected() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/shot.jpg"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(jpeg()))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/missing.jpg"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("<!doctype html>"))
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let covers = Covers::new(dir.path().to_path_buf());
+        let client = Client::new(base_of(&server, "/"));
+        let shot = covers
+            .ensure_screenshot(&client, 3, "/shot.jpg")
+            .await
+            .unwrap();
+        assert_eq!(
+            covers
+                .ensure_screenshot(&client, 3, "/shot.jpg")
+                .await
+                .unwrap(),
+            shot
+        );
+        assert_eq!(covers.cached_screenshot(3, "/shot.jpg"), Some(shot));
+        assert_eq!(covers.cached_large(3, "/shot.jpg"), None);
+        assert!(covers
+            .ensure_screenshot(&client, 3, "/missing.jpg")
+            .await
+            .is_err());
+        assert_eq!(covers.cached_screenshot(3, "/missing.jpg"), None);
     }
 
     #[tokio::test]

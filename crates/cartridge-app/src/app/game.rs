@@ -2,6 +2,7 @@ use super::save_sync::PendingLaunch;
 use super::{on_ui, with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY};
 use crate::bios;
 use crate::cores::{core_for_platform, BUILDBOT};
+use crate::details;
 use crate::download::DownloadError;
 use crate::fetch::download_game;
 use crate::paths;
@@ -9,28 +10,23 @@ use crate::play::{self, CoreIdentity, GameOptions};
 use crate::romm::client::Error;
 use crate::saves::{self, SramOutcome};
 use crate::store::GameDetail;
-use slint::Image;
+use crate::{GameCard, Shot};
+use slint::{Image, Model, ModelRc, VecModel};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
+const SIMILAR_LIMIT: u32 = 12;
+
 pub(super) struct GameState {
     detail: GameDetail,
+    shots: Rc<VecModel<Shot>>,
+    similar: Rc<VecModel<GameCard>>,
 }
 
-pub(super) fn human_size(bytes: i64) -> String {
-    let units = ["B", "KB", "MB", "GB", "TB"];
-    let mut value = bytes.max(0) as f64;
-    let mut unit = 0;
-    while value >= 1000.0 && unit < units.len() - 1 {
-        value /= 1000.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} B")
-    } else {
-        format!("{value:.1} {}", units[unit])
-    }
+fn load_image(path: &Path) -> Option<Image> {
+    Image::load_from_path(path).ok()
 }
 
 fn downloaded_path(detail: &GameDetail) -> Option<PathBuf> {
@@ -74,15 +70,163 @@ impl Controller {
         let Some(detail) = self.shared.store.lock().unwrap().game(id) else {
             return;
         };
+        let shots = Rc::new(VecModel::from(
+            detail
+                .screenshots
+                .iter()
+                .map(|url| {
+                    let image = self
+                        .shared
+                        .covers
+                        .cached_screenshot(id, url)
+                        .and_then(|p| load_image(&p));
+                    Shot {
+                        loaded: image.is_some(),
+                        image: image.unwrap_or_default(),
+                    }
+                })
+                .collect::<Vec<_>>(),
+        ));
+        let similar = Rc::new(VecModel::default());
         *self.game.borrow_mut() = Some(GameState {
             detail: detail.clone(),
+            shots: shots.clone(),
+            similar: similar.clone(),
         });
         self.refresh_game_page(true);
         if let Some(ui) = self.ui() {
             ui.set_game_status("".into());
+            ui.set_game_shots(ModelRc::from(shots));
+            ui.set_game_similar(ModelRc::from(similar));
             ui.set_screen(SCREEN_GAME);
         }
         self.load_game_cover(&detail);
+        self.load_screenshots(&detail);
+        self.load_similar(id);
+    }
+
+    fn with_game<T>(&self, id: i64, f: impl FnOnce(&GameState) -> T) -> Option<T> {
+        self.game
+            .borrow()
+            .as_ref()
+            .filter(|g| g.detail.id == id)
+            .map(f)
+    }
+
+    fn load_screenshots(&self, detail: &GameDetail) {
+        let missing: Vec<(usize, String)> = detail
+            .screenshots
+            .iter()
+            .enumerate()
+            .filter(|(_, url)| {
+                self.shared
+                    .covers
+                    .cached_screenshot(detail.id, url)
+                    .is_none()
+            })
+            .map(|(i, url)| (i, url.clone()))
+            .collect();
+        let client = self.client.borrow().clone();
+        let Some(client) = client.filter(|_| !self.offline.get() && !missing.is_empty()) else {
+            return;
+        };
+        let covers = self.shared.covers.clone();
+        let id = detail.id;
+        self.shared.rt.spawn(async move {
+            for (index, url) in missing {
+                if let Ok(path) = covers.ensure_screenshot(&client, id, &url).await {
+                    on_ui(move |c| c.show_screenshot(id, index, &path));
+                }
+            }
+        });
+    }
+
+    fn show_screenshot(&self, id: i64, index: usize, path: &Path) {
+        let Some(image) = load_image(path) else {
+            return;
+        };
+        self.with_game(id, |g| {
+            if index < g.shots.row_count() {
+                g.shots.set_row_data(
+                    index,
+                    Shot {
+                        image,
+                        loaded: true,
+                    },
+                );
+            }
+        });
+    }
+
+    fn load_similar(&self, id: i64) {
+        let client = self.client.borrow().clone();
+        let Some(client) = client.filter(|_| !self.offline.get()) else {
+            return;
+        };
+        self.shared.rt.spawn(async move {
+            match client.similar(id, SIMILAR_LIMIT).await {
+                Ok(ids) => on_ui(move |c| c.show_similar(id, ids)),
+                Err(e) => tracing::warn!("similar games for {id}: {e}"),
+            }
+        });
+    }
+
+    fn show_similar(&self, id: i64, ids: Vec<i64>) {
+        let games: Vec<GameDetail> = {
+            let store = self.shared.store.lock().unwrap();
+            ids.iter().filter_map(|&i| store.game(i)).collect()
+        };
+        let mut wanted = Vec::new();
+        let cards: Vec<GameCard> = games
+            .iter()
+            .map(|g| {
+                let image = g.cover_small.as_deref().and_then(|cover| {
+                    let path = self.shared.covers.path_for(g.id, cover);
+                    let image = path.exists().then(|| load_image(&path)).flatten();
+                    if image.is_none() {
+                        wanted.push((g.id, cover.to_string()));
+                    }
+                    image
+                });
+                GameCard {
+                    id: g.id as i32,
+                    title: g.title.clone().into(),
+                    platform: g.platform.clone().into(),
+                    has_cover: image.is_some(),
+                    cover: image.unwrap_or_default(),
+                    downloaded: g.local_path.is_some(),
+                }
+            })
+            .collect();
+        if self.with_game(id, |g| g.similar.set_vec(cards)).is_none() {
+            return;
+        }
+        let Some(client) = self.client.borrow().clone() else {
+            return;
+        };
+        let covers = self.shared.covers.clone();
+        self.shared.rt.spawn(async move {
+            for (game, cover) in wanted {
+                if let Ok(path) = covers.ensure(&client, game, &cover).await {
+                    on_ui(move |c| c.show_similar_cover(id, game, &path));
+                }
+            }
+        });
+    }
+
+    fn show_similar_cover(&self, id: i64, game: i64, path: &Path) {
+        let Some(image) = load_image(path) else {
+            return;
+        };
+        self.with_game(id, |g| {
+            let index = g.similar.iter().position(|c| i64::from(c.id) == game);
+            if let Some(index) = index {
+                let mut card = g.similar.row_data(index).unwrap();
+                card.cover = image;
+                card.has_cover = true;
+                g.similar.set_row_data(index, card);
+            }
+        });
     }
 
     pub(super) fn refresh_game_page(&self, reload: bool) {
@@ -101,9 +245,25 @@ impl Controller {
         let playable = core_for_platform(&detail.platform_slug).is_some();
         let busy = self.downloading_id() == Some(detail.id);
         ui.set_game_title(detail.title.clone().into());
-        ui.set_game_platform(detail.platform.clone().into());
+        ui.set_game_category(
+            detail
+                .platform_category
+                .as_deref()
+                .unwrap_or_default()
+                .to_uppercase()
+                .into(),
+        );
+        ui.set_game_subtitle(details::subtitle(&detail).into());
         ui.set_game_summary(detail.summary.clone().unwrap_or_default().into());
-        ui.set_game_size(human_size(detail.size_bytes).into());
+        ui.set_game_facts(ModelRc::new(VecModel::from(
+            details::facts(&detail)
+                .into_iter()
+                .map(|(label, value)| crate::Fact {
+                    label: label.into(),
+                    value: value.into(),
+                })
+                .collect::<Vec<_>>(),
+        )));
         ui.set_game_downloaded(downloaded_path(&detail).is_some());
         ui.set_game_busy(busy);
         if busy {
@@ -205,6 +365,9 @@ impl Controller {
             if result.is_ok() {
                 if let Some(cover) = detail.cover_large.as_deref() {
                     let _ = covers.ensure_large(&client, id, cover).await;
+                }
+                for url in &detail.screenshots {
+                    let _ = covers.ensure_screenshot(&client, id, url).await;
                 }
                 let _ = bios::fetch_firmware(
                     &client,
@@ -424,18 +587,5 @@ impl Controller {
             .set_local_path(detail.id, None);
         self.game_status(detail.id, String::new());
         self.refresh_game_page(true);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sizes_are_human_readable() {
-        assert_eq!(human_size(512), "512 B");
-        assert_eq!(human_size(46_857), "46.9 KB");
-        assert_eq!(human_size(627_135_698), "627.1 MB");
-        assert_eq!(human_size(4_700_000_000), "4.7 GB");
     }
 }
