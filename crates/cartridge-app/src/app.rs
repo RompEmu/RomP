@@ -1,4 +1,5 @@
 mod game;
+mod save_sync;
 
 use crate::cores::Cores;
 use crate::covers::Covers;
@@ -88,6 +89,8 @@ struct Controller {
     downloading: RefCell<Option<(i64, Arc<AtomicBool>)>>,
     preparing: Cell<bool>,
     download_fraction: Cell<f32>,
+    pending_launch: RefCell<Option<save_sync::PendingLaunch>>,
+    playing: RefCell<Option<crate::store::GameDetail>>,
     running: RefCell<Option<crate::play::RunningGame>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
@@ -134,6 +137,8 @@ pub fn run() -> anyhow::Result<()> {
         downloading: RefCell::new(None),
         preparing: Cell::new(false),
         download_fraction: Cell::new(0.0),
+        pending_launch: RefCell::new(None),
+        playing: RefCell::new(None),
         running: RefCell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
@@ -170,6 +175,9 @@ impl Controller {
         ui.on_cancel_download(|| with_controller(|c| c.cancel_download()));
         ui.on_play_game(|| with_controller(|c| c.play_game()));
         ui.on_delete_game(|| with_controller(|c| c.delete_game()));
+        ui.on_keep_local_save(|| with_controller(|c| c.keep_save(crate::saves::Keep::Local)));
+        ui.on_keep_server_save(|| with_controller(|c| c.keep_save(crate::saves::Keep::Server)));
+        ui.on_pair_again(|| with_controller(|c| c.pair_again()));
     }
 
     fn start(&self) {
@@ -257,7 +265,7 @@ impl Controller {
             pairing.client.take()
         };
         let message = match (outcome, client) {
-            (PollOutcome::Approved { token, .. }, Some(client)) => {
+            (PollOutcome::Approved { token, scopes }, Some(client)) => {
                 let server = client.base().to_string();
                 if let Err(e) = self.shared.tokens.save(&server, &token) {
                     ui.set_pair_failed(true);
@@ -265,7 +273,11 @@ impl Controller {
                     return;
                 }
                 self.stop_sync();
-                self.shared.store.lock().unwrap().switch_server(&server);
+                {
+                    let mut store = self.shared.store.lock().unwrap();
+                    store.switch_server(&server);
+                    store.set("scopes", &scopes.join(" "));
+                }
                 self.enter_library(client.with_token(token));
                 return;
             }
@@ -322,10 +334,20 @@ impl Controller {
     fn signed_in(&self, me: Result<User, Error>) {
         let Some(ui) = self.ui() else { return };
         match me {
-            Ok(user) => ui.set_user_label(user.username.into()),
+            Ok(user) => {
+                ui.set_user_label(user.username.into());
+                if let Some(device) = user.current_device_id {
+                    self.shared
+                        .store
+                        .lock()
+                        .unwrap()
+                        .set("device_uuid", &device);
+                }
+            }
             Err(Error::Unauthorized) => self.needs_repair(),
             Err(_) => {}
         }
+        self.update_pairing_prompt();
     }
 
     fn needs_repair(&self) {
@@ -592,6 +614,7 @@ impl Controller {
             Ok(_) => {
                 self.set_offline(false);
                 ui.set_sync_status("".into());
+                self.sync_pending();
             }
             Err(Error::Cancelled) => return,
             Err(Error::Unauthorized) => return self.needs_repair(),

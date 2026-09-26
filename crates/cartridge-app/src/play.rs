@@ -49,14 +49,19 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             title,
             jit,
         },
-        || {},
+        |_| {},
     )?;
     slint::run_event_loop()?;
     game.wait_exit(Duration::from_secs(4));
     Ok(())
 }
 
-pub fn launch(opts: GameOptions, on_closed: impl Fn() + 'static) -> anyhow::Result<RunningGame> {
+pub type CoreIdentity = (String, String);
+
+pub fn launch(
+    opts: GameOptions,
+    on_closed: impl Fn(Option<CoreIdentity>) + 'static,
+) -> anyhow::Result<RunningGame> {
     let cfg = SessionConfig {
         runner: paths::runner_exe()?,
         core: opts.core,
@@ -73,9 +78,11 @@ pub fn launch(opts: GameOptions, on_closed: impl Fn() + 'static) -> anyhow::Resu
     ui.set_status("Starting…".into());
 
     let finished = Rc::new(Cell::new(false));
+    let started: Rc<RefCell<Option<CoreIdentity>>> = Rc::default();
     let finish: Rc<dyn Fn()> = Rc::new({
         let session = session.clone();
         let ui = ui.as_weak();
+        let started = started.clone();
         move || {
             if finished.replace(true) {
                 return;
@@ -84,7 +91,7 @@ pub fn launch(opts: GameOptions, on_closed: impl Fn() + 'static) -> anyhow::Resu
             if let Some(ui) = ui.upgrade() {
                 let _ = ui.hide();
             }
-            on_closed();
+            on_closed(started.borrow().clone());
         }
     });
     ui.window().on_close_requested({
@@ -161,7 +168,7 @@ pub fn launch(opts: GameOptions, on_closed: impl Fn() + 'static) -> anyhow::Resu
                 session.poll_events()
             };
             for event in events {
-                handle_event(&ui, event, &finish);
+                handle_event(&ui, event, &finish, &started);
             }
         }
     });
@@ -224,7 +231,12 @@ fn apply(session: &RefCell<Session>, command: Command, finish: &Rc<dyn Fn()>) {
     }
 }
 
-fn handle_event(ui: &GameWindow, event: SessionEvent, finish: &Rc<dyn Fn()>) {
+fn handle_event(
+    ui: &GameWindow,
+    event: SessionEvent,
+    finish: &Rc<dyn Fn()>,
+    started: &RefCell<Option<CoreIdentity>>,
+) {
     if let SessionEvent::Ended { code, .. } = &event {
         tracing::info!(?code, "emulator exited");
     }
@@ -236,6 +248,7 @@ fn handle_event(ui: &GameWindow, event: SessionEvent, finish: &Rc<dyn Fn()>) {
         }) => {
             tracing::info!("running {core_name} {core_version}");
             ui.set_status("".into());
+            *started.borrow_mut() = Some((core_name, core_version));
         }
         SessionEvent::Runner(RunnerMsg::StateWritten { slot, ok }) => flash(
             ui,

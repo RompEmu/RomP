@@ -179,6 +179,8 @@ component Library inherits Rectangle {
     callback refresh();
     callback sign-out();
     callback open-game(int);
+    in property <bool> needs-pairing;
+    callback pair-again();
 
     HorizontalLayout {
         Rectangle {
@@ -219,6 +221,7 @@ component Library inherits Rectangle {
                     text <=> root.search;
                     edited(text) => { root.search-edited(text); }
                 }
+                if root.needs-pairing: Button { text: "Pair again to turn on save sync"; clicked => { root.pair-again(); } }
                 Text { text: root.sync-status; color: #888; vertical-alignment: center; }
                 if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
                 Button { text: "Refresh"; enabled: !root.syncing; clicked => { root.refresh(); } }
@@ -267,6 +270,10 @@ component GamePage inherits Rectangle {
     in property <bool> can-download;
     in property <float> progress;
     in property <string> status;
+    in property <bool> conflict;
+    in property <string> conflict-text;
+    callback keep-local();
+    callback keep-server();
     callback back();
     callback download();
     callback cancel();
@@ -316,6 +323,22 @@ component GamePage inherits Rectangle {
                     if root.downloaded && !root.busy: Button { text: "Delete download"; clicked => { root.delete(); } }
                 }
                 if root.status != "": Text { text: root.status; color: #bbb; wrap: word-wrap; }
+                if root.conflict: Rectangle {
+                    border-radius: 8px;
+                    background: #3b2f1e;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+                        Text { text: "Your save changed on this computer and on the server."; font-weight: 700; wrap: word-wrap; }
+                        Text { text: root.conflict-text; color: #ccc; wrap: word-wrap; }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: 10px;
+                            Button { text: "Use this computer's save"; clicked => { root.keep-local(); } }
+                            Button { text: "Use the server's save"; clicked => { root.keep-server(); } }
+                        }
+                    }
+                }
                 ScrollView {
                     vertical-stretch: 1;
                     VerticalLayout {
@@ -387,6 +410,12 @@ export component AppWindow inherits Window {
     callback cancel-download();
     callback play-game();
     callback delete-game();
+    in property <bool> save-conflict;
+    in property <string> conflict-text;
+    callback keep-local-save();
+    callback keep-server-save();
+    in property <bool> needs-pairing;
+    callback pair-again();
 
     if root.screen == 0: Connect {
         server-url <=> root.server-url;
@@ -421,6 +450,8 @@ export component AppWindow inherits Window {
         row-shown(i) => { root.row-shown(i); }
         refresh => { root.refresh(); }
         open-game(id) => { root.open-game(id); }
+        needs-pairing: root.needs-pairing;
+        pair-again => { root.pair-again(); }
         sign-out => { root.sign-out(); }
     }
     if root.screen == 3: GamePage {
@@ -441,5 +472,9 @@ export component AppWindow inherits Window {
         cancel => { root.cancel-download(); }
         play => { root.play-game(); }
         delete => { root.delete-game(); }
+        conflict: root.save-conflict;
+        conflict-text: root.conflict-text;
+        keep-local => { root.keep-local-save(); }
+        keep-server => { root.keep-server-save(); }
     }
 }

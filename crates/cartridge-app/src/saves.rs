@@ -69,16 +69,6 @@ pub fn state_remote_name(slot: &str, core_id: &str, core_version: &str) -> Strin
     )
 }
 
-pub fn parse_state_name(name: &str) -> Option<(String, String, String)> {
-    let stem = name.strip_suffix(".state")?;
-    let mut parts = stem.split('.');
-    let (slot, core, version) = (parts.next()?, parts.next()?, parts.next()?);
-    if parts.next().is_some() {
-        return None;
-    }
-    Some((slot.into(), core.into(), version.into()))
-}
-
 pub const SRAM_FILE: &str = "game.srm";
 pub const SRAM_SLOT: &str = "autosave";
 
@@ -388,12 +378,6 @@ mod tests {
     fn state_names_round_trip_and_sanitize() {
         let name = state_remote_name("slot-1", "snes9x", "1.63 185488c");
         assert_eq!(name, "slot-1.snes9x.1-63-185488c.state");
-        assert_eq!(
-            parse_state_name(&name),
-            Some(("slot-1".into(), "snes9x".into(), "1-63-185488c".into()))
-        );
-        assert_eq!(parse_state_name("Zelda.state"), None);
-        assert_eq!(parse_state_name("a.b.c.srm"), None);
         assert_eq!(
             state_remote_name("auto", "../x", "v/1"),
             "auto.---x.v-1.state"

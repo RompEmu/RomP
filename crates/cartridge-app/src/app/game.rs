@@ -1,10 +1,13 @@
+use super::save_sync::PendingLaunch;
 use super::{on_ui, with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY};
 use crate::bios;
 use crate::cores::{core_for_platform, BUILDBOT};
 use crate::download::DownloadError;
 use crate::fetch::download_game;
 use crate::paths;
-use crate::play::{self, GameOptions};
+use crate::play::{self, CoreIdentity, GameOptions};
+use crate::romm::client::Error;
+use crate::saves::{self, SramOutcome};
 use crate::store::GameDetail;
 use slint::Image;
 use std::path::{Path, PathBuf};
@@ -54,7 +57,7 @@ impl Controller {
         self.downloading.borrow().as_ref().map(|(id, _)| *id)
     }
 
-    fn server(&self) -> String {
+    pub(super) fn server(&self) -> String {
         self.client
             .borrow()
             .as_ref()
@@ -274,6 +277,10 @@ impl Controller {
         let client = self.client.borrow().clone();
         let offline = self.offline.get();
         let id = detail.id;
+        let sync = self
+            .sync_device()
+            .zip(self.game_saves(&detail))
+            .filter(|_| !offline);
         self.shared.rt.spawn(async move {
             let core_path = match cores.installed(core) {
                 Some(path) => Ok(path),
@@ -297,11 +304,18 @@ impl Controller {
                     missing = bios::missing(&detail.platform_slug, &system);
                 }
             }
-            on_ui(move |c| c.launch_ready(detail, rom, core.jit, core_path, missing));
+            let sram = match (&client, sync) {
+                (Some(client), Some((device, game))) => {
+                    on_ui(move |c| c.game_status(id, "Syncing your save…".into()));
+                    Some(saves::sync_sram(client, &device, &game).await)
+                }
+                _ => None,
+            };
+            on_ui(move |c| c.launch_ready(detail, rom, core.jit, core_path, missing, sram));
         });
     }
 
-    fn game_status(&self, id: i64, text: String) {
+    pub(super) fn game_status(&self, id: i64, text: String) {
         if self.current_game().map(|g| g.id) == Some(id) {
             if let Some(ui) = self.ui() {
                 ui.set_game_status(text.into());
@@ -316,13 +330,17 @@ impl Controller {
         jit: bool,
         core_path: Result<PathBuf, String>,
         missing: Vec<String>,
+        sram: Option<Result<SramOutcome, Error>>,
     ) {
-        self.preparing.set(false);
         let core = match core_path {
             Ok(path) => path,
-            Err(e) => return self.game_status(detail.id, e),
+            Err(e) => {
+                self.preparing.set(false);
+                return self.game_status(detail.id, e);
+            }
         };
         if !missing.is_empty() {
+            self.preparing.set(false);
             return self.game_status(
                 detail.id,
                 format!(
@@ -331,6 +349,24 @@ impl Controller {
                 ),
             );
         }
+        match sram {
+            Some(Ok(SramOutcome::Conflict(conflict))) => {
+                return self.show_conflict(PendingLaunch {
+                    detail,
+                    rom,
+                    jit,
+                    core,
+                    conflict,
+                });
+            }
+            Some(Err(e)) => tracing::warn!("save sync before launch: {e}"),
+            _ => {}
+        }
+        self.start_game(detail, rom, jit, core);
+    }
+
+    pub(super) fn start_game(&self, detail: GameDetail, rom: PathBuf, jit: bool, core: PathBuf) {
+        self.preparing.set(false);
         let options = GameOptions {
             core,
             rom,
@@ -338,20 +374,25 @@ impl Controller {
             title: detail.title.clone(),
             jit,
         };
-        let on_closed = || {
-            let _ = slint::invoke_from_event_loop(|| with_controller(|c| c.game_closed()));
+        let on_closed = move |identity| {
+            let _ =
+                slint::invoke_from_event_loop(move || with_controller(|c| c.game_closed(identity)));
         };
         match play::launch(options, on_closed) {
             Ok(running) => {
                 *self.running.borrow_mut() = Some(running);
                 self.game_status(detail.id, String::new());
+                *self.playing.borrow_mut() = Some(detail);
             }
             Err(e) => self.game_status(detail.id, format!("Could not start the game: {e:#}")),
         }
     }
 
-    fn game_closed(&self) {
+    fn game_closed(&self, identity: Option<CoreIdentity>) {
         self.running.borrow_mut().take();
+        if let Some(detail) = self.playing.borrow_mut().take() {
+            self.after_play(detail, identity);
+        }
     }
 
     pub(super) fn delete_game(&self) {
