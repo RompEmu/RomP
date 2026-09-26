@@ -1,7 +1,7 @@
 use crate::romm::types::PollOutcome;
 use std::time::{Duration, Instant};
 
-pub const SCOPES: [&str; 8] = [
+pub const SCOPES: [&str; 10] = [
     "me.read",
     "platforms.read",
     "roms.read",
@@ -10,6 +10,8 @@ pub const SCOPES: [&str; 8] = [
     "assets.write",
     "devices.read",
     "devices.write",
+    "collections.read",
+    "collections.write",
 ];
 
 #[derive(Debug, PartialEq, Eq)]

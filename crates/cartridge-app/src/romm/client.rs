@@ -1,6 +1,6 @@
 use crate::romm::types::{
-    ClientSave, DeviceAuth, Firmware, Heartbeat, Negotiation, Platform, PollOutcome, RemoteSave,
-    RemoteState, RomDetail, RomFile, RomPage, User,
+    ClientSave, DeviceAuth, Firmware, Heartbeat, Negotiation, Platform, PollOutcome,
+    RemoteCollection, RemoteSave, RemoteState, RomDetail, RomFile, RomPage, User,
 };
 use serde::de::DeserializeOwned;
 use std::time::Duration;
@@ -238,6 +238,79 @@ impl Client {
             )
             .await?;
         Ok(found.into_iter().map(|s| s.rom.id).collect())
+    }
+
+    pub async fn collections(&self) -> Result<Vec<RemoteCollection>, Error> {
+        self.get_json("/api/collections", &[]).await
+    }
+
+    pub async fn smart_collections(&self) -> Result<Vec<RemoteCollection>, Error> {
+        self.get_json("/api/collections/smart", &[]).await
+    }
+
+    pub async fn virtual_collections(&self, kind: &str) -> Result<Vec<RemoteCollection>, Error> {
+        self.get_json("/api/collections/virtual", &[("type", kind.to_string())])
+            .await
+    }
+
+    pub async fn create_collection(
+        &self,
+        name: &str,
+        favorite: bool,
+    ) -> Result<RemoteCollection, Error> {
+        let form = reqwest::multipart::Form::new().text("name", name.to_string());
+        let resp = self
+            .send(
+                self.request(reqwest::Method::POST, "/api/collections")
+                    .query(&[
+                        ("is_public", "false"),
+                        ("is_favorite", if favorite { "true" } else { "false" }),
+                    ])
+                    .multipart(form),
+            )
+            .await?;
+        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    pub async fn set_collection_member(
+        &self,
+        id: i64,
+        rom_id: i64,
+        member: bool,
+    ) -> Result<(), Error> {
+        let method = if member {
+            reqwest::Method::POST
+        } else {
+            reqwest::Method::DELETE
+        };
+        self.send(
+            self.request(method, &format!("/api/collections/{id}/roms"))
+                .json(&serde_json::json!({ "rom_ids": [rom_id] })),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn rename_collection(&self, id: i64, name: &str) -> Result<(), Error> {
+        let current: RemoteCollection = self
+            .get_json(&format!("/api/collections/{id}"), &[])
+            .await?;
+        let rom_ids = serde_json::to_string(&current.rom_ids).expect("ids serialize");
+        let form = reqwest::multipart::Form::new()
+            .text("rom_ids", rom_ids)
+            .text("name", name.to_string());
+        self.send(
+            self.request(reqwest::Method::PUT, &format!("/api/collections/{id}"))
+                .multipart(form),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn delete_collection(&self, id: i64) -> Result<(), Error> {
+        self.send(self.request(reqwest::Method::DELETE, &format!("/api/collections/{id}")))
+            .await
+            .map(|_| ())
     }
 
     pub async fn rom_ids(&self) -> Result<Vec<i64>, Error> {
@@ -744,6 +817,90 @@ pub(crate) mod tests {
             .mount(&server)
             .await;
         assert_eq!(authed(&server).similar(7, 12).await.unwrap(), [9, 4]);
+    }
+
+    #[tokio::test]
+    async fn collection_lists() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/collections/virtual"))
+            .and(query_param("type", "genre"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": "Zz==", "name": "Shooter", "type": "genre", "rom_ids": [1]}
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/collections/smart"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": 2, "name": "Unplayed", "rom_ids": [1, 2], "is_smart": true, "user_id": 1}
+            ])))
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        assert_eq!(
+            client.virtual_collections("genre").await.unwrap()[0].name,
+            "Shooter"
+        );
+        assert!(client.smart_collections().await.unwrap()[0].is_smart);
+    }
+
+    #[tokio::test]
+    async fn creating_and_editing_collections() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/collections"))
+            .and(query_param("is_favorite", "true"))
+            .and(query_param("is_public", "false"))
+            .and(body_string_contains("name=\"name\"\r\n\r\nFavourites"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(
+                {"id": 7, "name": "Favourites", "rom_ids": [], "is_favorite": true, "user_id": 1}
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/collections/7/roms"))
+            .and(body_json(serde_json::json!({"rom_ids": [42]})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/api/collections/7/roms"))
+            .and(body_json(serde_json::json!({"rom_ids": [42]})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/collections/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(
+                {"id": 7, "name": "Old", "rom_ids": [3, 4]}
+            )))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/api/collections/7"))
+            .and(body_string_contains("[3,4]"))
+            .and(body_string_contains("RPGs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/api/collections/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        let created = client.create_collection("Favourites", true).await.unwrap();
+        assert_eq!(created.id.to_string(), "7");
+        client.set_collection_member(7, 42, true).await.unwrap();
+        client.set_collection_member(7, 42, false).await.unwrap();
+        client.rename_collection(7, "RPGs").await.unwrap();
+        client.delete_collection(7).await.unwrap();
     }
 
     #[test]

@@ -1,5 +1,6 @@
 mod app;
 mod bios;
+mod collections;
 mod cores;
 mod covers;
 mod credentials;

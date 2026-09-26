@@ -60,8 +60,16 @@ impl Controller {
 
     pub(super) fn update_pairing_prompt(&self) {
         let signed_in = self.client.borrow().is_some();
+        let prompt = if self.sync_device().is_none() {
+            Some("Pair again to turn on save sync")
+        } else if !self.has_scope("collections.write") {
+            Some("Pair again to use favorites and collections")
+        } else {
+            None
+        };
         if let Some(ui) = self.ui() {
-            ui.set_needs_pairing(signed_in && self.sync_device().is_none());
+            ui.set_needs_pairing(signed_in && prompt.is_some());
+            ui.set_pair_prompt(prompt.unwrap_or_default().into());
         }
     }
 

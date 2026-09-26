@@ -1,3 +1,7 @@
+mod collections;
+
+pub use collections::{CollectionItem, CollectionKind, CollectionRecord};
+
 use crate::romm::types::{Platform, Rom, RomMetadata};
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -44,8 +48,16 @@ pub struct StateRecord {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Scope {
+    #[default]
+    All,
+    Platform(i64),
+    Collection(String),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GameFilter {
-    pub platform: Option<i64>,
+    pub scope: Scope,
     pub search: String,
     pub downloaded_only: bool,
 }
@@ -119,6 +131,18 @@ impl Store {
                  ALTER TABLE platforms ADD COLUMN category TEXT;
                  DELETE FROM kv WHERE key = 'last_sync_at';
                  PRAGMA user_version = 3;
+                 COMMIT;",
+            )?;
+        }
+        if version < 4 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS collections (key TEXT PRIMARY KEY, kind INTEGER NOT NULL,
+                   remote_id TEXT NOT NULL, name TEXT NOT NULL, owner TEXT, position INTEGER NOT NULL);
+                 CREATE TABLE IF NOT EXISTS collection_roms (key TEXT NOT NULL, rom_id INTEGER NOT NULL,
+                   PRIMARY KEY (key, rom_id));
+                 CREATE INDEX IF NOT EXISTS collection_roms_rom ON collection_roms(rom_id);
+                 PRAGMA user_version = 4;
                  COMMIT;",
             )?;
         }
@@ -257,11 +281,17 @@ impl Store {
                  FROM games g LEFT JOIN platforms p ON p.id = g.platform_id
                  WHERE (?1 IS NULL OR g.platform_id = ?1) AND g.title LIKE ?2 ESCAPE '\\'
                    AND (?3 = 0 OR g.local_path IS NOT NULL)
+                   AND (?4 IS NULL OR g.id IN (SELECT rom_id FROM collection_roms WHERE key = ?4))
                  ORDER BY g.title COLLATE NOCASE, g.id",
             )
             .expect("prepare");
+        let (platform, collection) = match &filter.scope {
+            Scope::All => (None, None),
+            Scope::Platform(id) => (Some(*id), None),
+            Scope::Collection(key) => (None, Some(key.as_str())),
+        };
         stmt.query_map(
-            params![filter.platform, pattern, filter.downloaded_only],
+            params![platform, pattern, filter.downloaded_only, collection],
             |r| {
                 Ok(GameItem {
                     id: r.get(0)?,
@@ -393,6 +423,7 @@ impl Store {
         self.conn
             .execute_batch(
                 "DELETE FROM games; DELETE FROM platforms; DELETE FROM state_sync; DELETE FROM pending_saves;
+                 DELETE FROM collections; DELETE FROM collection_roms;
                  DELETE FROM kv WHERE key = 'last_sync_at';",
             )
             .expect("clear library");
@@ -464,8 +495,8 @@ mod tests {
     #[test]
     fn filter_by_platform_and_search() {
         let s = seeded();
-        let f = |platform, search: &str| GameFilter {
-            platform,
+        let f = |platform: Option<i64>, search: &str| GameFilter {
+            scope: platform.map_or(Scope::All, Scope::Platform),
             search: search.into(),
             downloaded_only: false,
         };
@@ -480,7 +511,7 @@ mod tests {
         let mut s = seeded();
         s.upsert_games(&[rom(12, 2, "Tetris DX", "2026-02-01T00:00:00+00:00")]);
         let g = s.games(&GameFilter {
-            platform: Some(2),
+            scope: Scope::Platform(2),
             ..GameFilter::default()
         });
         assert_eq!(g.len(), 1);

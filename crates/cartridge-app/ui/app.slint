@@ -1,6 +1,7 @@
-import { Button, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner, Switch } from "std-widgets.slint";
+import { Button, CheckBox, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner, Switch } from "std-widgets.slint";
 
-export struct PlatformEntry { id: int, name: string, count: int, icon: image, has-icon: bool }
+export struct SidebarEntry { header: bool, key: string, name: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
+export struct Membership { key: string, name: string, member: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool }
 export struct GameRow { cards: [GameCard] }
 export struct Fact { label: string, value: string }
@@ -110,6 +111,7 @@ component SidebarItem inherits Rectangle {
     in property <bool> selected;
     in property <image> icon;
     in property <bool> has-icon;
+    in property <string> glyph;
     callback clicked();
     height: 34px;
     border-radius: 6px;
@@ -122,9 +124,52 @@ component SidebarItem inherits Rectangle {
         Rectangle {
             width: 20px;
             if root.has-icon: Image { source: root.icon; width: 20px; height: 20px; image-fit: contain; }
+            if !root.has-icon: Text { text: root.glyph; color: #e5484d; font-size: 14px; }
         }
         Text { text: root.label; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
         Text { text: root.count; vertical-alignment: center; color: #888; }
+    }
+}
+
+component SectionHeader inherits Rectangle {
+    in property <string> label;
+    in property <bool> expanded;
+    in property <bool> can-add;
+    callback toggled();
+    callback add();
+    height: 32px;
+    touch := TouchArea { clicked => { root.toggled(); } }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 6px;
+        padding-top: 8px;
+        spacing: 6px;
+        Rectangle {
+            width: 10px;
+            Path {
+                width: 6px;
+                height: 6px;
+                commands: root.expanded ? "M 0 2 L 8 2 L 4 7 Z" : "M 2 0 L 7 4 L 2 8 Z";
+                fill: #6b7280;
+            }
+        }
+        Text {
+            text: root.label;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: touch.has-hover ? #c9d1d9 : #7d8590;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if root.can-add: Rectangle {
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            background: add-touch.has-hover ? #2a2e36 : transparent;
+            Text { text: "+"; font-size: 16px; color: #c9d1d9; }
+            add-touch := TouchArea { clicked => { root.add(); } }
+        }
     }
 }
 
@@ -184,14 +229,17 @@ component Card inherits Rectangle {
 
 component Library inherits Rectangle {
     in property <string> user-label;
-    in property <[PlatformEntry]> platforms;
-    in property <int> selected-platform;
-    in property <int> total-games;
+    in property <[SidebarEntry]> sidebar;
+    in property <string> selected-key;
     in property <[GameRow]> rows;
     in property <string> sync-status;
     in property <bool> syncing;
     in-out property <string> search;
-    callback select-platform(int);
+    callback select(string);
+    callback toggle-section(string);
+    callback new-collection();
+    callback rename-collection(string);
+    callback delete-collection(string);
     callback search-edited(string);
     callback columns-changed(int);
     callback row-shown(int);
@@ -199,6 +247,7 @@ component Library inherits Rectangle {
     callback sign-out();
     callback open-game(int);
     in property <bool> needs-pairing;
+    in property <string> pair-prompt;
     callback pair-again();
     in-out property <bool> downloaded-only;
     in property <bool> offline;
@@ -213,26 +262,42 @@ component Library inherits Rectangle {
                 spacing: 4px;
                 Text { text: "Cartridge"; font-size: 20px; font-weight: 700; }
                 Rectangle { height: 8px; }
-                HorizontalLayout {
-                    padding-right: 14px;
-                    SidebarItem {
-                    label: "All games";
-                    count: root.total-games;
-                    selected: root.selected-platform == -1;
-                    clicked => { root.select-platform(-1); }
-                    }
-                }
                 ListView {
                     vertical-stretch: 1;
-                    for p in root.platforms: HorizontalLayout {
+                    for e in root.sidebar: HorizontalLayout {
                         padding-right: 14px;
-                        SidebarItem {
-                            label: p.name;
-                            count: p.count;
-                            icon: p.icon;
-                            has-icon: p.has-icon;
-                            selected: root.selected-platform == p.id;
-                            clicked => { root.select-platform(p.id); }
+                        if e.header: SectionHeader {
+                            label: e.name;
+                            expanded: e.expanded;
+                            can-add: e.can-add;
+                            toggled => { root.toggle-section(e.key); }
+                            add => { root.new-collection(); }
+                        }
+                        if !e.header && e.editable: ContextMenuArea {
+                            height: 34px;
+                            Menu {
+                                MenuItem { title: "Rename…"; activated => { root.rename-collection(e.key); } }
+                                MenuItem { title: "Delete…"; activated => { root.delete-collection(e.key); } }
+                            }
+                            SidebarItem {
+                                width: parent.width;
+                                label: e.name;
+                                count: e.count;
+                                icon: e.icon;
+                                has-icon: e.has-icon;
+                                glyph: e.glyph;
+                                selected: root.selected-key == e.key;
+                                clicked => { root.select(e.key); }
+                            }
+                        }
+                        if !e.header && !e.editable: SidebarItem {
+                            label: e.name;
+                            count: e.count;
+                            icon: e.icon;
+                            has-icon: e.has-icon;
+                            glyph: e.glyph;
+                            selected: root.selected-key == e.key;
+                            clicked => { root.select(e.key); }
                         }
                     }
                 }
@@ -257,7 +322,7 @@ component Library inherits Rectangle {
                     enabled: !root.offline;
                     toggled => { root.downloaded-only-toggled(self.checked); }
                 }
-                if root.needs-pairing: Button { text: "Pair again to turn on save sync"; clicked => { root.pair-again(); } }
+                if root.needs-pairing: Button { text: root.pair-prompt; clicked => { root.pair-again(); } }
                 Text { text: root.sync-status; color: #888; vertical-alignment: center; }
                 if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
                 Button { text: "Refresh"; enabled: !root.syncing; clicked => { root.refresh(); } }
@@ -325,6 +390,13 @@ component GamePage inherits Rectangle {
     callback play();
     callback delete();
     callback open-game(int);
+    in property <bool> show-collections;
+    in property <bool> can-edit-collections;
+    in property <bool> favorite;
+    in property <[Membership]> memberships;
+    callback toggle-favorite();
+    callback toggle-membership(string, bool);
+    callback new-collection();
 
     property <int> viewing: -1;
     changed title => { self.viewing = -1; page.content-y = 0; }
@@ -390,6 +462,55 @@ component GamePage inherits Rectangle {
                             if root.busy: Button { text: "Cancel"; clicked => { root.cancel(); } }
                             if root.downloaded && !root.busy: Button { text: "Play"; primary: true; clicked => { root.play(); } }
                             if root.downloaded && !root.busy: Button { text: "Delete download"; clicked => { root.delete(); } }
+                            if root.show-collections: Button {
+                                text: root.favorite ? "♥ In favorites" : "♡ Add to favorites";
+                                enabled: root.can-edit-collections;
+                                clicked => { root.toggle-favorite(); }
+                            }
+                            if root.show-collections: Rectangle {
+                                width: collections-button.preferred-width;
+                                collections-button := Button {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: "Collections…";
+                                    enabled: root.can-edit-collections;
+                                    clicked => { collections-popup.show(); }
+                                }
+                                collections-popup := PopupWindow {
+                                    y: parent.height + 4px;
+                                    close-policy: close-on-click-outside;
+                                    Rectangle {
+                                        background: #23272f;
+                                        border-radius: 8px;
+                                        border-width: 1px;
+                                        border-color: #3a3f4b;
+                                        drop-shadow-blur: 12px;
+                                        drop-shadow-color: #00000080;
+                                        VerticalLayout {
+                                            width: 260px;
+                                            padding: 12px;
+                                            spacing: 6px;
+                                            if root.memberships.length == 0: Text {
+                                                text: "You don't have any collections yet.";
+                                                color: #8a8f98;
+                                                wrap: word-wrap;
+                                            }
+                                            for m in root.memberships: CheckBox {
+                                                text: m.name;
+                                                checked: m.member;
+                                                toggled => { root.toggle-membership(m.key, self.checked); }
+                                            }
+                                            Button {
+                                                text: "New collection…";
+                                                clicked => {
+                                                    collections-popup.close();
+                                                    root.new-collection();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         if root.status != "": Text { text: root.status; color: #bbb; wrap: word-wrap; }
                         if root.conflict: Rectangle {
@@ -503,6 +624,51 @@ component GamePage inherits Rectangle {
     }
 }
 
+component Dialog inherits Rectangle {
+    in property <string> title;
+    in property <string> message;
+    in property <bool> asks-name;
+    in-out property <string> value;
+    in property <string> confirm-label;
+    in property <bool> destructive;
+    callback accepted(string);
+    callback cancelled();
+    background: #000000a0;
+    TouchArea { }
+    Rectangle {
+        width: 380px;
+        height: box.preferred-height;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: #23272f;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: #3a3f4b;
+        box := VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            Text { text: root.title; font-size: 17px; font-weight: 700; }
+            if root.message != "": Text { text: root.message; color: #b8bec8; wrap: word-wrap; }
+            if root.asks-name: LineEdit {
+                text <=> root.value;
+                accepted => { if root.value != "" { root.accepted(root.value); } }
+                init => { self.focus(); }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+                Button { text: "Cancel"; clicked => { root.cancelled(); } }
+                Button {
+                    text: root.confirm-label;
+                    primary: !root.destructive;
+                    enabled: !root.asks-name || root.value != "";
+                    clicked => { root.accepted(root.value); }
+                }
+            }
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "Cartridge";
     preferred-width: 1100px;
@@ -531,14 +697,17 @@ export component AppWindow inherits Window {
     in property <string> user-label;
     callback sign-out();
 
-    in property <[PlatformEntry]> platforms;
-    in property <int> selected-platform: -1;
-    in property <int> total-games;
+    in property <[SidebarEntry]> sidebar;
+    in property <string> selected-key: "all";
     in property <[GameRow]> rows;
     in property <string> sync-status;
     in property <bool> syncing;
     in-out property <string> search;
-    callback select-platform(int);
+    callback select(string);
+    callback toggle-section(string);
+    callback new-collection();
+    callback rename-collection(string);
+    callback delete-collection(string);
     callback search-edited(string);
     callback columns-changed(int);
     callback row-shown(int);
@@ -570,7 +739,24 @@ export component AppWindow inherits Window {
     callback keep-local-save();
     callback keep-server-save();
     in property <bool> needs-pairing;
+    in property <string> pair-prompt;
     callback pair-again();
+    in property <bool> show-collections;
+    in property <bool> can-edit-collections;
+    in property <bool> game-favorite;
+    in property <[Membership]> game-memberships;
+    callback toggle-favorite();
+    callback toggle-membership(string, bool);
+    callback new-collection-with-game();
+    in property <bool> dialog-open;
+    in property <string> dialog-title;
+    in property <string> dialog-message;
+    in property <bool> dialog-asks-name;
+    in-out property <string> dialog-value;
+    in property <string> dialog-confirm;
+    in property <bool> dialog-destructive;
+    callback dialog-accepted(string);
+    callback dialog-cancelled();
     in-out property <bool> downloaded-only;
     in property <bool> offline;
     callback downloaded-only-toggled(bool);
@@ -596,20 +782,24 @@ export component AppWindow inherits Window {
     Library {
         visible: root.screen == 2;
         user-label: root.user-label;
-        platforms: root.platforms;
-        selected-platform: root.selected-platform;
-        total-games: root.total-games;
+        sidebar: root.sidebar;
+        selected-key: root.selected-key;
         rows: root.rows;
         sync-status: root.sync-status;
         syncing: root.syncing;
         search <=> root.search;
-        select-platform(id) => { root.select-platform(id); }
+        select(key) => { root.select(key); }
+        toggle-section(key) => { root.toggle-section(key); }
+        new-collection => { root.new-collection(); }
+        rename-collection(key) => { root.rename-collection(key); }
+        delete-collection(key) => { root.delete-collection(key); }
         search-edited(text) => { root.search-edited(text); }
         columns-changed(n) => { root.columns-changed(n); }
         row-shown(i) => { root.row-shown(i); }
         refresh => { root.refresh(); }
         open-game(id) => { root.open-game(id); }
         needs-pairing: root.needs-pairing;
+        pair-prompt: root.pair-prompt;
         pair-again => { root.pair-again(); }
         downloaded-only <=> root.downloaded-only;
         offline: root.offline;
@@ -642,5 +832,22 @@ export component AppWindow inherits Window {
         conflict-text: root.conflict-text;
         keep-local => { root.keep-local-save(); }
         keep-server => { root.keep-server-save(); }
+        show-collections: root.show-collections;
+        can-edit-collections: root.can-edit-collections;
+        favorite: root.game-favorite;
+        memberships: root.game-memberships;
+        toggle-favorite => { root.toggle-favorite(); }
+        toggle-membership(key, on) => { root.toggle-membership(key, on); }
+        new-collection => { root.new-collection-with-game(); }
+    }
+    if root.dialog-open: Dialog {
+        title: root.dialog-title;
+        message: root.dialog-message;
+        asks-name: root.dialog-asks-name;
+        value <=> root.dialog-value;
+        confirm-label: root.dialog-confirm;
+        destructive: root.dialog-destructive;
+        accepted(value) => { root.dialog-accepted(value); }
+        cancelled => { root.dialog-cancelled(); }
     }
 }

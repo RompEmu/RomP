@@ -32,6 +32,8 @@ pub enum PollOutcome {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct User {
+    #[serde(default)]
+    pub id: Option<i64>,
     pub username: String,
     pub current_device_id: Option<String>,
 }
@@ -57,6 +59,40 @@ pub struct RomMetadata {
     pub player_count: Option<String>,
     pub first_release_date: Option<i64>,
     pub average_rating: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum CollectionId {
+    Number(i64),
+    Text(String),
+}
+
+impl std::fmt::Display for CollectionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Text(t) => f.write_str(t),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RemoteCollection {
+    pub id: CollectionId,
+    pub name: String,
+    #[serde(default)]
+    pub rom_ids: Vec<i64>,
+    #[serde(default)]
+    pub is_favorite: bool,
+    #[serde(default)]
+    pub is_smart: bool,
+    #[serde(default)]
+    pub user_id: Option<i64>,
+    #[serde(default)]
+    pub owner_username: Option<String>,
+    #[serde(default, rename = "type")]
+    pub kind: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -207,6 +243,25 @@ mod tests {
         assert_eq!(meta.average_rating, Some(81.5));
         assert!(meta.publishers.is_empty());
         assert_eq!(rom.merged_screenshots.len(), 1);
+    }
+
+    #[test]
+    fn collections_parse_numeric_and_virtual_ids() {
+        let list: Vec<RemoteCollection> = serde_json::from_value(serde_json::json!([
+            {"id": 3, "name": "Favourites", "rom_ids": [1, 2], "is_favorite": true,
+             "user_id": 1, "owner_username": "me", "description": "", "rom_count": 2},
+            {"id": "eyJuYW1lIjoiWmVsZGEifQ==", "name": "Zelda", "type": "franchise",
+             "rom_ids": [5], "is_virtual": true}
+        ]))
+        .unwrap();
+        assert_eq!(list[0].id.to_string(), "3");
+        assert!(list[0].is_favorite);
+        assert_eq!(
+            list[1].id,
+            CollectionId::Text("eyJuYW1lIjoiWmVsZGEifQ==".into())
+        );
+        assert_eq!(list[1].kind.as_deref(), Some("franchise"));
+        assert_eq!(list[1].user_id, None);
     }
 
     #[test]

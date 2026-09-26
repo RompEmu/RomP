@@ -61,6 +61,10 @@ impl Controller {
             .unwrap_or_default()
     }
 
+    pub(super) fn current_game_id(&self) -> Option<i64> {
+        self.game.borrow().as_ref().map(|g| g.detail.id)
+    }
+
     fn current_game(&self) -> Option<GameDetail> {
         self.game.borrow().as_ref().map(|g| g.detail.clone())
     }
@@ -270,6 +274,7 @@ impl Controller {
             ui.set_game_progress(self.download_fraction.get());
         }
         ui.set_game_playable(playable);
+        self.refresh_collection_controls(detail.id);
         ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
             ui.set_game_status(

@@ -1,3 +1,4 @@
+mod collections;
 mod game;
 mod save_sync;
 
@@ -10,7 +11,7 @@ use crate::romm::pairing::{PollStep, Poller};
 use crate::romm::types::{DeviceAuth, PollOutcome, User};
 use crate::store::{GameFilter, GameItem, Store};
 use crate::sync::{sync_library, SyncReport, PAGE_SIZE};
-use crate::{identity, paths, qr, AppWindow, GameCard, GameRow, PlatformEntry};
+use crate::{identity, paths, qr, AppWindow, GameCard, GameRow};
 use slint::{
     ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode,
     VecModel, Weak,
@@ -97,6 +98,9 @@ struct Controller {
     running: RefCell<Option<crate::play::RunningGame>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
+    selected: RefCell<String>,
+    expanded: RefCell<HashSet<String>>,
+    dialog: RefCell<Option<collections::DialogAction>>,
 }
 
 thread_local! {
@@ -148,6 +152,14 @@ pub fn run() -> anyhow::Result<()> {
         running: RefCell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
+        selected: RefCell::new("all".into()),
+        expanded: RefCell::new(
+            ["platforms", "collections"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+        ),
+        dialog: RefCell::new(None),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -170,7 +182,20 @@ impl Controller {
         ui.on_cancel_pairing(|| with_controller(|c| c.cancel_pairing()));
         ui.on_retry_pairing(|| with_controller(|c| c.connect()));
         ui.on_sign_out(|| with_controller(|c| c.sign_out()));
-        ui.on_select_platform(|id| with_controller(|c| c.set_platform(id)));
+        ui.on_select(|key| with_controller(|c| c.select(key.to_string())));
+        ui.on_toggle_section(|key| with_controller(|c| c.toggle_section(key.to_string())));
+        ui.on_new_collection(|| with_controller(|c| c.new_collection(None)));
+        ui.on_rename_collection(|key| with_controller(|c| c.rename_collection(key.to_string())));
+        ui.on_delete_collection(|key| with_controller(|c| c.delete_collection(key.to_string())));
+        ui.on_toggle_favorite(|| with_controller(|c| c.toggle_favorite()));
+        ui.on_toggle_membership(|key, on| {
+            with_controller(|c| c.toggle_membership(key.to_string(), on))
+        });
+        ui.on_new_collection_with_game(|| {
+            with_controller(|c| c.new_collection(c.current_game_id()))
+        });
+        ui.on_dialog_accepted(|value| with_controller(|c| c.dialog_accepted(value.to_string())));
+        ui.on_dialog_cancelled(|| with_controller(|c| c.close_dialog()));
         ui.on_search_edited(|text| with_controller(|c| c.set_search(text.to_string())));
         ui.on_columns_changed(|n| with_controller(|c| c.set_columns(n)));
         ui.on_row_shown(|i| with_controller(|c| c.row_shown(i.max(0) as usize)));
@@ -333,9 +358,10 @@ impl Controller {
         *self.client.borrow_mut() = Some(client.clone());
         self.set_offline(false);
         self.library.borrow_mut().filter = GameFilter::default();
+        *self.selected.borrow_mut() = "all".into();
         self.apply_download_filter();
         if let Some(ui) = self.ui() {
-            ui.set_selected_platform(-1);
+            ui.set_selected_key("all".into());
             ui.set_search("".into());
             ui.set_screen(SCREEN_LIBRARY);
         }
@@ -448,14 +474,6 @@ impl Controller {
         }
     }
 
-    fn set_platform(&self, id: i32) {
-        self.library.borrow_mut().filter.platform = (id >= 0).then_some(id as i64);
-        if let Some(ui) = self.ui() {
-            ui.set_selected_platform(id);
-        }
-        self.reload_games();
-    }
-
     fn set_search(&self, text: String) {
         self.library.borrow_mut().filter.search = text;
         self.reload_games();
@@ -467,37 +485,6 @@ impl Controller {
             self.library.borrow_mut().columns = columns;
             self.rebuild_rows();
         }
-    }
-
-    fn reload_sidebar(&self) {
-        let Some(ui) = self.ui() else { return };
-        let downloaded_only = self.library.borrow().filter.downloaded_only;
-        let platforms = self.shared.store.lock().unwrap().platforms(downloaded_only);
-        let total: i64 = platforms.iter().map(|p| p.count).sum();
-        let mut missing = Vec::new();
-        let entries: Vec<PlatformEntry> = platforms
-            .into_iter()
-            .map(|p| {
-                let image = self
-                    .shared
-                    .covers
-                    .cached_icon(&p.slug)
-                    .and_then(|icon| Image::load_from_path(&icon).ok());
-                if image.is_none() && self.icon_requests.borrow_mut().insert(p.slug.clone()) {
-                    missing.push(p.slug.clone());
-                }
-                PlatformEntry {
-                    id: p.id as i32,
-                    name: p.name.into(),
-                    count: p.count as i32,
-                    has_icon: image.is_some(),
-                    icon: image.unwrap_or_default(),
-                }
-            })
-            .collect();
-        ui.set_platforms(ModelRc::new(VecModel::from(entries)));
-        ui.set_total_games(total as i32);
-        self.fetch_icons(missing);
     }
 
     fn fetch_icons(&self, slugs: Vec<String>) {
@@ -667,8 +654,14 @@ impl Controller {
         let cancel = Arc::new(AtomicBool::new(false));
         *self.sync_cancel.borrow_mut() = cancel.clone();
         let store = self.shared.store.clone();
+        let collections = self.has_scope("collections.read");
         self.shared.rt.spawn(async move {
             let result = sync_library(&client, &store, PAGE_SIZE, &cancel).await;
+            if result.is_ok() && collections && !cancel.load(Ordering::SeqCst) {
+                if let Err(e) = crate::collections::sync_collections(&client, &store).await {
+                    tracing::warn!("syncing collections: {e}");
+                }
+            }
             on_ui(move |c| c.sync_finished(generation, result));
         });
     }
