@@ -62,6 +62,26 @@ impl Covers {
         ))
     }
 
+    pub fn icon_path(&self, slug: &str) -> PathBuf {
+        self.dir.join(format!("platform-{slug}.svg"))
+    }
+
+    pub async fn ensure_icon(&self, client: &Client, slug: &str) -> Result<PathBuf, String> {
+        if !crate::layout::safe_component(slug) {
+            return Err(format!("invalid platform slug: {slug}"));
+        }
+        let path = self.icon_path(slug);
+        if tokio::fs::try_exists(&path).await.unwrap_or(false) {
+            return Ok(path);
+        }
+        let bytes = client
+            .fetch_bytes(&format!("/assets/platforms/{slug}.svg"))
+            .await
+            .map_err(|e| e.to_string())?;
+        write_atomic(&self.dir, &path, &bytes).await?;
+        Ok(path)
+    }
+
     pub fn cached_large(&self, game_id: i64, cover: &str) -> Option<PathBuf> {
         let base = self.large_base(game_id, cover);
         IMAGE_EXTENSIONS
@@ -221,5 +241,36 @@ mod tests {
         assert_eq!(a.extension().unwrap(), "jpg");
         assert_eq!(covers.cached_large(9, "/cover"), Some(a));
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn platform_icons_are_fetched_once_and_slugs_are_checked() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/assets/platforms/snes.svg"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("<svg/>"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let covers = Covers::new(dir.path().to_path_buf());
+        let client = Client::new(base_of(&server, "/"));
+        let icon = covers.ensure_icon(&client, "snes").await.unwrap();
+        assert_eq!(covers.ensure_icon(&client, "snes").await.unwrap(), icon);
+        assert_eq!(std::fs::read_to_string(icon).unwrap(), "<svg/>");
+        assert!(covers.ensure_icon(&client, "../x").await.is_err());
+    }
+
+    #[test]
+    fn svg_icons_with_css_classes_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let icon = dir.path().join("platform-x.svg");
+        std::fs::write(
+            &icon,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><style>.a{fill:#a7a1cf;}</style></defs><rect class="a" width="10" height="10"/></svg>"#,
+        )
+        .unwrap();
+        let image = slint::Image::load_from_path(&icon).unwrap();
+        assert_eq!(image.size().width, 10);
     }
 }

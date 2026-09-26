@@ -92,6 +92,8 @@ struct Controller {
     pending_launch: RefCell<Option<save_sync::PendingLaunch>>,
     playing: RefCell<Option<crate::store::GameDetail>>,
     syncing_game: Cell<Option<i64>>,
+    downloaded_choice: Cell<bool>,
+    icon_requests: RefCell<HashSet<String>>,
     running: RefCell<Option<crate::play::RunningGame>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
@@ -141,6 +143,8 @@ pub fn run() -> anyhow::Result<()> {
         pending_launch: RefCell::new(None),
         playing: RefCell::new(None),
         syncing_game: Cell::new(None),
+        downloaded_choice: Cell::new(false),
+        icon_requests: RefCell::default(),
         running: RefCell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
@@ -180,6 +184,7 @@ impl Controller {
         ui.on_keep_local_save(|| with_controller(|c| c.keep_save(crate::saves::Keep::Local)));
         ui.on_keep_server_save(|| with_controller(|c| c.keep_save(crate::saves::Keep::Server)));
         ui.on_pair_again(|| with_controller(|c| c.pair_again()));
+        ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
     }
 
     fn start(&self) {
@@ -328,6 +333,7 @@ impl Controller {
         *self.client.borrow_mut() = Some(client.clone());
         self.set_offline(false);
         self.library.borrow_mut().filter = GameFilter::default();
+        self.apply_download_filter();
         if let Some(ui) = self.ui() {
             ui.set_selected_platform(-1);
             ui.set_search("".into());
@@ -379,9 +385,27 @@ impl Controller {
         }
     }
 
+    fn set_downloaded_only(&self, on: bool) {
+        self.downloaded_choice.set(on);
+        self.apply_download_filter();
+        self.reload_sidebar();
+        self.reload_games();
+    }
+
+    fn apply_download_filter(&self) {
+        let offline = self.offline.get();
+        let only = offline || self.downloaded_choice.get();
+        self.library.borrow_mut().filter.downloaded_only = only;
+        if let Some(ui) = self.ui() {
+            ui.set_downloaded_only(only);
+            ui.set_offline(offline);
+        }
+    }
+
     fn set_offline(&self, offline: bool) {
-        self.library.borrow_mut().filter.downloaded_only = offline;
-        if self.offline.replace(offline) == offline {
+        let changed = self.offline.replace(offline) != offline;
+        self.apply_download_filter();
+        if !changed {
             return;
         }
         *self.offline_retry.borrow_mut() = offline.then(|| {
@@ -447,23 +471,49 @@ impl Controller {
 
     fn reload_sidebar(&self) {
         let Some(ui) = self.ui() else { return };
-        let platforms = self
-            .shared
-            .store
-            .lock()
-            .unwrap()
-            .platforms(self.offline.get());
+        let downloaded_only = self.library.borrow().filter.downloaded_only;
+        let platforms = self.shared.store.lock().unwrap().platforms(downloaded_only);
         let total: i64 = platforms.iter().map(|p| p.count).sum();
+        let mut missing = Vec::new();
         let entries: Vec<PlatformEntry> = platforms
             .into_iter()
-            .map(|p| PlatformEntry {
-                id: p.id as i32,
-                name: p.name.into(),
-                count: p.count as i32,
+            .map(|p| {
+                let icon = self.shared.covers.icon_path(&p.slug);
+                let image = Image::load_from_path(&icon).ok();
+                if image.is_none() && self.icon_requests.borrow_mut().insert(p.slug.clone()) {
+                    missing.push(p.slug.clone());
+                }
+                PlatformEntry {
+                    id: p.id as i32,
+                    name: p.name.into(),
+                    count: p.count as i32,
+                    has_icon: image.is_some(),
+                    icon: image.unwrap_or_default(),
+                }
             })
             .collect();
         ui.set_platforms(ModelRc::new(VecModel::from(entries)));
         ui.set_total_games(total as i32);
+        self.fetch_icons(missing);
+    }
+
+    fn fetch_icons(&self, slugs: Vec<String>) {
+        let Some(client) = self.client.borrow().clone() else {
+            return;
+        };
+        if slugs.is_empty() || self.offline.get() {
+            return;
+        }
+        let covers = self.shared.covers.clone();
+        self.shared.rt.spawn(async move {
+            let mut fetched = false;
+            for slug in slugs {
+                fetched |= covers.ensure_icon(&client, &slug).await.is_ok();
+            }
+            if fetched {
+                on_ui(|c| c.reload_sidebar());
+            }
+        });
     }
 
     fn reload_games(&self) {

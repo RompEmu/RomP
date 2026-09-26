@@ -1,6 +1,6 @@
-import { Button, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner } from "std-widgets.slint";
+import { Button, LineEdit, ListView, ProgressIndicator, ScrollView, Spinner, Switch } from "std-widgets.slint";
 
-export struct PlatformEntry { id: int, name: string, count: int }
+export struct PlatformEntry { id: int, name: string, count: int, icon: image, has-icon: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool }
 export struct GameRow { cards: [GameCard] }
 
@@ -106,6 +106,8 @@ component SidebarItem inherits Rectangle {
     in property <string> label;
     in property <int> count;
     in property <bool> selected;
+    in property <image> icon;
+    in property <bool> has-icon;
     callback clicked();
     height: 34px;
     border-radius: 6px;
@@ -114,6 +116,11 @@ component SidebarItem inherits Rectangle {
     HorizontalLayout {
         padding-left: 10px;
         padding-right: 10px;
+        spacing: 8px;
+        Rectangle {
+            width: 20px;
+            if root.has-icon: Image { source: root.icon; width: 20px; height: 20px; image-fit: contain; }
+        }
         Text { text: root.label; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
         Text { text: root.count; vertical-alignment: center; color: #888; }
     }
@@ -159,7 +166,16 @@ component Card inherits Rectangle {
             if touch.has-hover: Rectangle { background: #ffffff14; }
         }
         Text { text: root.game.title; overflow: elide; font-weight: 600; }
-        Text { text: root.game.platform; overflow: elide; color: #888; font-size: 12px; }
+        HorizontalLayout {
+            spacing: 4px;
+            Text { text: root.game.platform; overflow: elide; color: #888; font-size: 12px; horizontal-stretch: 1; }
+            Text {
+                text: root.game.downloaded ? "Downloaded" : "On server";
+                color: root.game.downloaded ? #40c057 : #777;
+                font-size: 12px;
+                font-weight: root.game.downloaded ? 600 : 400;
+            }
+        }
     }
 }
 
@@ -181,6 +197,9 @@ component Library inherits Rectangle {
     callback open-game(int);
     in property <bool> needs-pairing;
     callback pair-again();
+    in-out property <bool> downloaded-only;
+    in property <bool> offline;
+    callback downloaded-only-toggled(bool);
 
     HorizontalLayout {
         Rectangle {
@@ -202,6 +221,8 @@ component Library inherits Rectangle {
                     for p in root.platforms: SidebarItem {
                         label: p.name;
                         count: p.count;
+                        icon: p.icon;
+                        has-icon: p.has-icon;
                         selected: root.selected-platform == p.id;
                         clicked => { root.select-platform(p.id); }
                     }
@@ -220,6 +241,12 @@ component Library inherits Rectangle {
                     placeholder-text: "Search";
                     text <=> root.search;
                     edited(text) => { root.search-edited(text); }
+                }
+                Switch {
+                    text: "Downloaded only";
+                    checked <=> root.downloaded-only;
+                    enabled: !root.offline;
+                    toggled => { root.downloaded-only-toggled(self.checked); }
                 }
                 if root.needs-pairing: Button { text: "Pair again to turn on save sync"; clicked => { root.pair-again(); } }
                 Text { text: root.sync-status; color: #888; vertical-alignment: center; }
@@ -417,6 +444,9 @@ export component AppWindow inherits Window {
     callback keep-server-save();
     in property <bool> needs-pairing;
     callback pair-again();
+    in-out property <bool> downloaded-only;
+    in property <bool> offline;
+    callback downloaded-only-toggled(bool);
 
     if root.screen == 0: Connect {
         server-url <=> root.server-url;
@@ -453,6 +483,9 @@ export component AppWindow inherits Window {
         open-game(id) => { root.open-game(id); }
         needs-pairing: root.needs-pairing;
         pair-again => { root.pair-again(); }
+        downloaded-only <=> root.downloaded-only;
+        offline: root.offline;
+        downloaded-only-toggled(on) => { root.downloaded-only-toggled(on); }
         sign-out => { root.sign-out(); }
     }
     if root.screen == 3: GamePage {

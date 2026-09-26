@@ -5,6 +5,7 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformItem {
     pub id: i64,
+    pub slug: String,
     pub name: String,
     pub count: i64,
 }
@@ -195,7 +196,7 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT p.id, p.name, COUNT(g.id) FROM platforms p
+                "SELECT p.id, p.slug, p.name, COUNT(g.id) FROM platforms p
                  JOIN games g ON g.platform_id = p.id
                  WHERE ?1 = 0 OR g.local_path IS NOT NULL
                  GROUP BY p.id ORDER BY p.name COLLATE NOCASE",
@@ -204,8 +205,9 @@ impl Store {
         stmt.query_map([downloaded_only], |r| {
             Ok(PlatformItem {
                 id: r.get(0)?,
-                name: r.get(1)?,
-                count: r.get(2)?,
+                slug: r.get(1)?,
+                name: r.get(2)?,
+                count: r.get(3)?,
             })
         })
         .expect("query")
@@ -462,11 +464,13 @@ mod tests {
             [
                 PlatformItem {
                     id: 2,
+                    slug: "game boy".into(),
                     name: "Game Boy".into(),
                     count: 1
                 },
                 PlatformItem {
                     id: 1,
+                    slug: "snes".into(),
                     name: "SNES".into(),
                     count: 2
                 }
@@ -594,6 +598,7 @@ mod tests {
             s.platforms(true),
             [PlatformItem {
                 id: 1,
+                slug: "snes".into(),
                 name: "SNES".into(),
                 count: 1
             }]
