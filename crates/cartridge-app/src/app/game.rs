@@ -587,7 +587,11 @@ impl Controller {
         self.preparing.set(false);
         let save_dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
         let prefs = self.prefs.get();
-        let load_slot = (prefs.resume && save_dir.join("auto.state").exists()).then_some(0);
+        let reliable = core_for_platform(&detail.platform_slug)
+            .is_some_and(|core| crate::cores::resumes_reliably(core.id));
+        let load_slot =
+            (reliable && prefs.resume && save_dir.join(crate::saves::AUTO_STATE).exists())
+                .then_some(0);
         let options = GameOptions {
             core,
             rom,
@@ -603,6 +607,7 @@ impl Controller {
             players: self.players.clone(),
             prefs,
             load_slot,
+            auto_state: reliable,
             mappings: self.mappings.clone(),
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
             mouse: core_for_platform(&detail.platform_slug)

@@ -125,9 +125,16 @@ impl StateManager {
         }
     }
 
-    pub fn save_on_shutdown(&mut self, core: &mut lr::Core, frontend: &mut Frontend) {
+    pub fn save_on_shutdown(
+        &mut self,
+        core: &mut lr::Core,
+        frontend: &mut Frontend,
+        auto_state: bool,
+    ) {
         self.flush_sram(core, frontend);
-        self.save_state(0, core, frontend);
+        if auto_state {
+            self.save_state(0, core, frontend);
+        }
     }
 }
 

@@ -35,6 +35,8 @@ struct Args {
     jit: bool,
     #[arg(long, default_value_t = 100)]
     volume: u8,
+    #[arg(long)]
+    no_auto_state: bool,
     #[arg(long = "option", value_parser = parse_option)]
     options: Vec<(String, String)>,
 }
@@ -265,7 +267,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         }
     }
     if stop_requested {
-        saves.save_on_shutdown(&mut core, frontend);
+        saves.save_on_shutdown(&mut core, frontend, !args.no_auto_state);
         let scratch = archive::scratch_dir(&session_tag);
         std::thread::spawn(move || {
             std::thread::sleep(UNLOAD_GRACE);

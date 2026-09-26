@@ -28,6 +28,7 @@ pub struct SessionConfig {
     pub jit: bool,
     pub load_slot: Option<u8>,
     pub volume: u8,
+    pub auto_state: bool,
     pub options: Vec<(String, String)>,
 }
 
@@ -68,6 +69,9 @@ pub fn runner_args(cfg: &SessionConfig, socket: &Path, frames: &str) -> Vec<OsSt
     }
     if cfg.jit {
         args.push("--jit".into());
+    }
+    if !cfg.auto_state {
+        args.push("--no-auto-state".into());
     }
     if cfg.volume < 100 {
         args.push("--volume".into());
@@ -254,6 +258,7 @@ mod tests {
             jit: false,
             load_slot: None,
             volume: 100,
+            auto_state: true,
             options: Vec::new(),
         }
     }
@@ -288,6 +293,19 @@ mod tests {
         .map(OsString::from)
         .collect();
         assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn automatic_saves_can_be_turned_off() {
+        let mut cfg = config("/bin/runner".into());
+        let has_flag = |cfg: &SessionConfig| {
+            runner_args(cfg, Path::new("/tmp/c.sock"), "/cart-1")
+                .iter()
+                .any(|a| a == "--no-auto-state")
+        };
+        assert!(!has_flag(&cfg));
+        cfg.auto_state = false;
+        assert!(has_flag(&cfg));
     }
 
     #[test]

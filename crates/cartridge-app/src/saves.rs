@@ -84,6 +84,18 @@ fn newest(saves: Vec<crate::romm::types::RemoteSave>) -> Option<crate::romm::typ
         .max_by_key(|s| crate::sync::parse_iso(&s.updated_at).unwrap_or(i64::MIN))
 }
 
+pub const AUTO_STATE: &str = "auto.state";
+
+pub fn set_aside_auto_state(dir: &Path) -> io::Result<()> {
+    let source = dir.join(AUTO_STATE);
+    if !source.exists() {
+        return Ok(());
+    }
+    std::fs::rename(&source, new_backup_dir(dir)?.join("auto.state.failed"))?;
+    prune_backups(dir);
+    Ok(())
+}
+
 pub fn replace_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     if let Some(dir) = path.parent() {
@@ -450,6 +462,21 @@ mod tests {
         assert_ne!(a, b);
         assert_eq!(std::fs::read(a).unwrap(), b"one");
         assert_eq!(std::fs::read(b).unwrap(), b"two");
+    }
+
+    #[test]
+    fn a_failed_automatic_save_is_set_aside_not_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(AUTO_STATE), b"broken").unwrap();
+        set_aside_auto_state(dir.path()).unwrap();
+        assert!(!dir.path().join(AUTO_STATE).exists());
+        let kept: Vec<_> = std::fs::read_dir(dir.path().join("backup"))
+            .unwrap()
+            .flatten()
+            .map(|e| std::fs::read(e.path().join("auto.state.failed")).unwrap())
+            .collect();
+        assert_eq!(kept, [b"broken".to_vec()]);
+        assert!(set_aside_auto_state(dir.path()).is_ok());
     }
 
     #[test]

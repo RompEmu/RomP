@@ -32,6 +32,7 @@ pub struct GameOptions {
     pub players: Rc<RefCell<Assignments>>,
     pub prefs: Preferences,
     pub load_slot: Option<u8>,
+    pub auto_state: bool,
     pub mappings: Rc<RefCell<Mappings>>,
     pub nintendo: bool,
     pub mouse: bool,
@@ -79,6 +80,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             players: Rc::default(),
             prefs: Preferences::default(),
             load_slot: None,
+            auto_state: true,
             mappings: Rc::default(),
             nintendo: false,
             mouse: false,
@@ -95,6 +97,8 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
 }
 
 pub type CoreIdentity = (String, String);
+
+const RESUME_GRACE: Duration = Duration::from_secs(20);
 
 struct Game {
     session: RefCell<Session>,
@@ -539,11 +543,12 @@ pub fn launch(
         core: opts.core,
         rom: opts.rom,
         system_dir: paths::system_dir(),
-        save_dir: opts.save_dir,
+        save_dir: opts.save_dir.clone(),
         jit: opts.jit,
         load_slot: opts.load_slot,
         options: opts.options,
         volume: opts.prefs.volume,
+        auto_state: opts.auto_state,
     };
     let session = Session::start(&cfg)?;
 
@@ -631,6 +636,9 @@ pub fn launch(
         let nintendo = opts.nintendo;
         let mut known: HashSet<String> = HashSet::new();
         let mut first_poll = true;
+        let resumed = opts.load_slot == Some(0);
+        let launched = std::time::Instant::now();
+        let save_dir = opts.save_dir.clone();
         move || {
             let Some(game) = weak.upgrade() else { return };
             let ui = game.primary();
@@ -715,7 +723,18 @@ pub fn launch(
                     continue;
                 }
                 let started_now = matches!(event, SessionEvent::Runner(RunnerMsg::Started { .. }));
+                let failed_resume = resumed
+                    && launched.elapsed() < RESUME_GRACE
+                    && matches!(event, SessionEvent::Ended { code, .. } if code != Some(0));
                 handle_event(ui, event, &game.finish, &started);
+                if failed_resume {
+                    if let Err(e) = crate::saves::set_aside_auto_state(&save_dir) {
+                        tracing::warn!("setting aside the automatic save: {e}");
+                    }
+                    ui.set_status(
+                        "The game couldn't continue from where you left off, so that automatic save was set aside. Start the game again to play from the beginning or from a save slot.".into(),
+                    );
+                }
                 if started_now && game.computer {
                     flash(
                         ui,

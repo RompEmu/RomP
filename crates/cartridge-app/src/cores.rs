@@ -205,6 +205,10 @@ const NINTENDO: [&str; 11] = [
     "virtualboy",
 ];
 
+pub fn resumes_reliably(core_id: &str) -> bool {
+    core_id != "play"
+}
+
 pub fn is_computer(core_id: &str) -> bool {
     matches!(core_id, "puae" | "dosbox_pure" | "vice_x64sc" | "fuse")
 }
@@ -486,6 +490,12 @@ mod tests {
         for slug in ["arcade", "neogeoaes", "cps2"] {
             assert_eq!(core_for_platform(slug).unwrap().id, "fbneo");
         }
+    }
+
+    #[test]
+    fn play_does_not_resume_from_automatic_saves() {
+        assert!(!resumes_reliably("play"));
+        assert!(resumes_reliably("snes9x"));
     }
 
     #[test]
