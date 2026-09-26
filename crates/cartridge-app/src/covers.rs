@@ -62,24 +62,50 @@ impl Covers {
         ))
     }
 
-    pub fn icon_path(&self, slug: &str) -> PathBuf {
-        self.dir.join(format!("platform-{slug}.svg"))
+    pub fn cached_icon(&self, slug: &str) -> Option<PathBuf> {
+        ["svg", "png"]
+            .iter()
+            .map(|ext| self.dir.join(format!("platform-{slug}.{ext}")))
+            .find(|p| p.exists())
     }
 
     pub async fn ensure_icon(&self, client: &Client, slug: &str) -> Result<PathBuf, String> {
         if !crate::layout::safe_component(slug) {
             return Err(format!("invalid platform slug: {slug}"));
         }
-        let path = self.icon_path(slug);
-        if tokio::fs::try_exists(&path).await.unwrap_or(false) {
+        if let Some(path) = self.cached_icon(slug) {
             return Ok(path);
         }
-        let bytes = client
+        match client
             .fetch_bytes(&format!("/assets/platforms/{slug}.svg"))
             .await
-            .map_err(|e| e.to_string())?;
-        write_atomic(&self.dir, &path, &bytes).await?;
-        Ok(path)
+        {
+            Ok(bytes) => {
+                let path = self.dir.join(format!("platform-{slug}.svg"));
+                write_atomic(&self.dir, &path, &bytes).await?;
+                Ok(path)
+            }
+            Err(crate::romm::client::Error::Status(404)) => {
+                let ico = client
+                    .fetch_bytes(&format!("/assets/platforms/{slug}.ico"))
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let png = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+                    let image = image::load_from_memory(&ico).map_err(|e| e.to_string())?;
+                    let mut out = std::io::Cursor::new(Vec::new());
+                    image
+                        .write_to(&mut out, image::ImageFormat::Png)
+                        .map_err(|e| e.to_string())?;
+                    Ok(out.into_inner())
+                })
+                .await
+                .map_err(|e| e.to_string())??;
+                let path = self.dir.join(format!("platform-{slug}.png"));
+                write_atomic(&self.dir, &path, &png).await?;
+                Ok(path)
+            }
+            Err(e) => Err(e.to_string()),
+        }
     }
 
     pub fn cached_large(&self, game_id: i64, cover: &str) -> Option<PathBuf> {
@@ -272,5 +298,26 @@ mod tests {
         .unwrap();
         let image = slint::Image::load_from_path(&icon).unwrap();
         assert_eq!(image.size().width, 10);
+    }
+
+    #[tokio::test]
+    async fn missing_svg_icons_fall_back_to_ico_converted_to_png() {
+        let server = MockServer::start().await;
+        let mut ico = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(16, 16, image::Rgba([1, 2, 3, 255]))
+            .write_to(&mut ico, image::ImageFormat::Ico)
+            .unwrap();
+        Mock::given(method("GET"))
+            .and(path("/assets/platforms/sms.ico"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(ico.into_inner()))
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let covers = Covers::new(dir.path().to_path_buf());
+        let client = Client::new(base_of(&server, "/"));
+        let icon = covers.ensure_icon(&client, "sms").await.unwrap();
+        assert_eq!(icon.extension().unwrap(), "png");
+        assert_eq!(covers.cached_icon("sms"), Some(icon.clone()));
+        assert_eq!(image::open(icon).unwrap().width(), 16);
     }
 }

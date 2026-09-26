@@ -210,21 +210,27 @@ component Library inherits Rectangle {
                 spacing: 4px;
                 Text { text: "Cartridge"; font-size: 20px; font-weight: 700; }
                 Rectangle { height: 8px; }
-                SidebarItem {
+                HorizontalLayout {
+                    padding-right: 14px;
+                    SidebarItem {
                     label: "All games";
                     count: root.total-games;
                     selected: root.selected-platform == -1;
                     clicked => { root.select-platform(-1); }
+                    }
                 }
                 ListView {
                     vertical-stretch: 1;
-                    for p in root.platforms: SidebarItem {
-                        label: p.name;
-                        count: p.count;
-                        icon: p.icon;
-                        has-icon: p.has-icon;
-                        selected: root.selected-platform == p.id;
-                        clicked => { root.select-platform(p.id); }
+                    for p in root.platforms: HorizontalLayout {
+                        padding-right: 14px;
+                        SidebarItem {
+                            label: p.name;
+                            count: p.count;
+                            icon: p.icon;
+                            has-icon: p.has-icon;
+                            selected: root.selected-platform == p.id;
+                            clicked => { root.select-platform(p.id); }
+                        }
                     }
                 }
                 Text { text: root.user-label; color: #888; overflow: elide; }

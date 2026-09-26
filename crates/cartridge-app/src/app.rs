@@ -478,8 +478,11 @@ impl Controller {
         let entries: Vec<PlatformEntry> = platforms
             .into_iter()
             .map(|p| {
-                let icon = self.shared.covers.icon_path(&p.slug);
-                let image = Image::load_from_path(&icon).ok();
+                let image = self
+                    .shared
+                    .covers
+                    .cached_icon(&p.slug)
+                    .and_then(|icon| Image::load_from_path(&icon).ok());
                 if image.is_none() && self.icon_requests.borrow_mut().insert(p.slug.clone()) {
                     missing.push(p.slug.clone());
                 }
