@@ -59,34 +59,44 @@ fn ext(p: &Path) -> String {
         .unwrap_or_default()
 }
 
-pub fn launch_target(rom: &RomDetail, rel_paths: &[PathBuf]) -> Option<Launch> {
-    let mut top: Vec<&PathBuf> = rel_paths
-        .iter()
-        .filter(|p| p.components().count() == 1)
-        .collect();
-    top.sort();
+const EXTRAS: [&str; 22] = [
+    "txt", "nfo", "diz", "pdf", "doc", "docx", "md", "html", "htm", "url", "jpg", "jpeg", "png",
+    "gif", "bmp", "xml", "sfv", "md5", "sha1", "srm", "sav", "log",
+];
+
+pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch> {
+    let depth = |p: &PathBuf| p.components().count();
     for wanted in DISC_ORDER {
-        let found: Vec<PathBuf> = top
+        let matching: Vec<&PathBuf> = files
             .iter()
+            .map(|(p, _)| p)
             .filter(|p| ext(p) == wanted)
-            .map(|p| (*p).clone())
             .collect();
-        match found.len() {
-            0 => continue,
-            1 => return Some(Launch::File(found[0].clone())),
-            _ if wanted == "m3u" => return Some(Launch::File(found[0].clone())),
-            _ => {
-                let name = format!("{}.m3u", rom.fs_name);
-                let name = if safe_component(&name) {
-                    name
-                } else {
-                    "game.m3u".to_string()
-                };
-                return Some(Launch::Playlist { name, discs: found });
-            }
+        let Some(shallowest) = matching.iter().map(|p| depth(p)).min() else {
+            continue;
+        };
+        let mut found: Vec<PathBuf> = matching
+            .into_iter()
+            .filter(|p| depth(p) == shallowest)
+            .cloned()
+            .collect();
+        found.sort();
+        if found.len() == 1 || wanted == "m3u" {
+            return Some(Launch::File(found.swap_remove(0)));
         }
+        let name = format!("{}.m3u", rom.fs_name);
+        let name = if safe_component(&name) {
+            name
+        } else {
+            "game.m3u".to_string()
+        };
+        return Some(Launch::Playlist { name, discs: found });
     }
-    top.first().map(|p| Launch::File((*p).clone()))
+    files
+        .iter()
+        .filter(|(p, _)| !EXTRAS.contains(&ext(p).as_str()))
+        .min_by(|(a, sa), (b, sb)| depth(a).cmp(&depth(b)).then(sb.cmp(sa)).then(a.cmp(b)))
+        .map(|(p, _)| Launch::File(p.clone()))
 }
 
 pub fn m3u(discs: &[PathBuf]) -> String {
@@ -116,6 +126,10 @@ mod tests {
             has_multiple_files: multi,
             files,
         }
+    }
+
+    fn sized(paths: &[PathBuf]) -> Vec<(PathBuf, u64)> {
+        paths.iter().map(|p| (p.clone(), 1)).collect()
     }
 
     fn rels(r: &RomDetail) -> Vec<PathBuf> {
@@ -163,7 +177,7 @@ mod tests {
             PathBuf::from("Arc (Disc 2).chd"),
             PathBuf::from("Arc (Disc 1).chd"),
         ];
-        match launch_target(&r, &files).unwrap() {
+        match launch_target(&r, &sized(&files)).unwrap() {
             Launch::Playlist { name, discs } => {
                 assert_eq!(name, "Arc III.m3u");
                 assert_eq!(
@@ -191,12 +205,12 @@ mod tests {
             PathBuf::from("Game (Track 2).bin"),
         ];
         assert!(
-            matches!(launch_target(&r, &files), Some(Launch::File(p)) if p == Path::new("Game.cue"))
+            matches!(launch_target(&r, &sized(&files)), Some(Launch::File(p)) if p == Path::new("Game.cue"))
         );
         assert!(
-            matches!(launch_target(&r, &[PathBuf::from("Zelda.sfc")]), Some(Launch::File(p)) if p == Path::new("Zelda.sfc"))
+            matches!(launch_target(&r, &sized(&[PathBuf::from("Zelda.sfc")])), Some(Launch::File(p)) if p == Path::new("Zelda.sfc"))
         );
-        assert!(launch_target(&r, &[PathBuf::from("sub/x.chd")]).is_none());
+        assert!(launch_target(&r, &[]).is_none());
     }
 
     #[test]
@@ -204,7 +218,7 @@ mod tests {
         let mut r = rom(true, vec![]);
         r.fs_name = "../../evil".into();
         let files = [PathBuf::from("a.chd"), PathBuf::from("b.chd")];
-        match launch_target(&r, &files).unwrap() {
+        match launch_target(&r, &sized(&files)).unwrap() {
             Launch::Playlist { name, .. } => assert_eq!(name, "game.m3u"),
             other => panic!("{other:?}"),
         }
@@ -212,5 +226,35 @@ mod tests {
         assert!(!safe_component(".."));
         assert!(!safe_component("a/b"));
         assert!(!safe_component(""));
+    }
+
+    #[test]
+    fn discs_in_a_sub_folder_are_found() {
+        let r = rom(true, vec![]);
+        let files = sized(&[
+            PathBuf::from("readme.txt"),
+            PathBuf::from("CD/Game.cue"),
+            PathBuf::from("CD/Game.bin"),
+        ]);
+        assert_eq!(
+            launch_target(&r, &files),
+            Some(Launch::File(PathBuf::from("CD/Game.cue")))
+        );
+    }
+
+    #[test]
+    fn fallback_skips_extras_and_prefers_the_largest_file() {
+        let r = rom(true, vec![]);
+        let files = vec![
+            (PathBuf::from("a-manual.pdf"), 900),
+            (PathBuf::from("b-readme.txt"), 5),
+            (PathBuf::from("game.bin"), 100),
+            (PathBuf::from("patch.ips"), 10),
+        ];
+        assert_eq!(
+            launch_target(&r, &files),
+            Some(Launch::File(PathBuf::from("game.bin")))
+        );
+        assert_eq!(launch_target(&r, &[(PathBuf::from("notes.txt"), 1)]), None);
     }
 }

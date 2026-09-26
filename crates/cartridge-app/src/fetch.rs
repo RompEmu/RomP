@@ -39,7 +39,10 @@ pub async fn download_game(
         .await?;
         done += planned.file.file_size_bytes.max(0) as u64;
     }
-    let rels: Vec<PathBuf> = files.iter().map(|f| f.rel_path.clone()).collect();
+    let rels: Vec<(PathBuf, u64)> = files
+        .iter()
+        .map(|f| (f.rel_path.clone(), f.file.file_size_bytes.max(0) as u64))
+        .collect();
     match launch_target(&rom, &rels) {
         Some(Launch::File(rel)) => Ok(dir.join(rel)),
         Some(Launch::Playlist { name, discs }) => {
