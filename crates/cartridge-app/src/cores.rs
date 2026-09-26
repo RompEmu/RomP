@@ -26,7 +26,7 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         core("nestopia", "Nestopia UE", "nestopia_libretro", false),
     ),
     (
-        &["genesis", "sms", "gamegear", "segacd"],
+        &["genesis", "sms", "gamegear", "segacd", "sg1000"],
         core(
             "genesis_plus_gx",
             "Genesis Plus GX",
@@ -96,7 +96,7 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         core("stella", "Stella", "stella_libretro", false),
     ),
     (
-        &["neo-geo-pocket-color"],
+        &["neo-geo-pocket", "neo-geo-pocket-color"],
         core(
             "mednafen_ngp",
             "Beetle NeoPop",
@@ -162,6 +162,10 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         core("desmume", "DeSmuME", "desmume_libretro", true),
     ),
     (&["ps2"], core("play", "Play!", "play_libretro", true)),
+    (
+        &crate::bios::ARCADE,
+        core("fbneo", "FinalBurn Neo", "fbneo_libretro", false),
+    ),
 ];
 
 pub fn core_for_platform(slug: &str) -> Option<&'static CoreInfo> {
@@ -344,7 +348,9 @@ mod tests {
         );
         assert!(core_for_platform("dc").unwrap().jit);
         assert!(core_for_platform("xbox").is_none());
-        assert!(core_for_platform("arcade").is_none());
+        for slug in ["arcade", "neogeoaes", "cps2"] {
+            assert_eq!(core_for_platform(slug).unwrap().id, "fbneo");
+        }
     }
 
     #[test]

@@ -362,6 +362,7 @@ impl Controller {
             };
             let roms = paths::server_roms_dir(client.base().as_str());
             let result = download_game(&client, id, &roms, &progress, &cancel).await;
+            let mut missing = Vec::new();
             if result.is_ok() {
                 if let Some(cover) = detail.cover_large.as_deref() {
                     let _ = covers.ensure_large(&client, id, cover).await;
@@ -369,15 +370,24 @@ impl Controller {
                 for url in &detail.screenshots {
                     let _ = covers.ensure_screenshot(&client, id, url).await;
                 }
-                let _ = bios::fetch_firmware(
+                let system = paths::system_dir();
+                missing = match bios::ensure(
                     &client,
                     detail.platform_id,
-                    &paths::system_dir(),
+                    &detail.platform_slug,
+                    &system,
                     &cancel,
                 )
-                .await;
+                .await
+                {
+                    Ok(missing) => missing,
+                    Err(e) => {
+                        tracing::warn!("fetching BIOS for {id}: {e}");
+                        bios::missing(&detail.platform_slug, &system)
+                    }
+                };
             }
-            on_ui(move |c| c.download_finished(id, result));
+            on_ui(move |c| c.download_finished(id, result, missing));
         });
     }
 
@@ -390,7 +400,12 @@ impl Controller {
         }
     }
 
-    fn download_finished(&self, id: i64, result: Result<PathBuf, DownloadError>) {
+    fn download_finished(
+        &self,
+        id: i64,
+        result: Result<PathBuf, DownloadError>,
+        missing: Vec<String>,
+    ) {
         self.downloading.borrow_mut().take();
         let status = match result {
             Ok(path) => {
@@ -399,7 +414,11 @@ impl Controller {
                     .lock()
                     .unwrap()
                     .set_local_path(id, Some(&path.to_string_lossy()));
-                String::new()
+                if missing.is_empty() {
+                    String::new()
+                } else {
+                    bios::missing_message(&missing)
+                }
             }
             Err(DownloadError::Cancelled) => {
                 "Download paused. Choose Download to continue.".to_string()
@@ -463,14 +482,17 @@ impl Controller {
             let mut missing = bios::missing(&detail.platform_slug, &system);
             if !missing.is_empty() && !offline {
                 if let Some(client) = &client {
-                    let _ = bios::fetch_firmware(
+                    if let Ok(still) = bios::ensure(
                         client,
                         detail.platform_id,
+                        &detail.platform_slug,
                         &system,
                         &AtomicBool::new(false),
                     )
-                    .await;
-                    missing = bios::missing(&detail.platform_slug, &system);
+                    .await
+                    {
+                        missing = still;
+                    }
                 }
             }
             let sram = match (&client, sync) {
@@ -510,13 +532,7 @@ impl Controller {
         };
         if !missing.is_empty() {
             self.preparing.set(false);
-            return self.game_status(
-                detail.id,
-                format!(
-                    "Missing BIOS: {}. Add it to this platform's firmware in RomM.",
-                    missing.join("; ")
-                ),
-            );
+            return self.game_status(detail.id, bios::missing_message(&missing));
         }
         match sram {
             Some(Ok(SramOutcome::Conflict(conflict))) => {

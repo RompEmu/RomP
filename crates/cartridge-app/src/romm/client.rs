@@ -253,9 +253,12 @@ impl Client {
         self.get_json(&format!("/api/roms/{id}"), &[]).await
     }
 
-    pub async fn firmware(&self, platform_id: i64) -> Result<Vec<Firmware>, Error> {
-        self.get_json("/api/firmware", &[("platform_id", platform_id.to_string())])
-            .await
+    pub async fn firmware(&self, platform_id: Option<i64>) -> Result<Vec<Firmware>, Error> {
+        let query: Vec<_> = platform_id
+            .map(|id| ("platform_id", id.to_string()))
+            .into_iter()
+            .collect();
+        self.get_json("/api/firmware", &query).await
     }
 
     fn content_url(&self, prefix: &str, file_name: &str) -> Url {
@@ -789,7 +792,7 @@ pub(crate) mod tests {
         let client = authed(&server);
         assert_eq!(client.rom_detail(3672).await.unwrap().files[0].id, 3705);
         assert_eq!(
-            client.firmware(32).await.unwrap()[0].file_name,
+            client.firmware(Some(32)).await.unwrap()[0].file_name,
             "scph5501.bin"
         );
     }
