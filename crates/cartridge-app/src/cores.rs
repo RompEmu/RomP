@@ -231,6 +231,7 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         ],
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
         "vice_x64sc" => &[("vice_drive_true_emulation", "disabled")],
+        "nestopia" => &[("nestopia_zapper_device", "lightgun")],
         "desmume" => &[
             ("desmume_pointer_type", "touch"),
             ("desmume_screens_layout", "top/bottom"),

@@ -490,6 +490,12 @@ pub struct ControllerType {
     pub id: u32,
 }
 
+static ROTATION: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn rotation() -> u32 {
+    ROTATION.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 static CONTROLLER_INFO: std::sync::Mutex<Vec<Vec<ControllerType>>> =
     std::sync::Mutex::new(Vec::new());
 
@@ -961,6 +967,14 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             true
         }
         sys::RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME => true,
+        sys::RETRO_ENVIRONMENT_SET_ROTATION => {
+            if data.is_null() {
+                return false;
+            }
+            let quarter_turns = unsafe { *(data as *const c_uint) } % 4;
+            ROTATION.store(quarter_turns, std::sync::atomic::Ordering::Relaxed);
+            true
+        }
         sys::RETRO_ENVIRONMENT_SET_CONTROLLER_INFO => {
             if data.is_null() {
                 return false;

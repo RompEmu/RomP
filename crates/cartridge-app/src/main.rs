@@ -23,6 +23,7 @@ mod ports;
 mod prefs;
 mod qr;
 mod romm;
+mod rotation;
 mod saves;
 mod session;
 mod storage;

@@ -45,8 +45,12 @@ pub fn uses_mouse(devices: &[u32]) -> bool {
     devices.iter().any(|d| d & MASK == MOUSE)
 }
 
+const POINTER: u32 = 6;
+
 pub fn uses_lightgun(devices: &[u32]) -> bool {
-    devices.iter().any(|d| d & MASK == LIGHTGUN)
+    devices
+        .iter()
+        .any(|d| matches!(d & MASK, LIGHTGUN | POINTER))
 }
 
 #[cfg(test)]
@@ -94,5 +98,6 @@ mod tests {
         assert!(!uses_mouse(&[JOYPAD, 0x104]));
         assert!(uses_lightgun(&[JOYPAD, 0x104]));
         assert!(!uses_lightgun(&[JOYPAD]));
+        assert!(uses_lightgun(&[JOYPAD, 0x106]));
     }
 }

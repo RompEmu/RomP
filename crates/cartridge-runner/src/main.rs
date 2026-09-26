@@ -140,6 +140,8 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         fps: av.timing.fps,
         sample_rate: av.timing.sample_rate,
     });
+    let mut rotation = lr::rotation();
+    link.send(&RunnerMsg::Rotation(rotation as u8));
     link.send(&RunnerMsg::Controllers {
         ports: lr::controller_info()
             .into_iter()
@@ -232,6 +234,10 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             );
             if let Some(line) = stats.report(Instant::now()) {
                 info!("{line}");
+            }
+            if lr::rotation() != rotation {
+                rotation = lr::rotation();
+                link.send(&RunnerMsg::Rotation(rotation as u8));
             }
             if saves.tick_sram(&mut core, frontend) {
                 link.send(&RunnerMsg::SramWritten);

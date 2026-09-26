@@ -50,6 +50,7 @@ pub enum RunnerMsg {
     Controllers {
         ports: Vec<Vec<(String, u32)>>,
     },
+    Rotation(u8),
     SramWritten,
     StateWritten {
         slot: u8,

@@ -120,6 +120,8 @@ struct Game {
     computer: bool,
     held_keys: RefCell<HashSet<u32>>,
     modifiers: Cell<u16>,
+    rotation: Cell<u8>,
+    aim: Cell<(i16, i16)>,
 }
 
 const MENU_PORTS_START: i32 = 7;
@@ -169,6 +171,13 @@ impl Game {
         }
     }
 
+    fn pointer(&self, u: f32, v: f32, pressed: bool, bottom_half: bool) {
+        let (u, v) = crate::rotation::unrotate_point(u, v, self.rotation.get());
+        let (x, y) = input::pointer_coords(u, v, bottom_half);
+        self.aim.set((x, y));
+        self.send(&AppMsg::Pointer { x, y, pressed });
+    }
+
     fn mouse_button(&self, bit: i32, pressed: bool) {
         let Ok(bit) = u8::try_from(bit) else { return };
         let buttons = if pressed {
@@ -177,6 +186,14 @@ impl Game {
             self.mouse_buttons.get() & !bit
         };
         self.mouse_buttons.set(buttons);
+        if self.primary().get_lightgun_mode() {
+            let (x, y) = self.aim.get();
+            self.send(&AppMsg::Pointer {
+                x,
+                y,
+                pressed: buttons & 1 != 0,
+            });
+        }
         self.send(&AppMsg::Mouse {
             dx: 0,
             dy: 0,
@@ -189,6 +206,7 @@ impl Game {
             return;
         }
         let (dx, dy) = crate::mouse::take_motion();
+        let (dx, dy) = crate::rotation::unrotate_delta(dx, dy, self.rotation.get());
         if (dx, dy) != (0, 0) {
             self.send(&AppMsg::Mouse {
                 dx,
@@ -590,6 +608,8 @@ pub fn launch(
             computer: opts.computer,
             held_keys: RefCell::default(),
             modifiers: Cell::new(0),
+            rotation: Cell::new(0),
+            aim: Cell::new((0, 0)),
         }
     });
     let _ = game
@@ -667,6 +687,12 @@ pub fn launch(
                             show_frame(ui, top_half, info.width, half, 0.0);
                             show_frame(bottom, bottom_half, info.width, half, 0.0);
                         }
+                        _ if game.rotation.get() % 4 != 0 => {
+                            let turns = game.rotation.get();
+                            let (rotated, w, h) =
+                                crate::rotation::rotate(&buf, info.width, info.height, turns);
+                            show_frame(ui, &rotated, w, h, info.aspect);
+                        }
                         _ => show_frame(ui, &buf, info.width, info.height, info.aspect),
                     }
                 }
@@ -675,6 +701,17 @@ pub fn launch(
             for event in events {
                 if let SessionEvent::Runner(RunnerMsg::Controllers { ports }) = event {
                     game.set_ports(ports);
+                    continue;
+                }
+                if let SessionEvent::Runner(RunnerMsg::Rotation(turns)) = event {
+                    tracing::debug!(turns, "rotation");
+                    let was_tall = game.rotation.replace(turns) % 2 == 1;
+                    let tall = turns % 2 == 1;
+                    let window = ui.window();
+                    if tall != was_tall && !window.is_fullscreen() {
+                        let (w, h) = if tall { (600.0, 800.0) } else { (960.0, 720.0) };
+                        window.set_size(slint::LogicalSize::new(w, h));
+                    }
                     continue;
                 }
                 let started_now = matches!(event, SessionEvent::Runner(RunnerMsg::Started { .. }));
@@ -731,10 +768,7 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     let with = Rc::new(with);
     window.on_pointer({
         let with = with.clone();
-        move |u, v, pressed| {
-            let (x, y) = input::pointer_coords(u, v, bottom_half);
-            with(&|g| g.send(&AppMsg::Pointer { x, y, pressed }));
-        }
+        move |u, v, pressed| with(&|g| g.pointer(u, v, pressed, bottom_half))
     });
     window.window().on_close_requested({
         let with = with.clone();
