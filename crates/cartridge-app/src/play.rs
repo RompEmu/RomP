@@ -16,6 +16,7 @@ pub struct GameOptions {
     pub save_dir: PathBuf,
     pub title: String,
     pub jit: bool,
+    pub options: Vec<(String, String)>,
 }
 
 pub struct RunningGame {
@@ -48,6 +49,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             save_dir,
             title,
             jit,
+            options: Vec::new(),
         },
         |_| {},
     )?;
@@ -70,6 +72,7 @@ pub fn launch(
         save_dir: opts.save_dir,
         jit: opts.jit,
         load_slot: None,
+        options: opts.options,
     };
     let session = Rc::new(RefCell::new(Session::start(&cfg)?));
 

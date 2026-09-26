@@ -34,6 +34,14 @@ struct Args {
     load_slot: Option<u8>,
     #[arg(long)]
     jit: bool,
+    #[arg(long = "option", value_parser = parse_option)]
+    options: Vec<(String, String)>,
+}
+
+fn parse_option(s: &str) -> Result<(String, String), String> {
+    s.split_once('=')
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .ok_or_else(|| format!("expected KEY=VALUE, got `{s}`"))
 }
 
 fn main() -> anyhow::Result<()> {
@@ -79,6 +87,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     apply_sandbox(args)?;
 
     let mut core = unsafe { lr::Core::load(&args.core) }.context("load core")?;
+    lr::set_core_option_values(&args.options);
     let sys = core.system_info();
     info!(core = %sys.library_name, version = %sys.library_version, "core loaded");
     let session_tag = std::process::id().to_string();
@@ -248,4 +257,19 @@ fn apply_sandbox(args: &Args) -> anyhow::Result<()> {
         permissive_mach: std::env::var_os("CARTRIDGE_SANDBOX_PERMISSIVE_MACH").is_some(),
         permissive_read: std::env::var_os("CARTRIDGE_SANDBOX_PERMISSIVE_READ").is_some(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn options_parse_as_key_value() {
+        assert_eq!(
+            parse_option("puae_kickstart=auto"),
+            Ok(("puae_kickstart".into(), "auto".into()))
+        );
+        assert_eq!(parse_option("a=b=c"), Ok(("a".into(), "b=c".into())));
+        assert!(parse_option("novalue").is_err());
+    }
 }

@@ -27,6 +27,7 @@ pub struct SessionConfig {
     pub save_dir: PathBuf,
     pub jit: bool,
     pub load_slot: Option<u8>,
+    pub options: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -66,6 +67,10 @@ pub fn runner_args(cfg: &SessionConfig, socket: &Path, frames: &str) -> Vec<OsSt
     }
     if cfg.jit {
         args.push("--jit".into());
+    }
+    for (key, value) in &cfg.options {
+        args.push("--option".into());
+        args.push(format!("{key}={value}").into());
     }
     args
 }
@@ -243,6 +248,7 @@ mod tests {
             save_dir: "/data/saves/7".into(),
             jit: false,
             load_slot: None,
+            options: Vec::new(),
         }
     }
 
@@ -251,6 +257,7 @@ mod tests {
         let mut cfg = config("/bin/runner".into());
         cfg.jit = true;
         cfg.load_slot = Some(2);
+        cfg.options = vec![("puae_kickstart".into(), "auto".into())];
         let args = runner_args(&cfg, Path::new("/tmp/c.sock"), "/cart-1");
         let expected: Vec<OsString> = [
             "--core",
@@ -268,6 +275,8 @@ mod tests {
             "--load-slot",
             "2",
             "--jit",
+            "--option",
+            "puae_kickstart=auto",
         ]
         .iter()
         .map(OsString::from)

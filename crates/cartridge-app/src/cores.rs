@@ -189,6 +189,34 @@ pub fn buildbot_url(base: &str, core: &CoreInfo) -> String {
     format!("{base}/{target}/latest/{}.zip", lib_file(core))
 }
 
+pub fn default_options(core_id: &str) -> Vec<(String, String)> {
+    let options: &[(&str, &str)] = match core_id {
+        "puae" => &[
+            ("puae_model", "A600"),
+            ("puae_kickstart", "auto"),
+            ("puae_chipmem_size", "4"),
+            ("puae_fastmem_size", "8"),
+            ("puae_floppy_speed", "800"),
+            ("puae_immediate_blits", "true"),
+        ],
+        "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
+        "vice_x64sc" => &[("vice_drive_true_emulation", "disabled")],
+        "desmume" => &[
+            ("desmume_pointer_type", "touch"),
+            ("desmume_screens_layout", "top/bottom"),
+        ],
+        // GLideN64 renders black with the macOS OpenGL driver.
+        "mupen64plus_next" if cfg!(target_os = "macos") => {
+            &[("mupen64plus-rdp-plugin", "angrylion")]
+        }
+        _ => &[],
+    };
+    options
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Manifest {
     id: String,
@@ -387,5 +415,15 @@ mod tests {
             .install(&reqwest::Client::new(), &server.uri(), core)
             .await
             .is_err());
+    }
+
+    #[test]
+    fn amiga_defaults_boot_a_real_kickstart() {
+        let options = default_options("puae");
+        assert!(options.contains(&("puae_kickstart".into(), "auto".into())));
+        assert!(options.contains(&("puae_model".into(), "A600".into())));
+        assert!(default_options("mednafen_psx_hw")
+            .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
+        assert!(default_options("snes9x").is_empty());
     }
 }

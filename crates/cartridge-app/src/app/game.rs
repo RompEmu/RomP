@@ -373,6 +373,9 @@ impl Controller {
             save_dir: paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
             title: detail.title.clone(),
             jit,
+            options: core_for_platform(&detail.platform_slug)
+                .map(|core| crate::cores::default_options(core.id))
+                .unwrap_or_default(),
         };
         let on_closed = move |identity| {
             let _ =
