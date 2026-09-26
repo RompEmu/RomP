@@ -8,9 +8,12 @@ pub const PAGE_SIZE: i64 = 500;
 const CURSOR_MARGIN: Duration = Duration::from_secs(60);
 
 pub fn cursor_from(time: SystemTime) -> String {
+    iso_utc(time.checked_sub(CURSOR_MARGIN).unwrap_or(UNIX_EPOCH))
+}
+
+pub fn iso_utc(time: SystemTime) -> String {
     let secs = time
-        .checked_sub(CURSOR_MARGIN)
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
     let (y, m, d) = civil_from_days((secs / 86_400) as i64);

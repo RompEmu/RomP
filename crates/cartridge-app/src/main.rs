@@ -14,6 +14,7 @@ mod paths;
 mod play;
 mod qr;
 mod romm;
+mod saves;
 mod session;
 mod store;
 mod sync;
