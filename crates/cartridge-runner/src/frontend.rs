@@ -1,5 +1,6 @@
 use crate::audio::AudioProducer;
 use crate::input::InputState;
+use crate::resample::{RateControl, Resampler};
 use cartridge_libretro as lr;
 use ringbuf::traits::{Observer, Producer};
 use std::time::{Duration, Instant};
@@ -22,6 +23,10 @@ pub struct Frontend {
     pub hw_frame_dirty: bool,
     pub hw_frame_width: u32,
     pub hw_frame_height: u32,
+    pub audio_frames: u64,
+    resampler: Resampler,
+    resampled: Vec<i16>,
+    rate: RateControl,
 }
 
 impl Frontend {
@@ -37,6 +42,10 @@ impl Frontend {
             hw_frame_dirty: false,
             hw_frame_width: 0,
             hw_frame_height: 0,
+            audio_frames: 0,
+            resampler: Resampler::default(),
+            resampled: Vec::new(),
+            rate: RateControl::default(),
         }
     }
 
@@ -79,13 +88,24 @@ impl lr::Frontend for Frontend {
     }
 
     fn audio_sample_batch(&mut self, samples: &[i16]) -> usize {
-        if let Some(a) = &mut self.audio {
+        self.audio_frames += samples.len() as u64 / 2;
+        let fill = self.audio_fill();
+        let Self {
+            audio,
+            resampler,
+            resampled,
+            rate,
+            ..
+        } = self;
+        if let Some(a) = audio {
+            resampled.clear();
+            resampler.process(samples, rate.ratio(fill), resampled);
             // Blocking here paces cores that emulate on their own thread.
             let deadline = Instant::now() + Duration::from_millis(500);
             let mut pushed = 0;
-            while pushed < samples.len() && Instant::now() < deadline {
-                pushed += a.push_slice(&samples[pushed..]);
-                if pushed < samples.len() {
+            while pushed < resampled.len() && Instant::now() < deadline {
+                pushed += a.push_slice(&resampled[pushed..]);
+                if pushed < resampled.len() {
                     std::thread::sleep(Duration::from_millis(1));
                 }
             }

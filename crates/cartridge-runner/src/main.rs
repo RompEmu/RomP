@@ -5,14 +5,13 @@ use cartridge_proto::msg::{AppMsg, RunnerMsg};
 use cartridge_runner::frontend::Frontend;
 use cartridge_runner::ipc::Link;
 use cartridge_runner::state::StateManager;
-use cartridge_runner::{archive, audio, hw_gl, pacing, sandbox};
+use cartridge_runner::{archive, audio, hw_gl, perf, sandbox};
 use clap::Parser;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
-const NUDGE: f64 = 0.02;
 const UNLOAD_GRACE: Duration = Duration::from_secs(2);
 
 #[derive(Parser)]
@@ -144,6 +143,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let mut next_frame_at = Instant::now();
     let mut paused = false;
     let mut stop_requested = false;
+    let mut stats = perf::FrameStats::new(Duration::from_secs(10), Instant::now());
     loop {
         let now = Instant::now();
         if now < next_frame_at {
@@ -168,7 +168,10 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             break;
         }
         if !paused {
+            let run_started = Instant::now();
             core.run(frontend);
+            let run_time = run_started.elapsed();
+            let readback_started = Instant::now();
             if frontend.hw_frame_dirty {
                 frontend.hw_frame_dirty = false;
                 if let Some(ctx) = &hw_ctx {
@@ -198,6 +201,15 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     );
                 }
             }
+            stats.record(
+                run_time,
+                readback_started.elapsed(),
+                std::mem::take(&mut frontend.audio_frames),
+                frontend.audio_fill(),
+            );
+            if let Some(line) = stats.report(Instant::now()) {
+                info!("{line}");
+            }
             if saves.tick_sram(&mut core, frontend) {
                 link.send(&RunnerMsg::SramWritten);
             }
@@ -205,7 +217,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         if frontend.shutdown {
             break;
         }
-        next_frame_at += pacing::paced_step(frame_duration, frontend.audio_fill(), NUDGE);
+        next_frame_at += frame_duration;
         let now = Instant::now();
         if next_frame_at + frame_duration * 4 < now {
             next_frame_at = now;
