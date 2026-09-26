@@ -10,6 +10,7 @@ pub struct PadState {
 pub enum AppMsg {
     Pad { port: u8, state: PadState },
     Pointer { x: i16, y: i16, pressed: bool },
+    Mouse { dx: i16, dy: i16, buttons: u8 },
     Pause(bool),
     Volume(u8),
     SaveSlot(u8),

@@ -25,6 +25,7 @@ impl Link {
                 Ok(AppMsg::Pointer { x, y, pressed }) => {
                     input.apply_pointer(crate::input::Pointer { x, y, pressed })
                 }
+                Ok(AppMsg::Mouse { dx, dy, buttons }) => input.apply_mouse(dx, dy, buttons),
                 Ok(msg) => {
                     if tx.send(msg).is_err() {
                         return;

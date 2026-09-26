@@ -31,7 +31,7 @@ Add `--jit` for cores that use a dynamic recompiler. Cores are available from th
 
 ## Controls
 
-Gamepads are picked up automatically: the first one joins the keyboard as player 1, and each new one becomes the next player. Change who plays as which player, or remap any keyboard key or controller button, in **Settings → Players**. The Guide button, or Select and Start together, opens the game menu. The default keyboard layout:
+Gamepads are picked up automatically: the first one joins the keyboard as player 1, and each new one becomes the next player. Change who plays as which player, or remap any keyboard key or controller button, in **Settings → Players**. The Guide button, or Select and Start together, opens the game menu. In Amiga and DOS games, click in the game to use your mouse; Esc releases it. The default keyboard layout:
 
 | Key | Action |
 |---|---|

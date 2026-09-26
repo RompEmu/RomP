@@ -200,6 +200,7 @@ impl Controller {
                     cover: image.unwrap_or_default(),
                     downloaded: g.local_path.is_some(),
                     focused: false,
+                    favorite: false,
                 }
             })
             .collect();
@@ -579,6 +580,8 @@ impl Controller {
             load_slot,
             mappings: self.mappings.clone(),
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
+            mouse: core_for_platform(&detail.platform_slug)
+                .is_some_and(|core| crate::cores::uses_mouse(core.id)),
         };
         let on_closed = move |identity| {
             let _ =

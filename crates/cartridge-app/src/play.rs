@@ -29,6 +29,7 @@ pub struct GameOptions {
     pub load_slot: Option<u8>,
     pub mappings: Rc<RefCell<Mappings>>,
     pub nintendo: bool,
+    pub mouse: bool,
 }
 
 pub struct RunningGame {
@@ -72,6 +73,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             load_slot: None,
             mappings: Rc::default(),
             nintendo: false,
+            mouse: false,
         },
         |_| {},
         || {},
@@ -97,6 +99,8 @@ struct Game {
     menu_focus: Cell<i32>,
     pad_buttons: Cell<u16>,
     menu_combo: Cell<bool>,
+    mouse_captured: Cell<bool>,
+    mouse_buttons: Cell<u8>,
 }
 
 const MENU_ITEMS: i32 = 8;
@@ -125,8 +129,58 @@ impl Game {
         }
     }
 
+    fn capture_mouse(&self, on: bool) {
+        if self.mouse_captured.replace(on) == on {
+            return;
+        }
+        crate::mouse::capture(self.primary().window(), on);
+        self.primary().set_mouse_captured(on);
+        self.mouse_buttons.set(0);
+        self.send(&AppMsg::Mouse {
+            dx: 0,
+            dy: 0,
+            buttons: 0,
+        });
+        if on {
+            flash(
+                self.primary(),
+                "Mouse captured. Press Esc to release it.".into(),
+            );
+        }
+    }
+
+    fn mouse_button(&self, bit: i32, pressed: bool) {
+        let Ok(bit) = u8::try_from(bit) else { return };
+        let buttons = if pressed {
+            self.mouse_buttons.get() | bit
+        } else {
+            self.mouse_buttons.get() & !bit
+        };
+        self.mouse_buttons.set(buttons);
+        self.send(&AppMsg::Mouse {
+            dx: 0,
+            dy: 0,
+            buttons,
+        });
+    }
+
+    fn send_mouse_motion(&self) {
+        if !self.mouse_captured.get() {
+            return;
+        }
+        let (dx, dy) = crate::mouse::take_motion();
+        if (dx, dy) != (0, 0) {
+            self.send(&AppMsg::Mouse {
+                dx,
+                dy,
+                buttons: self.mouse_buttons.get(),
+            });
+        }
+    }
+
     fn set_paused(&self, paused: bool) {
         if paused {
+            self.capture_mouse(false);
             let released = self.controls.borrow_mut().release_all();
             self.run_commands(released);
         }
@@ -253,6 +307,9 @@ impl Game {
     }
 
     fn window_active(&self, active: bool) {
+        if !active {
+            self.capture_mouse(false);
+        }
         if active {
             if self.focus_paused.replace(false) && !self.menu_open.get() {
                 self.set_paused(false);
@@ -293,6 +350,7 @@ pub fn launch(
     let ui = GameWindow::new()?;
     ui.set_game_title(format!("{} — Cartridge", opts.title).into());
     ui.set_game_name(opts.title.clone().into());
+    ui.set_mouse_mode(opts.mouse);
     ui.set_has_menu(true);
     ui.set_status("Starting…".into());
     let mut windows = vec![ui];
@@ -316,6 +374,7 @@ pub fn launch(
                     return;
                 }
                 if let Some(game) = weak.upgrade() {
+                    game.capture_mouse(false);
                     game.session.borrow_mut().request_stop();
                     for window in &game.windows {
                         let _ = window.hide();
@@ -338,6 +397,8 @@ pub fn launch(
             menu_focus: Cell::new(-1),
             pad_buttons: Cell::new(0),
             menu_combo: Cell::new(false),
+            mouse_captured: Cell::new(false),
+            mouse_buttons: Cell::new(0),
         }
     });
     let _ = game
@@ -396,6 +457,7 @@ pub fn launch(
                 (inputs, states)
             };
             game.pads(&inputs);
+            game.send_mouse_motion();
             if !game.paused.get() && !game.menu_open.get() {
                 let keyboard = players.borrow().player(KEYBOARD);
                 let mut commands = game.controls.borrow_mut().set_keyboard_player(keyboard);
@@ -499,6 +561,14 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     window.on_window_active({
         let with = with.clone();
         move |active| with(&|g| g.window_active(active))
+    });
+    window.on_capture_mouse({
+        let with = with.clone();
+        move || with(&|g| g.capture_mouse(true))
+    });
+    window.on_mouse_button({
+        let with = with.clone();
+        move |bit, pressed| with(&|g| g.mouse_button(bit, pressed))
     });
     window.on_resume({
         let with = with.clone();

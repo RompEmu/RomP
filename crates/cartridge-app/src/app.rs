@@ -587,6 +587,7 @@ impl Controller {
                         has_cover: false,
                         downloaded: g.downloaded,
                         focused: focus == Some(start + j),
+                        favorite: g.favorite,
                     })
                     .collect();
                 GameRow {

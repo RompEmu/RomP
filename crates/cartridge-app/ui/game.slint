@@ -99,6 +99,10 @@ export component GameWindow inherits Window {
     in property <bool> fullscreen;
     in property <bool> sharp: true;
     in property <int> menu-focus: -1;
+    in property <bool> mouse-mode;
+    in property <bool> mouse-captured;
+    callback capture-mouse();
+    callback mouse-button(int, bool);
     callback window-active(bool);
     callback resume();
     callback toggle-pause();
@@ -156,12 +160,27 @@ export component GameWindow inherits Window {
             width: frame.width;
             height: frame.height;
             pointer-event(event) => {
+                if root.mouse-mode {
+                    if event.kind == PointerEventKind.move {
+                        return;
+                    }
+                    if !root.mouse-captured {
+                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                            root.capture-mouse();
+                        }
+                        return;
+                    }
+                    root.mouse-button(
+                        event.button == PointerEventButton.left ? 1 : event.button == PointerEventButton.right ? 2 : event.button == PointerEventButton.middle ? 4 : 0,
+                        event.kind == PointerEventKind.down);
+                    return;
+                }
                 if event.button == PointerEventButton.left && event.kind != PointerEventKind.move {
                     root.pointer(self.mouse-x / self.width, self.mouse-y / self.height, event.kind == PointerEventKind.down);
                 }
             }
             moved => {
-                if self.pressed {
+                if self.pressed && !root.mouse-mode {
                     root.pointer(self.mouse-x / self.width, self.mouse-y / self.height, true);
                 }
             }

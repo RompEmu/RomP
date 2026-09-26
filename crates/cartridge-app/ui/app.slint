@@ -6,7 +6,7 @@ export struct DeviceRow { key: string, name: string, detail: string, player: int
 export struct StorageRow { label: string, size: string }
 export struct KeyHint { keys: string, action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
-export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool }
+export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool }
 export struct GameRow { cards: [GameCard] }
 export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
@@ -131,7 +131,7 @@ component SidebarItem inherits Rectangle {
             if !root.has-icon: Text { text: root.glyph; color: #e5484d; font-size: 14px; }
         }
         Text { text: root.label; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-        Text { text: root.count; vertical-alignment: center; color: #888; }
+        if root.count >= 0: Text { text: root.count; vertical-alignment: center; color: #888; }
     }
 }
 
@@ -205,6 +205,15 @@ component Card inherits Rectangle {
                 vertical-alignment: center;
                 width: parent.width - 16px;
                 x: 8px;
+            }
+            if root.game.favorite: Rectangle {
+                x: 8px;
+                y: 8px;
+                width: 24px;
+                height: 24px;
+                border-radius: 12px;
+                background: #000000a0;
+                Text { text: "♥"; color: #ff5c7a; font-size: 13px; }
             }
             if root.game.downloaded: Rectangle {
                 x: parent.width - self.width - 8px;
@@ -382,7 +391,7 @@ component Library inherits Rectangle {
 
 
 component SectionTitle inherits Text {
-    font-size: 17px;
+    font-size: 20px;
     font-weight: 700;
     color: #e6e8eb;
 }
@@ -469,8 +478,8 @@ component GamePage inherits Rectangle {
                             letter-spacing: 1.5px;
                             color: #8b9cff;
                         }
-                        Text { text: root.title; font-size: 30px; font-weight: 800; wrap: word-wrap; }
-                        Text { text: root.subtitle; font-size: 15px; color: #9aa3b2; wrap: word-wrap; }
+                        Text { text: root.title; font-size: 34px; font-weight: 800; wrap: word-wrap; }
+                        Text { text: root.subtitle; font-size: 16px; color: #9aa3b2; wrap: word-wrap; }
                         HorizontalLayout {
                             padding-top: 8px;
                             alignment: start;
@@ -553,22 +562,29 @@ component GamePage inherits Rectangle {
                             }
                         }
                         VerticalLayout {
-                            padding-top: 14px;
-                            spacing: 9px;
+                            padding-top: 16px;
+                            spacing: 11px;
                             for fact in root.facts: HorizontalLayout {
-                                spacing: 16px;
-                                Text { text: fact.label; width: 96px; font-size: 13px; color: #8a8f98; }
-                                Text { text: fact.value; font-size: 13px; wrap: word-wrap; horizontal-stretch: 1; }
+                                spacing: 18px;
+                                Text { text: fact.label; width: 110px; font-size: 14px; color: #8a8f98; line-height-factor: 1.3; }
+                                Text { text: fact.value; font-size: 14px; color: #e6e8eb; wrap: word-wrap; horizontal-stretch: 1; line-height-factor: 1.3; }
                             }
                         }
                     }
                 }
                 if root.summary != "": VerticalLayout {
-                    spacing: 10px;
+                    spacing: 12px;
                     SectionTitle { text: "Overview"; }
                     HorizontalLayout {
                         alignment: start;
-                        Text { text: root.summary; max-width: 780px; wrap: word-wrap; font-size: 14px; color: #cfd3da; }
+                        Text {
+                            text: root.summary;
+                            max-width: 720px;
+                            wrap: word-wrap;
+                            font-size: 16px;
+                            line-height-factor: 1.55;
+                            color: #d6dae0;
+                        }
                     }
                 }
                 if root.shots.length > 0: VerticalLayout {

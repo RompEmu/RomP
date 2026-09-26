@@ -287,6 +287,17 @@ mod tests {
     }
 
     #[test]
+    fn game_list_marks_favorites() {
+        let s = seeded();
+        let favorites: Vec<(i64, bool)> = s
+            .games(&GameFilter::default())
+            .into_iter()
+            .map(|g| (g.id, g.favorite))
+            .collect();
+        assert_eq!(favorites, [(1, false), (2, false), (3, true)]);
+    }
+
+    #[test]
     fn clearing_the_library_drops_collections() {
         let mut s = seeded();
         s.clear_library();

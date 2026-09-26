@@ -13,6 +13,7 @@ mod identity;
 mod input;
 mod layout;
 mod mapping;
+mod mouse;
 mod navigation;
 mod paths;
 mod play;
@@ -50,6 +51,9 @@ fn main() -> anyhow::Result<()> {
         )
         .init();
     let args = Args::parse();
+    slint::BackendSelector::new()
+        .with_winit_custom_application_handler(mouse::RawMouse)
+        .select()?;
     match (args.core, args.rom) {
         (Some(core), Some(rom)) => play::run(core, rom, args.jit),
         _ => app::run(),

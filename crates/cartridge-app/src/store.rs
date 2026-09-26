@@ -21,6 +21,7 @@ pub struct GameItem {
     pub platform: String,
     pub cover: Option<String>,
     pub downloaded: bool,
+    pub favorite: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -277,7 +278,9 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL
+                "SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL,
+                        EXISTS (SELECT 1 FROM collection_roms m JOIN collections c ON c.key = m.key
+                                WHERE m.rom_id = g.id AND c.kind = 0)
                  FROM games g LEFT JOIN platforms p ON p.id = g.platform_id
                  WHERE (?1 IS NULL OR g.platform_id = ?1) AND g.title LIKE ?2 ESCAPE '\\'
                    AND (?3 = 0 OR g.local_path IS NOT NULL)
@@ -299,6 +302,7 @@ impl Store {
                     platform: r.get(2)?,
                     cover: r.get(3)?,
                     downloaded: r.get(4)?,
+                    favorite: r.get(5)?,
                 })
             },
         )

@@ -189,6 +189,10 @@ const NINTENDO: [&str; 11] = [
     "virtualboy",
 ];
 
+pub fn uses_mouse(core_id: &str) -> bool {
+    matches!(core_id, "puae" | "dosbox_pure")
+}
+
 pub fn is_nintendo(platform_slug: &str) -> bool {
     NINTENDO.contains(&platform_slug)
 }

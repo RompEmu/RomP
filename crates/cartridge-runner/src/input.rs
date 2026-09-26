@@ -20,13 +20,55 @@ pub struct Pointer {
     pub pressed: bool,
 }
 
+pub const MOUSE_LEFT: u8 = 1;
+pub const MOUSE_RIGHT: u8 = 2;
+pub const MOUSE_MIDDLE: u8 = 4;
+
+#[derive(Clone, Copy, Default, Debug)]
+struct Mouse {
+    pending: (i32, i32),
+    frame: (i16, i16),
+    buttons: u8,
+}
+
 #[derive(Clone, Default)]
 pub struct InputState {
     ports: Arc<Mutex<[PadState; PORTS]>>,
     pointer: Arc<Mutex<Pointer>>,
+    mouse: Arc<Mutex<Mouse>>,
 }
 
 impl InputState {
+    pub fn apply_mouse(&self, dx: i16, dy: i16, buttons: u8) {
+        let mut m = self.mouse.lock();
+        m.pending.0 += i32::from(dx);
+        m.pending.1 += i32::from(dy);
+        m.buttons = buttons;
+    }
+
+    pub fn latch_mouse(&self) {
+        let mut m = self.mouse.lock();
+        let clamp = |v: i32| v.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+        m.frame = (clamp(m.pending.0), clamp(m.pending.1));
+        m.pending = (0, 0);
+    }
+
+    pub fn mouse_state(&self, port: u32, id: u32) -> i16 {
+        if port != 0 {
+            return 0;
+        }
+        let m = *self.mouse.lock();
+        let button = |bit: u8| i16::from(m.buttons & bit != 0);
+        match id {
+            lr::RETRO_DEVICE_ID_MOUSE_X => m.frame.0,
+            lr::RETRO_DEVICE_ID_MOUSE_Y => m.frame.1,
+            lr::RETRO_DEVICE_ID_MOUSE_LEFT => button(MOUSE_LEFT),
+            lr::RETRO_DEVICE_ID_MOUSE_RIGHT => button(MOUSE_RIGHT),
+            lr::RETRO_DEVICE_ID_MOUSE_MIDDLE => button(MOUSE_MIDDLE),
+            _ => 0,
+        }
+    }
+
     pub fn apply_pointer(&self, pointer: Pointer) {
         *self.pointer.lock() = pointer;
     }
@@ -200,5 +242,24 @@ mod tests {
         });
         assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_PRESSED), 0);
         assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_COUNT), 0);
+    }
+
+    #[test]
+    fn mouse_motion_is_latched_once_per_frame() {
+        let input = InputState::default();
+        input.apply_mouse(3, -2, MOUSE_LEFT);
+        input.apply_mouse(4, 1, MOUSE_LEFT | MOUSE_RIGHT);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_X), 0);
+        input.latch_mouse();
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_X), 7);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_Y), -1);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_X), 7);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_LEFT), 1);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_RIGHT), 1);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_MIDDLE), 0);
+        assert_eq!(input.mouse_state(1, lr::RETRO_DEVICE_ID_MOUSE_LEFT), 0);
+        input.latch_mouse();
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_X), 0);
+        assert_eq!(input.mouse_state(0, lr::RETRO_DEVICE_ID_MOUSE_LEFT), 1);
     }
 }

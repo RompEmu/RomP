@@ -165,7 +165,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     link.send(&RunnerMsg::StateLoaded { slot, ok });
                 }
                 AppMsg::Shutdown => stop_requested = true,
-                AppMsg::Pad { .. } | AppMsg::Pointer { .. } => {}
+                AppMsg::Pad { .. } | AppMsg::Pointer { .. } | AppMsg::Mouse { .. } => {}
             }
         }
         if stop_requested {

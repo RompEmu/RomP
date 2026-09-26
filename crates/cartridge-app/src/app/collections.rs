@@ -12,6 +12,8 @@ const AUTO_SECTIONS: [(&str, &str, CollectionKind); 3] = [
     ("genres", "GENRES", CollectionKind::Genre),
 ];
 
+const PAIR_KEY: &str = "pair";
+
 pub(super) enum DialogAction {
     Create { add_game: Option<i64> },
     Rename(String),
@@ -101,6 +103,8 @@ impl Controller {
                 "♥",
             ));
             keys.push(key.to_string());
+        } else if self.client.borrow().is_some() {
+            entries.push(item(PAIR_KEY, "Favorites", -1, "♥"));
         }
 
         let open = expanded.contains("platforms");
@@ -154,6 +158,10 @@ impl Controller {
                 });
             }
         }
+        if !show_collections && self.client.borrow().is_some() {
+            entries.push(header("collections", "COLLECTIONS", true, false));
+            entries.push(item(PAIR_KEY, "Pair again to show them", -1, ""));
+        }
         for (section, label, kind) in AUTO_SECTIONS {
             let members: Vec<&CollectionItem> =
                 collections.iter().filter(|c| c.kind == kind).collect();
@@ -178,6 +186,9 @@ impl Controller {
     }
 
     pub(super) fn select(&self, key: String) {
+        if key == PAIR_KEY {
+            return self.pair_again();
+        }
         self.library.borrow_mut().filter.scope = scope_for(&key);
         if let Some(ui) = self.ui() {
             ui.set_selected_key(key.clone().into());
@@ -223,11 +234,9 @@ impl Controller {
         ui.set_game_memberships(ModelRc::new(VecModel::from(memberships)));
     }
 
-    fn collections_changed(&self, key: &str) {
+    fn collections_changed(&self, _key: &str) {
         self.reload_sidebar();
-        if *self.selected.borrow() == key {
-            self.reload_games();
-        }
+        self.reload_games();
         if let Some(id) = self.current_game_id() {
             self.refresh_collection_controls(id);
         }
