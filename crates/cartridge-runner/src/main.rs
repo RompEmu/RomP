@@ -55,6 +55,12 @@ fn main() -> anyhow::Result<()> {
         )
         .init();
     let args = Args::parse();
+    if cfg!(target_os = "macos") {
+        // Cores that keep data under the user's Documents or Library write it into the game's save folder instead.
+        let home = core_home(&args.save_dir);
+        std::fs::create_dir_all(&home).context("creating the core's home folder")?;
+        std::env::set_var("CFFIXED_USER_HOME", &home);
+    }
     let mut frontend = Frontend::new();
     let input = frontend.input.clone();
     lr::set_input_source(Some(std::sync::Arc::new(move |port, device, index, id| {
@@ -292,6 +298,10 @@ fn src_format(format: lr::PixelFormat) -> SrcFormat {
     }
 }
 
+fn core_home(save_dir: &std::path::Path) -> PathBuf {
+    save_dir.join("home")
+}
+
 fn apply_sandbox(args: &Args) -> anyhow::Result<()> {
     if std::env::var_os("CARTRIDGE_NO_SANDBOX").is_some() {
         warn!("sandbox disabled by CARTRIDGE_NO_SANDBOX");
@@ -317,6 +327,15 @@ fn apply_sandbox(args: &Args) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cores_get_a_home_inside_the_game_save_folder() {
+        let save = std::path::Path::new("/data/saves/server-1/7");
+        assert_eq!(
+            core_home(save),
+            PathBuf::from("/data/saves/server-1/7/home")
+        );
+    }
 
     #[test]
     fn options_parse_as_key_value() {
