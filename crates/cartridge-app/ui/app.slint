@@ -593,7 +593,8 @@ export component AppWindow inherits Window {
         cancel => { root.cancel-pairing(); }
         retry => { root.retry-pairing(); }
     }
-    if root.screen == 2: Library {
+    Library {
+        visible: root.screen == 2;
         user-label: root.user-label;
         platforms: root.platforms;
         selected-platform: root.selected-platform;

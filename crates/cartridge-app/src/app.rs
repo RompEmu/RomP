@@ -522,6 +522,9 @@ impl Controller {
     fn reload_games(&self) {
         let filter = self.library.borrow().filter.clone();
         let games = self.shared.store.lock().unwrap().games(&filter);
+        if self.library.borrow().games == games {
+            return;
+        }
         self.library.borrow_mut().games = games;
         self.rebuild_rows();
     }
