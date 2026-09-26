@@ -11,8 +11,6 @@ cargo build --release
 ./target/release/cartridge
 ```
 
-The interface uses a dark Fluent style. To build with another style, set `SLINT_STYLE` to `material-dark`, `cosmic-dark` or `cupertino-dark`.
-
 Enter your RomM server address (RomM 5.0 or newer). Approve Cartridge in RomM by scanning the code or opening the link.
 
 Open a game from your library to download and play it. Cartridge installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
