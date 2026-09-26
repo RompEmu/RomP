@@ -32,6 +32,13 @@ pub struct GameDetail {
     pub local_path: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateRecord {
+    pub local_md5: String,
+    pub remote_id: Option<i64>,
+    pub remote_updated_at: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GameFilter {
     pub platform: Option<i64>,
@@ -82,6 +89,17 @@ impl Store {
         if version < 1 {
             conn.execute_batch(
                 "BEGIN; ALTER TABLE games ADD COLUMN local_path TEXT; PRAGMA user_version = 1; COMMIT;",
+            )?;
+        }
+        if version < 2 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS state_sync (rom_id INTEGER NOT NULL, file TEXT NOT NULL,
+                   local_md5 TEXT NOT NULL, remote_id INTEGER, remote_updated_at TEXT,
+                   PRIMARY KEY (rom_id, file));
+                 CREATE TABLE IF NOT EXISTS pending_saves (rom_id INTEGER PRIMARY KEY);
+                 PRAGMA user_version = 2;
+                 COMMIT;",
             )?;
         }
         Ok(Self { conn })
@@ -266,6 +284,67 @@ impl Store {
             .expect("set local path");
     }
 
+    pub fn state_record(&self, rom_id: i64, file: &str) -> Option<StateRecord> {
+        self.conn
+            .query_row(
+                "SELECT local_md5, remote_id, remote_updated_at FROM state_sync
+                 WHERE rom_id = ?1 AND file = ?2",
+                params![rom_id, file],
+                |r| {
+                    Ok(StateRecord {
+                        local_md5: r.get(0)?,
+                        remote_id: r.get(1)?,
+                        remote_updated_at: r.get(2)?,
+                    })
+                },
+            )
+            .ok()
+    }
+
+    pub fn set_state_record(&mut self, rom_id: i64, file: &str, record: &StateRecord) {
+        self.conn
+            .execute(
+                "INSERT INTO state_sync (rom_id, file, local_md5, remote_id, remote_updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(rom_id, file) DO UPDATE SET local_md5 = excluded.local_md5,
+                   remote_id = excluded.remote_id, remote_updated_at = excluded.remote_updated_at",
+                params![
+                    rom_id,
+                    file,
+                    record.local_md5,
+                    record.remote_id,
+                    record.remote_updated_at
+                ],
+            )
+            .expect("write state record");
+    }
+
+    pub fn add_pending(&mut self, rom_id: i64) {
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO pending_saves (rom_id) VALUES (?1)",
+                [rom_id],
+            )
+            .expect("add pending");
+    }
+
+    pub fn remove_pending(&mut self, rom_id: i64) {
+        self.conn
+            .execute("DELETE FROM pending_saves WHERE rom_id = ?1", [rom_id])
+            .expect("remove pending");
+    }
+
+    pub fn pending(&self) -> Vec<i64> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT rom_id FROM pending_saves ORDER BY rom_id")
+            .expect("prepare");
+        stmt.query_map([], |r| r.get(0))
+            .expect("query")
+            .filter_map(Result::ok)
+            .collect()
+    }
+
     pub fn switch_server(&mut self, server: &str) {
         if self.get("server").as_deref() != Some(server) {
             self.clear_library();
@@ -282,7 +361,8 @@ impl Store {
     pub fn clear_library(&mut self) {
         self.conn
             .execute_batch(
-                "DELETE FROM games; DELETE FROM platforms; DELETE FROM kv WHERE key = 'last_sync_at';",
+                "DELETE FROM games; DELETE FROM platforms; DELETE FROM state_sync; DELETE FROM pending_saves;
+                 DELETE FROM kv WHERE key = 'last_sync_at';",
             )
             .expect("clear library");
     }
@@ -518,5 +598,60 @@ mod tests {
                 count: 1
             }]
         );
+    }
+
+    #[test]
+    fn state_records_round_trip() {
+        let mut s = seeded();
+        assert_eq!(s.state_record(10, "slot-1"), None);
+        let record = StateRecord {
+            local_md5: "abc".into(),
+            remote_id: Some(3),
+            remote_updated_at: Some("t".into()),
+        };
+        s.set_state_record(10, "slot-1", &record);
+        assert_eq!(s.state_record(10, "slot-1"), Some(record.clone()));
+        let newer = StateRecord {
+            local_md5: "def".into(),
+            ..record
+        };
+        s.set_state_record(10, "slot-1", &newer);
+        assert_eq!(s.state_record(10, "slot-1"), Some(newer));
+    }
+
+    #[test]
+    fn pending_saves_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("c.db");
+        {
+            let mut s = Store::open(&path).unwrap();
+            s.add_pending(7);
+            s.add_pending(7);
+            s.add_pending(3);
+        }
+        let mut s = Store::open(&path).unwrap();
+        assert_eq!(s.pending(), [3, 7]);
+        s.remove_pending(3);
+        assert_eq!(s.pending(), [7]);
+        s.clear_library();
+        assert!(s.pending().is_empty());
+    }
+
+    #[test]
+    fn v1_database_migrates_to_v2() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v1.db");
+        rusqlite::Connection::open(&path)
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE games (id INTEGER PRIMARY KEY, platform_id INTEGER NOT NULL, title TEXT NOT NULL,
+                 summary TEXT, updated_at TEXT NOT NULL, cover_small TEXT, cover_large TEXT, size_bytes INTEGER NOT NULL,
+                 local_path TEXT);
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        let mut s = Store::open(&path).unwrap();
+        s.add_pending(1);
+        assert_eq!(s.pending(), [1]);
     }
 }
