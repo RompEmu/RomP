@@ -263,6 +263,83 @@ pub async fn resolve_sram(
     }
 }
 
+pub const STATE_SLOTS: [&str; 6] = ["auto", "slot-1", "slot-2", "slot-3", "slot-4", "slot-5"];
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct StateReport {
+    pub uploaded: usize,
+    pub downloaded: usize,
+}
+
+pub async fn sync_states(
+    client: &Client,
+    store: &std::sync::Mutex<crate::store::Store>,
+    game: &GameSaves,
+    core_version: &str,
+) -> Result<StateReport, Error> {
+    let remote = client.states(game.rom_id).await?;
+    let io_err = |e: io::Error| Error::Decode(format!("could not write a save state: {e}"));
+    let mut report = StateReport::default();
+    for slot in STATE_SLOTS {
+        let file = format!("{slot}.state");
+        let path = game.dir.join(&file);
+        let name = state_remote_name(slot, &game.emulator, core_version);
+        let server = remote.iter().find(|r| r.file_name == name);
+        let local = std::fs::read(&path).ok();
+        let record = store.lock().unwrap().state_record(game.rom_id, slot);
+        let local_md5 = local.as_deref().map(md5_hex);
+        let local_changed =
+            local_md5.is_some() && record.as_ref().map(|r| &r.local_md5) != local_md5.as_ref();
+        let remote_changed = server.is_some_and(|srv| {
+            record.as_ref().and_then(|r| r.remote_updated_at.as_deref())
+                != Some(srv.updated_at.as_str())
+        });
+        let upload = match (local_changed, remote_changed) {
+            (true, false) => true,
+            (false, true) => false,
+            (true, true) => {
+                file_iso_mtime(&path).unwrap_or_default()
+                    > server.map(|s| s.updated_at.clone()).unwrap_or_default()
+            }
+            (false, false) => continue,
+        };
+        let recorded = if upload {
+            if let Some(srv) = server.filter(|_| remote_changed) {
+                let bytes = client.download_state(srv.id).await?;
+                let keep = game.dir.join("backup").join(format!("server-{file}"));
+                replace_file(&keep, &bytes).map_err(io_err)?;
+            }
+            let bytes = local.expect("local state to upload");
+            let md5 = md5_hex(&bytes);
+            let saved = client
+                .upload_state(game.rom_id, &game.emulator, &name, bytes)
+                .await?;
+            report.uploaded += 1;
+            crate::store::StateRecord {
+                local_md5: md5,
+                remote_id: Some(saved.id),
+                remote_updated_at: Some(saved.updated_at),
+            }
+        } else {
+            let srv = server.expect("remote state to download");
+            let bytes = client.download_state(srv.id).await?;
+            backup(&game.dir, &file).map_err(io_err)?;
+            replace_file(&path, &bytes).map_err(io_err)?;
+            report.downloaded += 1;
+            crate::store::StateRecord {
+                local_md5: md5_hex(&bytes),
+                remote_id: Some(srv.id),
+                remote_updated_at: Some(srv.updated_at.clone()),
+            }
+        };
+        store
+            .lock()
+            .unwrap()
+            .set_state_record(game.rom_id, slot, &recorded);
+    }
+    Ok(report)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -538,6 +615,155 @@ mod tests {
                 std::fs::read(dir.path().join(SRAM_FILE)).unwrap(),
                 b"server"
             );
+        }
+    }
+
+    mod states {
+        use super::super::*;
+        use crate::romm::client::tests::base_of;
+        use crate::store::{StateRecord, Store};
+        use serde_json::json;
+        use std::sync::Mutex;
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        fn game(dir: &Path) -> GameSaves {
+            GameSaves {
+                rom_id: 5,
+                dir: dir.to_path_buf(),
+                title: "Zelda".into(),
+                emulator: "snes9x".into(),
+            }
+        }
+
+        fn state_json(id: i64, name: &str, updated: &str) -> serde_json::Value {
+            json!({"id": id, "rom_id": 5, "file_name": name, "updated_at": updated, "emulator": "snes9x"})
+        }
+
+        async fn remote(server: &MockServer, states: serde_json::Value) {
+            Mock::given(method("GET"))
+                .and(path("/api/states"))
+                .and(query_param("rom_id", "5"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(states))
+                .mount(server)
+                .await;
+        }
+
+        fn client(server: &MockServer) -> Client {
+            Client::new(base_of(server, "/")).with_token("t".into())
+        }
+
+        fn store() -> Mutex<Store> {
+            Mutex::new(Store::open_in_memory().unwrap())
+        }
+
+        #[tokio::test]
+        async fn uploads_new_local_state_once() {
+            let server = MockServer::start().await;
+            remote(&server, json!([])).await;
+            Mock::given(method("POST"))
+                .and(path("/api/states"))
+                .and(query_param("emulator", "snes9x"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(state_json(
+                    3,
+                    "slot-1.snes9x.1-63.state",
+                    "2026-09-26T10:00:00+00:00",
+                )))
+                .expect(1)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("slot-1.state"), b"S1").unwrap();
+            let store = store();
+            let report = sync_states(&client(&server), &store, &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert_eq!(
+                report,
+                StateReport {
+                    uploaded: 1,
+                    downloaded: 0
+                }
+            );
+            let record = store.lock().unwrap().state_record(5, "slot-1").unwrap();
+            assert_eq!(record.remote_id, Some(3));
+            assert_eq!(record.local_md5, md5_hex(b"S1"));
+        }
+
+        #[tokio::test]
+        async fn unchanged_states_do_nothing() {
+            let server = MockServer::start().await;
+            remote(
+                &server,
+                json!([state_json(3, "slot-1.snes9x.1-63.state", "t1")]),
+            )
+            .await;
+            Mock::given(method("POST"))
+                .and(path("/api/states"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(0)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("slot-1.state"), b"S1").unwrap();
+            let store = store();
+            store.lock().unwrap().set_state_record(
+                5,
+                "slot-1",
+                &StateRecord {
+                    local_md5: md5_hex(b"S1"),
+                    remote_id: Some(3),
+                    remote_updated_at: Some("t1".into()),
+                },
+            );
+            let report = sync_states(&client(&server), &store, &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert_eq!(report, StateReport::default());
+        }
+
+        #[tokio::test]
+        async fn downloads_newer_remote_state() {
+            let server = MockServer::start().await;
+            remote(
+                &server,
+                json!([state_json(4, "slot-2.snes9x.1-63.state", "t2")]),
+            )
+            .await;
+            Mock::given(method("GET"))
+                .and(path("/api/states/4/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"REMOTE".to_vec()))
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let store = store();
+            let report = sync_states(&client(&server), &store, &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert_eq!(report.downloaded, 1);
+            assert_eq!(
+                std::fs::read(dir.path().join("slot-2.state")).unwrap(),
+                b"REMOTE"
+            );
+        }
+
+        #[tokio::test]
+        async fn other_core_versions_are_ignored() {
+            let server = MockServer::start().await;
+            remote(
+                &server,
+                json!([
+                    state_json(4, "slot-2.snes9x.1-62.state", "t2"),
+                    state_json(5, "slot-3.bsnes.1-63.state", "t2")
+                ]),
+            )
+            .await;
+            let dir = tempfile::tempdir().unwrap();
+            let report = sync_states(&client(&server), &store(), &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert_eq!(report, StateReport::default());
+            assert!(!dir.path().join("slot-2.state").exists());
         }
     }
 }
