@@ -189,6 +189,10 @@ const NINTENDO: [&str; 11] = [
     "virtualboy",
 ];
 
+pub fn is_computer(core_id: &str) -> bool {
+    matches!(core_id, "puae" | "dosbox_pure" | "vice_x64sc" | "fuse")
+}
+
 pub fn uses_mouse(core_id: &str) -> bool {
     matches!(core_id, "puae" | "dosbox_pure")
 }

@@ -162,6 +162,15 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             match msg {
                 AppMsg::Pause(p) => paused = p,
                 AppMsg::Volume(v) => frontend.volume = v,
+                AppMsg::Key {
+                    code,
+                    character,
+                    modifiers,
+                    down,
+                } => {
+                    frontend.input.set_key(code, down);
+                    lr::invoke_keyboard_callback(down, code, character, modifiers);
+                }
                 AppMsg::PortDevice { port, device } => {
                     core.set_controller_port_device(u32::from(port), device, frontend);
                     frontend.input.set_port_device(u32::from(port), device);

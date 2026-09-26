@@ -8,10 +8,30 @@ pub struct PadState {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AppMsg {
-    Pad { port: u8, state: PadState },
-    Pointer { x: i16, y: i16, pressed: bool },
-    Mouse { dx: i16, dy: i16, buttons: u8 },
-    PortDevice { port: u8, device: u32 },
+    Pad {
+        port: u8,
+        state: PadState,
+    },
+    Pointer {
+        x: i16,
+        y: i16,
+        pressed: bool,
+    },
+    Mouse {
+        dx: i16,
+        dy: i16,
+        buttons: u8,
+    },
+    PortDevice {
+        port: u8,
+        device: u32,
+    },
+    Key {
+        code: u32,
+        character: u32,
+        modifiers: u16,
+        down: bool,
+    },
     Pause(bool),
     Volume(u8),
     SaveSlot(u8),

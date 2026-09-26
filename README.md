@@ -33,7 +33,7 @@ Add `--jit` for cores that use a dynamic recompiler. Cores are available from th
 
 ## Controls
 
-Gamepads are picked up automatically: the first one joins the keyboard as player 1, and each new one becomes the next player. Change who plays as which player, or remap any keyboard key or controller button, in **Settings → Players**. The Guide button, or Select and Start together, opens the game menu. In Amiga and DOS games, click in the game to use your mouse; Esc releases it. For accessories such as the SNES Mouse, Super Scope, Zapper or GunCon, choose them per port in the game menu: a mouse is captured the same way, and a light gun aims where you point and fires with the left button (right button reloads). The default keyboard layout:
+Gamepads are picked up automatically: the first one joins the keyboard as player 1, and each new one becomes the next player. Change who plays as which player, or remap any keyboard key or controller button, in **Settings → Players**. The Guide button, or Select and Start together, opens the game menu. In Amiga, DOS, C64 and ZX Spectrum games your keyboard types into the game and F12 opens the game menu; click in the game to use your mouse, and F12 releases it. For accessories such as the SNES Mouse, Super Scope, Zapper or GunCon, choose them per port in the game menu: a mouse is captured the same way, and a light gun aims where you point and fires with the left button (right button reloads). The default keyboard layout:
 
 | Key | Action |
 |---|---|

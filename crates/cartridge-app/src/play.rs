@@ -35,6 +35,7 @@ pub struct GameOptions {
     pub mappings: Rc<RefCell<Mappings>>,
     pub nintendo: bool,
     pub mouse: bool,
+    pub computer: bool,
     pub port_devices: Vec<(u8, u32)>,
     pub save_ports: SavePorts,
 }
@@ -81,6 +82,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             mappings: Rc::default(),
             nintendo: false,
             mouse: false,
+            computer: false,
             port_devices: Vec::new(),
             save_ports: Box::new(|_| {}),
         },
@@ -115,6 +117,9 @@ struct Game {
     port_devices: RefCell<Vec<u32>>,
     saved_ports: Vec<(u8, u32)>,
     save_ports: SavePorts,
+    computer: bool,
+    held_keys: RefCell<HashSet<u32>>,
+    modifiers: Cell<u16>,
 }
 
 const MENU_PORTS_START: i32 = 7;
@@ -156,9 +161,10 @@ impl Game {
             buttons: 0,
         });
         if on {
+            let key = if self.computer { "F12" } else { "Esc" };
             flash(
                 self.primary(),
-                "Mouse captured. Press Esc to release it.".into(),
+                format!("Mouse captured. Press {key} to release it."),
             );
         }
     }
@@ -195,6 +201,7 @@ impl Game {
     fn set_paused(&self, paused: bool) {
         if paused {
             self.capture_mouse(false);
+            self.release_keys();
             let released = self.controls.borrow_mut().release_all();
             self.run_commands(released);
         }
@@ -401,7 +408,63 @@ impl Game {
         }
     }
 
+    fn computer_key(&self, text: &str, pressed: bool, repeat: bool) -> bool {
+        let Some(key) = crate::keyboard::retro_key(text) else {
+            return false;
+        };
+        if repeat {
+            return true;
+        }
+        let bit = crate::keyboard::modifier_bit(key.code);
+        let modifiers = if pressed {
+            self.modifiers.get() | bit
+        } else {
+            self.modifiers.get() & !bit
+        };
+        self.modifiers.set(modifiers);
+        {
+            let mut held = self.held_keys.borrow_mut();
+            if pressed {
+                held.insert(key.code);
+            } else if !held.remove(&key.code) {
+                return true;
+            }
+        }
+        self.send(&AppMsg::Key {
+            code: key.code,
+            character: if pressed { key.character } else { 0 },
+            modifiers,
+            down: pressed,
+        });
+        true
+    }
+
+    fn release_keys(&self) {
+        let held: Vec<u32> = self.held_keys.borrow_mut().drain().collect();
+        self.modifiers.set(0);
+        for code in held {
+            self.send(&AppMsg::Key {
+                code,
+                character: 0,
+                modifiers: 0,
+                down: false,
+            });
+        }
+    }
+
     fn key(&self, text: &str, pressed: bool, repeat: bool) -> bool {
+        if self.computer {
+            let menu_key = text.chars().eq([char::from(slint::platform::Key::F12)]);
+            if menu_key {
+                if pressed && !repeat {
+                    self.set_menu(!self.menu_open.get());
+                }
+                return true;
+            }
+            if !self.menu_open.get() {
+                return self.paused.get() || self.computer_key(text, pressed, repeat);
+            }
+        }
         let mappings = self.mappings.borrow();
         let action = map_key(text, &mappings);
         if self.menu_open.get() {
@@ -470,6 +533,7 @@ pub fn launch(
     ui.set_game_title(format!("{} — Cartridge", opts.title).into());
     ui.set_game_name(opts.title.clone().into());
     ui.set_mouse_mode(opts.mouse);
+    ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());
     ui.set_has_menu(true);
     ui.set_status("Starting…".into());
     let mut windows = vec![ui];
@@ -523,6 +587,9 @@ pub fn launch(
             port_devices: RefCell::default(),
             saved_ports: opts.port_devices.clone(),
             save_ports: opts.save_ports,
+            computer: opts.computer,
+            held_keys: RefCell::default(),
+            modifiers: Cell::new(0),
         }
     });
     let _ = game
@@ -610,7 +677,14 @@ pub fn launch(
                     game.set_ports(ports);
                     continue;
                 }
+                let started_now = matches!(event, SessionEvent::Runner(RunnerMsg::Started { .. }));
                 handle_event(ui, event, &game.finish, &started);
+                if started_now && game.computer {
+                    flash(
+                        ui,
+                        "Your keyboard goes to the game. Press F12 for the menu.".into(),
+                    );
+                }
             }
         }
     });
@@ -681,6 +755,7 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
         let with = with.clone();
         move || {
             with(&|g| {
+                g.release_keys();
                 let released = g.controls.borrow_mut().release_all();
                 g.run_commands(released);
             })

@@ -11,6 +11,7 @@ mod gamepads;
 mod grid;
 mod identity;
 mod input;
+mod keyboard;
 mod layout;
 mod mapping;
 mod mouse;

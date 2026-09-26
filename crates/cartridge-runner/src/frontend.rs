@@ -127,7 +127,7 @@ impl lr::Frontend for Frontend {
             lr::RETRO_DEVICE_POINTER => self.input.pointer_state(id),
             lr::RETRO_DEVICE_MOUSE => self.input.mouse_state(port, id),
             lr::RETRO_DEVICE_LIGHTGUN => self.input.lightgun_state(port, id),
-            lr::RETRO_DEVICE_KEYBOARD => 0,
+            lr::RETRO_DEVICE_KEYBOARD => self.input.key_state(id),
             _ => i16::from(self.input.is_pressed(port, id)),
         }
     }

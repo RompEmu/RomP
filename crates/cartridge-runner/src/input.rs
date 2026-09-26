@@ -37,9 +37,23 @@ pub struct InputState {
     pointer: Arc<Mutex<Pointer>>,
     mouse: Arc<Mutex<Mouse>>,
     devices: Arc<Mutex<[u32; PORTS]>>,
+    keys: Arc<Mutex<std::collections::HashSet<u32>>>,
 }
 
 impl InputState {
+    pub fn set_key(&self, code: u32, down: bool) {
+        let mut keys = self.keys.lock();
+        if down {
+            keys.insert(code);
+        } else {
+            keys.remove(&code);
+        }
+    }
+
+    pub fn key_state(&self, code: u32) -> i16 {
+        i16::from(self.keys.lock().contains(&code))
+    }
+
     pub fn set_port_device(&self, port: u32, device: u32) {
         if let Some(slot) = self.devices.lock().get_mut(port as usize) {
             *slot = device;
@@ -336,5 +350,17 @@ mod tests {
         assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN), 1);
         assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_RELOAD), 1);
         assert_eq!(gun(lr::RETRO_DEVICE_ID_LIGHTGUN_TRIGGER), 1);
+    }
+
+    #[test]
+    fn held_keys_are_reported_until_released() {
+        let input = InputState::default();
+        input.set_key(97, true);
+        input.set_key(273, true);
+        assert_eq!(input.key_state(97), 1);
+        assert_eq!(input.key_state(98), 0);
+        input.set_key(97, false);
+        assert_eq!(input.key_state(97), 0);
+        assert_eq!(input.key_state(273), 1);
     }
 }

@@ -592,6 +592,8 @@ impl Controller {
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
             mouse: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| crate::cores::uses_mouse(core.id)),
+            computer: core_for_platform(&detail.platform_slug)
+                .is_some_and(|core| crate::cores::is_computer(core.id)),
             port_devices: self.saved_ports(detail.id),
             save_ports: {
                 let store = self.shared.store.clone();

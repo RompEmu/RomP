@@ -29,6 +29,7 @@ component GameMenu inherits Rectangle {
     in property <bool> fullscreen;
     in property <int> focused-item: -1;
     in property <[PortRow]> ports;
+    in property <string> menu-key: "Esc";
     callback cycle-port(int, int);
     callback resume();
     callback toggle-pause();
@@ -100,8 +101,8 @@ component GameMenu inherits Rectangle {
             VerticalLayout {
                 padding-top: 4px;
                 spacing: 2px;
-                Text { text: "Esc or Guide resume  ·  P pause  ·  F11 full screen"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
-                Text { text: "F5 save  ·  F7 load  ·  F6 next slot"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
+                Text { text: root.menu-key == "Esc" ? "Esc or Guide resume  ·  P pause  ·  F11 full screen" : "F12 or Guide resume  ·  your keyboard goes to the game"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
+                if root.menu-key == "Esc": Text { text: "F5 save  ·  F7 load  ·  F6 next slot"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
             }
         }
     }
@@ -120,6 +121,7 @@ export component GameWindow inherits Window {
     in property <bool> mouse-mode;
     in property <bool> mouse-captured;
     in property <bool> lightgun-mode;
+    in property <string> menu-key: "Esc";
     in property <[PortRow]> ports;
     callback cycle-port(int, int);
     callback capture-mouse();
@@ -224,7 +226,7 @@ export component GameWindow inherits Window {
             height: 32px;
             border-radius: 16px;
             background: #000000c0;
-            paused-label := Text { text: "Paused  ·  P to resume"; color: white; font-size: 14px; }
+            paused-label := Text { text: root.menu-key == "Esc" ? "Paused  ·  P to resume" : "Paused  ·  " + root.menu-key + " for the menu"; color: white; font-size: 14px; }
         }
 
         if root.has-menu && root.menu-open: GameMenu {
@@ -236,6 +238,7 @@ export component GameWindow inherits Window {
             fullscreen: root.fullscreen;
             focused-item: root.menu-focus;
             ports: root.ports;
+            menu-key: root.menu-key;
             cycle-port(i, step) => { root.cycle-port(i, step); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
