@@ -4,7 +4,7 @@ use crate::romm::client::Error;
 use crate::romm::types::RemoteCollection;
 use crate::store::{CollectionItem, CollectionKind, Scope};
 use crate::{Membership, SidebarEntry};
-use slint::{Image, ModelRc, VecModel};
+use slint::{Image, Model, ModelRc, VecModel};
 
 const AUTO_SECTIONS: [(&str, &str, CollectionKind); 3] = [
     ("series", "SERIES", CollectionKind::Series),
@@ -42,6 +42,33 @@ fn header(section: &str, label: &str, expanded: bool, can_add: bool) -> SidebarE
         expanded,
         can_add,
         ..item("", label, 0, "")
+    }
+}
+
+pub(super) fn heading_for(key: &str, entries: &[(String, String)]) -> String {
+    match key {
+        "all" => "All games".into(),
+        "favorites" | PAIR_KEY => "Favorites".into(),
+        _ => entries
+            .iter()
+            .find(|(k, _)| k == key)
+            .map_or_else(|| "Games".into(), |(_, name)| name.clone()),
+    }
+}
+
+pub(super) fn games_label(count: usize) -> String {
+    let digits = count.to_string();
+    let mut grouped = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(c);
+    }
+    match count {
+        0 => "No games".into(),
+        1 => "1 game".into(),
+        _ => format!("{grouped} games"),
     }
 }
 
@@ -178,11 +205,24 @@ impl Controller {
             }
         }
         ui.set_sidebar(ModelRc::new(VecModel::from(entries)));
+        self.update_heading();
         self.fetch_icons(missing_icons);
         let selected = self.selected.borrow().clone();
         if !keys.contains(&selected) && selected != "favorites" {
             self.select("all".into());
         }
+    }
+
+    pub(super) fn update_heading(&self) {
+        let Some(ui) = self.ui() else { return };
+        let entries: Vec<(String, String)> = ui
+            .get_sidebar()
+            .iter()
+            .filter(|e| !e.header)
+            .map(|e| (e.key.to_string(), e.name.to_string()))
+            .collect();
+        ui.set_heading(heading_for(&self.selected.borrow(), &entries).into());
+        ui.set_heading_detail(games_label(self.library.borrow().games.len()).into());
     }
 
     pub(super) fn select(&self, key: String) {
@@ -491,6 +531,21 @@ impl Controller {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn headings_name_the_selection_and_count_its_games() {
+        let entries = vec![
+            ("p:3".to_string(), "Super Nintendo".to_string()),
+            ("c:1".to_string(), "Favorites".to_string()),
+        ];
+        assert_eq!(heading_for("all", &entries), "All games");
+        assert_eq!(heading_for("p:3", &entries), "Super Nintendo");
+        assert_eq!(heading_for("favorites", &entries), "Favorites");
+        assert_eq!(heading_for("v:gone", &entries), "Games");
+        assert_eq!(games_label(0), "No games");
+        assert_eq!(games_label(1), "1 game");
+        assert_eq!(games_label(1234), "1,234 games");
+    }
 
     #[test]
     fn sidebar_keys_map_to_library_scopes() {

@@ -11,6 +11,59 @@ export struct GameRow { cards: [GameCard] }
 export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
 
+export global Brand {
+    out property <string> name: "Cartridge";
+    out property <string> tagline: "Play your RomM library, each game in its own sandboxed emulator.";
+}
+
+component AppTile inherits Rectangle {
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <length> size: 32px;
+    width: root.size;
+    height: root.size;
+    border-radius: root.size * 0.25;
+    clip: true;
+    background: @linear-gradient(135deg, #8b9cff 0%, #b56bff 100%);
+    if root.has-icon: Image { source: root.icon; width: parent.width; height: parent.height; }
+    if !root.has-icon: Text {
+        text: "▶";
+        color: white;
+        font-size: root.size * 0.42;
+    }
+}
+
+component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: touch.pressed ? #ffffff1f : touch.has-hover && root.enabled ? #ffffff12 : transparent;
+    Image {
+        source: root.icon;
+        width: 18px;
+        height: 18px;
+        colorize: root.enabled ? (touch.has-hover ? #ffffff : #b8bec8) : #5c616b;
+    }
+    touch := TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
+}
+
+component CountPill inherits Rectangle {
+    in property <int> count;
+    in property <bool> selected;
+    height: 18px;
+    width: max(24px, count-text.preferred-width + 12px);
+    border-radius: 9px;
+    background: root.selected ? #8b9cff40 : #ffffff0d;
+    count-text := Text {
+        text: root.count;
+        font-size: 11px;
+        color: root.selected ? #e6e8ff : #8a8f98;
+    }
+}
+
 component Connect inherits Rectangle {
     in-out property <string> server-url;
     in property <string> error;
@@ -118,20 +171,39 @@ component SidebarItem inherits Rectangle {
     in property <string> glyph;
     callback clicked();
     height: 34px;
-    border-radius: 6px;
-    background: root.selected ? #3a3f4b : touch.has-hover ? #2a2e36 : transparent;
+    border-radius: 8px;
+    background: root.selected ? #8b9cff24 : touch.has-hover ? #ffffff0a : transparent;
     touch := TouchArea { clicked => { root.clicked(); } }
+    if root.selected: Rectangle {
+        x: 0;
+        y: (parent.height - self.height) / 2;
+        width: 3px;
+        height: 16px;
+        border-radius: 1.5px;
+        background: #8b9cff;
+    }
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 8px;
+        padding-left: 12px;
+        padding-right: 8px;
+        spacing: 10px;
         Rectangle {
-            width: 20px;
-            if root.has-icon: Image { source: root.icon; width: 20px; height: 20px; image-fit: contain; }
-            if !root.has-icon: Text { text: root.glyph; color: #e5484d; font-size: 14px; }
+            width: 18px;
+            if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; }
+            if !root.has-icon: Text { text: root.glyph; color: #ff6b81; font-size: 13px; }
         }
-        Text { text: root.label; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-        if root.count >= 0: Text { text: root.count; vertical-alignment: center; color: #888; }
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            font-size: 13px;
+            font-weight: root.selected ? 600 : 400;
+            color: root.selected ? #ffffff : #c9ced6;
+        }
+        if root.count >= 0: VerticalLayout {
+            alignment: center;
+            CountPill { count: root.count; selected: root.selected; }
+        }
     }
 }
 
@@ -247,6 +319,13 @@ component Card inherits Rectangle {
 
 component Library inherits Rectangle {
     in property <string> user-label;
+    in property <string> server-label;
+    in property <string> heading;
+    in property <string> heading-detail;
+    in property <image> app-icon;
+    in property <bool> has-app-icon;
+    callback open-about();
+    in property <string> user-initial;
     in property <[SidebarEntry]> sidebar;
     in property <string> selected-key;
     in property <[GameRow]> rows;
@@ -271,6 +350,7 @@ component Library inherits Rectangle {
     in property <bool> offline;
     callback downloaded-only-toggled(bool);
     in property <int> focus-row: -1;
+    background: #15171c;
     changed focus-row => {
         if root.focus-row >= 0 {
             if root.focus-row * 306px < -games.content-y {
@@ -284,14 +364,50 @@ component Library inherits Rectangle {
 
     HorizontalLayout {
         Rectangle {
-            width: 240px;
-            background: #1b1e24;
+            width: 248px;
+            background: #111317;
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                background: #20242b;
+            }
             VerticalLayout {
-                padding: 12px;
-                spacing: 4px;
-                Text { text: "Cartridge"; font-size: 20px; font-weight: 700; }
-                Rectangle { height: 8px; }
+                padding-top: 16px;
+                padding-bottom: 12px;
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 6px;
+                HorizontalLayout {
+                    padding-left: 4px;
+                    padding-bottom: 10px;
+                    spacing: 10px;
+                    AppTile { icon: root.app-icon; has-icon: root.has-app-icon; }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 2px;
+                        Text { text: Brand.name; font-size: 16px; font-weight: 700; color: #ffffff; }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 7px;
+                                    height: 7px;
+                                    border-radius: 3.5px;
+                                    background: root.offline ? #f0a33c : root.syncing ? #8b9cff : #3fbf6b;
+                                }
+                            }
+                            Text {
+                                text: root.offline ? "Offline" : root.syncing ? "Syncing…" : root.server-label;
+                                font-size: 11px;
+                                color: #8a8f98;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
                 ListView {
+
                     vertical-stretch: 1;
                     for e in root.sidebar: HorizontalLayout {
                         padding-right: 14px;
@@ -330,34 +446,120 @@ component Library inherits Rectangle {
                         }
                     }
                 }
-                HorizontalLayout {
-                    spacing: 8px;
-                    Text { text: root.user-label; color: #888; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
-                    Button { text: "Settings"; clicked => { root.open-settings(); } }
+                Rectangle {
+                    height: 1px;
+                    background: #20242b;
                 }
+                HorizontalLayout {
+                    padding-top: 6px;
+                    padding-left: 4px;
+                    spacing: 10px;
+                    Rectangle {
+                        width: 30px;
+                        height: 30px;
+                        border-radius: 15px;
+                        background: #2a2f3a;
+                        Text {
+                            text: root.user-initial;
+                            color: #c7d0ff;
+                            font-size: 13px;
+                            font-weight: 700;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: root.user-label != "" ? root.user-label : "Signed in";
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: #e6e8eb;
+                            overflow: elide;
+                        }
+                    }
+                    IconButton { icon: @image-url("icons/info.svg"); clicked => { root.open-about(); } }
+                    IconButton { icon: @image-url("icons/settings.svg"); clicked => { root.open-settings(); } }
+                }
+
             }
         }
         VerticalLayout {
-            padding: 12px;
-            spacing: 10px;
+            padding-top: 18px;
+            padding-left: 20px;
+            padding-right: 16px;
+            padding-bottom: 8px;
+            spacing: 12px;
             HorizontalLayout {
                 vertical-stretch: 0;
-                spacing: 10px;
-                LineEdit {
-                    placeholder-text: "Search";
-                    text <=> root.search;
-                    edited(text) => { root.search-edited(text); }
+                spacing: 12px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 2px;
+                    Text { text: root.heading; font-size: 22px; font-weight: 800; color: #ffffff; overflow: elide; }
+                    Text {
+                        text: root.sync-status != "" ? root.heading-detail + "  ·  " + root.sync-status : root.heading-detail;
+                        font-size: 12px;
+                        color: #8a8f98;
+                        overflow: elide;
+                    }
+                }
+                if root.needs-pairing: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 30px;
+                        width: pair-text.preferred-width + 24px;
+                        border-radius: 15px;
+                        background: pair-touch.has-hover ? #8b9cff40 : #8b9cff26;
+                        pair-text := Text { text: root.pair-prompt; font-size: 12px; font-weight: 600; color: #d6dcff; }
+                        pair-touch := TouchArea { clicked => { root.pair-again(); } }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 240px;
+                        height: 32px;
+                        border-radius: 8px;
+                        background: #1c1f26;
+                        border-width: 1px;
+                        border-color: search-input.has-focus ? #8b9cff : #262a33;
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 8px;
+                            Image { source: @image-url("icons/search.svg"); width: 15px; colorize: #8a8f98; }
+                            search-input := TextInput {
+                                text <=> root.search;
+                                font-size: 13px;
+                                color: #e6e8eb;
+                                vertical-alignment: center;
+                                single-line: true;
+                                edited => { root.search-edited(self.text); }
+                                if self.text == "": Text {
+                                    x: 0;
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: "Search games";
+                                    color: #6b7280;
+                                    font-size: 13px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
                 }
                 Switch {
-                    text: "Downloaded only";
+                    text: "Downloaded";
                     checked <=> root.downloaded-only;
                     enabled: !root.offline;
                     toggled => { root.downloaded-only-toggled(self.checked); }
                 }
-                if root.needs-pairing: Button { text: root.pair-prompt; clicked => { root.pair-again(); } }
-                Text { text: root.sync-status; color: #888; vertical-alignment: center; }
-                if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
-                Button { text: "Refresh"; enabled: !root.syncing; clicked => { root.refresh(); } }
+                VerticalLayout {
+                    alignment: center;
+                    if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
+                    if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); clicked => { root.refresh(); } }
+                }
             }
             grid := Rectangle {
                 vertical-stretch: 1;
@@ -1053,8 +1255,67 @@ component Dialog inherits Rectangle {
     }
 }
 
+component AboutDialog inherits Rectangle {
+    in property <string> version;
+    in property <image> icon;
+    in property <bool> has-icon;
+    callback close();
+    background: #000000a8;
+    TouchArea { clicked => { root.close(); } }
+    Rectangle {
+        width: 340px;
+        height: about-box.preferred-height;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: #1c1f26;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: #2c313b;
+        drop-shadow-blur: 30px;
+        drop-shadow-color: #00000090;
+        TouchArea { }
+        about-box := VerticalLayout {
+            padding: 28px;
+            padding-bottom: 22px;
+            spacing: 6px;
+            HorizontalLayout {
+                alignment: center;
+                AppTile { size: 76px; icon: root.icon; has-icon: root.has-icon; }
+            }
+            Rectangle { height: 8px; }
+            Text { text: Brand.name; font-size: 24px; font-weight: 800; color: #ffffff; horizontal-alignment: center; }
+            Text { text: "Version " + root.version; font-size: 12px; color: #8a8f98; horizontal-alignment: center; }
+            Rectangle { height: 6px; }
+            Text {
+                text: Brand.tagline;
+                font-size: 13px;
+                color: #c9ced6;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+                line-height-factor: 1.35;
+            }
+            Rectangle { height: 10px; }
+            Rectangle { height: 1px; background: #2a2f38; }
+            Rectangle { height: 10px; }
+            Text {
+                text: "Games and saves from RomM. Emulation by libretro cores.";
+                font-size: 11px;
+                color: #8a8f98;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            Rectangle { height: 12px; }
+            HorizontalLayout {
+                alignment: center;
+                Button { text: "Close"; clicked => { root.close(); } }
+            }
+        }
+    }
+}
+
 export component AppWindow inherits Window {
-    title: "Cartridge";
+    title: Brand.name;
+    background: #15171c;
     preferred-width: 1100px;
     preferred-height: 760px;
     min-width: 640px;
@@ -1079,6 +1340,14 @@ export component AppWindow inherits Window {
     callback retry-pairing();
 
     in property <string> user-label;
+    in property <string> user-initial;
+    in property <string> server-label;
+    in property <string> heading: "All games";
+    in property <string> heading-detail;
+    in property <image> app-icon;
+    in property <bool> has-app-icon;
+    in property <string> app-version;
+    in-out property <bool> about-open;
     callback sign-out();
     callback open-settings();
     in-out property <int> settings-section;
@@ -1223,6 +1492,13 @@ export component AppWindow inherits Window {
         downloaded-only-toggled(on) => { root.downloaded-only-toggled(on); }
         open-settings => { root.open-settings(); }
         focus-row: root.grid-focus-row;
+        user-initial: root.user-initial;
+        server-label: root.server-label;
+        heading: root.heading;
+        heading-detail: root.heading-detail;
+        app-icon: root.app-icon;
+        has-app-icon: root.has-app-icon;
+        open-about => { root.about-open = true; }
     }
     if root.screen == 4: SettingsPage {
         section <=> root.settings-section;
@@ -1305,6 +1581,12 @@ export component AppWindow inherits Window {
         border-width: 1px;
         border-color: #ffffff1a;
         hints-text := Text { text: root.pad-hints; color: #d0d4da; font-size: 12px; }
+    }
+    if root.about-open: AboutDialog {
+        version: root.app-version;
+        icon: root.app-icon;
+        has-icon: root.has-app-icon;
+        close => { root.about-open = false; }
     }
     if root.dialog-open: Dialog {
         title: root.dialog-title;

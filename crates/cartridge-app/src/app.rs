@@ -194,6 +194,7 @@ pub fn run() -> anyhow::Result<()> {
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
     controller.wire(&ui);
+    ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     controller.start_navigation();
     controller.start();
     ui.run()?;
@@ -400,6 +401,9 @@ impl Controller {
     }
 
     fn enter_library(&self, client: Client) {
+        if let Some(ui) = self.ui() {
+            ui.set_server_label(client.base().host_str().unwrap_or_default().into());
+        }
         *self.client.borrow_mut() = Some(client.clone());
         self.set_offline(false);
         self.library.borrow_mut().filter = GameFilter::default();
@@ -423,6 +427,13 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         match me {
             Ok(user) => {
+                let initial = user
+                    .username
+                    .chars()
+                    .next()
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_default();
+                ui.set_user_initial(initial.into());
                 ui.set_user_label(user.username.into());
                 if let Some(device) = user.current_device_id {
                     self.shared
@@ -513,6 +524,7 @@ impl Controller {
         self.reload_sidebar();
         if let Some(ui) = self.ui() {
             ui.set_user_label("".into());
+            ui.set_user_initial("".into());
             ui.set_connect_error("".into());
             ui.set_sync_status("".into());
             ui.set_screen(SCREEN_CONNECT);
@@ -555,6 +567,7 @@ impl Controller {
         let filter = self.library.borrow().filter.clone();
         let games = self.shared.store.lock().unwrap().games(&filter);
         if self.library.borrow().games == games {
+            self.update_heading();
             return;
         }
         if let Some(i) = self.nav_card.get() {
@@ -563,6 +576,7 @@ impl Controller {
         }
         self.library.borrow_mut().games = games;
         self.rebuild_rows();
+        self.update_heading();
     }
 
     fn rebuild_rows(&self) {
