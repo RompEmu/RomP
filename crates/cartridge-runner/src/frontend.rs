@@ -98,7 +98,8 @@ impl lr::Frontend for Frontend {
     fn input_state(&mut self, port: u32, device: u32, index: u32, id: u32) -> i16 {
         match device {
             lr::RETRO_DEVICE_ANALOG => self.input.analog(port, index, id),
-            lr::RETRO_DEVICE_KEYBOARD | lr::RETRO_DEVICE_MOUSE | lr::RETRO_DEVICE_POINTER => 0,
+            lr::RETRO_DEVICE_POINTER => self.input.pointer_state(id),
+            lr::RETRO_DEVICE_KEYBOARD | lr::RETRO_DEVICE_MOUSE => 0,
             _ => i16::from(self.input.is_pressed(port, id)),
         }
     }

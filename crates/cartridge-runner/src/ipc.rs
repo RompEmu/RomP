@@ -22,6 +22,9 @@ impl Link {
         std::thread::spawn(move || loop {
             match wire::read_msg::<_, AppMsg>(&mut reader) {
                 Ok(AppMsg::Pad { port, state }) => input.apply_pad(port, state),
+                Ok(AppMsg::Pointer { x, y, pressed }) => {
+                    input.apply_pointer(crate::input::Pointer { x, y, pressed })
+                }
                 Ok(msg) => {
                     if tx.send(msg).is_err() {
                         return;

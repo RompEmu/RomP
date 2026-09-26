@@ -13,12 +13,36 @@ const L2: usize = 4;
 const R2: usize = 5;
 const TRIGGER_DIGITAL_THRESHOLD: i16 = 0x4000;
 
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct Pointer {
+    pub x: i16,
+    pub y: i16,
+    pub pressed: bool,
+}
+
 #[derive(Clone, Default)]
 pub struct InputState {
     ports: Arc<Mutex<[PadState; PORTS]>>,
+    pointer: Arc<Mutex<Pointer>>,
 }
 
 impl InputState {
+    pub fn apply_pointer(&self, pointer: Pointer) {
+        *self.pointer.lock() = pointer;
+    }
+
+    pub fn pointer_state(&self, id: u32) -> i16 {
+        let p = *self.pointer.lock();
+        match id {
+            lr::RETRO_DEVICE_ID_POINTER_X => p.x,
+            lr::RETRO_DEVICE_ID_POINTER_Y => p.y,
+            lr::RETRO_DEVICE_ID_POINTER_PRESSED | lr::RETRO_DEVICE_ID_POINTER_COUNT => {
+                i16::from(p.pressed)
+            }
+            _ => 0,
+        }
+    }
+
     pub fn apply_pad(&self, port: u8, state: PadState) {
         if let Some(slot) = self.ports.lock().get_mut(port as usize) {
             *slot = state;
@@ -155,5 +179,26 @@ mod tests {
             ),
             -100
         );
+    }
+
+    #[test]
+    fn pointer_reports_position_press_and_count() {
+        let input = InputState::default();
+        input.apply_pointer(Pointer {
+            x: -100,
+            y: 200,
+            pressed: true,
+        });
+        assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_X), -100);
+        assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_Y), 200);
+        assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_PRESSED), 1);
+        assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_COUNT), 1);
+        input.apply_pointer(Pointer {
+            x: -100,
+            y: 200,
+            pressed: false,
+        });
+        assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_PRESSED), 0);
+        assert_eq!(input.pointer_state(lr::RETRO_DEVICE_ID_POINTER_COUNT), 0);
     }
 }

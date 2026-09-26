@@ -121,6 +121,12 @@ pub fn stick(value: f32, invert: bool) -> i16 {
     }
 }
 
+pub fn pointer_coords(u: f32, v: f32, bottom_half: bool) -> (i16, i16) {
+    let v = if bottom_half { 0.5 + v / 2.0 } else { v };
+    let scale = |t: f32| ((t.clamp(0.0, 1.0) * 2.0 - 1.0) * 32767.0).round() as i16;
+    (scale(u), scale(v))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Send(AppMsg),
@@ -336,5 +342,15 @@ mod tests {
                 state: PadState::default()
             }))
         );
+    }
+
+    #[test]
+    fn pointer_maps_to_libretro_range() {
+        assert_eq!(pointer_coords(0.5, 0.5, false), (0, 0));
+        assert_eq!(pointer_coords(0.0, 0.0, false), (-32767, -32767));
+        assert_eq!(pointer_coords(1.0, 1.0, false), (32767, 32767));
+        assert_eq!(pointer_coords(0.5, 0.0, true), (0, 0));
+        assert_eq!(pointer_coords(0.5, 1.0, true), (0, 32767));
+        assert_eq!(pointer_coords(2.0, -1.0, false), (32767, -32767));
     }
 }

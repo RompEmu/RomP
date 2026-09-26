@@ -110,8 +110,9 @@ pub fn launch(
     });
 
     let controls = Rc::new(RefCell::new(Controls::default()));
-    for window in std::iter::once(&ui).chain(second.as_ref()) {
-        wire(window, &session, &controls, &finish);
+    wire(&ui, &session, &controls, &finish, false);
+    if let Some(window) = &second {
+        wire(window, &session, &controls, &finish, true);
     }
 
     let timer = Timer::default();
@@ -185,7 +186,17 @@ fn wire(
     session: &Rc<RefCell<Session>>,
     controls: &Rc<RefCell<Controls>>,
     finish: &Rc<dyn Fn()>,
+    bottom_half: bool,
 ) {
+    window.on_pointer({
+        let session = session.clone();
+        move |u, v, pressed| {
+            let (x, y) = input::pointer_coords(u, v, bottom_half);
+            session
+                .borrow_mut()
+                .send(&cartridge_proto::msg::AppMsg::Pointer { x, y, pressed });
+        }
+    });
     window.window().on_close_requested({
         let finish = finish.clone();
         move || {

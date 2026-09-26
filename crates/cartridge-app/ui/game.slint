@@ -4,6 +4,7 @@ export component GameWindow inherits Window {
     in property <float> aspect: 4 / 3;
     in property <string> status;
     callback key-event(string, bool, bool) -> bool;
+    callback pointer(float, float, bool);
     callback focus-lost();
 
     title: root.game-title;
@@ -23,7 +24,7 @@ export component GameWindow inherits Window {
             return root.key-event(event.text, false, false) ? EventResult.accept : EventResult.reject;
         }
 
-        Image {
+        frame := Image {
             source: root.frame;
             image-fit: fill;
             image-rendering: pixelated;
@@ -31,6 +32,23 @@ export component GameWindow inherits Window {
             height: self.width / root.aspect;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
+        }
+
+        TouchArea {
+            x: frame.x;
+            y: frame.y;
+            width: frame.width;
+            height: frame.height;
+            pointer-event(event) => {
+                if event.button == PointerEventButton.left && event.kind != PointerEventKind.move {
+                    root.pointer(self.mouse-x / self.width, self.mouse-y / self.height, event.kind == PointerEventKind.down);
+                }
+            }
+            moved => {
+                if self.pressed {
+                    root.pointer(self.mouse-x / self.width, self.mouse-y / self.height, true);
+                }
+            }
         }
 
         if root.status != "": Rectangle {
