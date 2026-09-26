@@ -13,6 +13,7 @@ mod identity;
 mod input;
 mod layout;
 mod mapping;
+mod navigation;
 mod paths;
 mod play;
 mod players;

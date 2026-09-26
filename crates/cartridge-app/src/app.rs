@@ -1,5 +1,6 @@
 mod collections;
 mod game;
+mod navigation;
 mod save_sync;
 mod settings;
 
@@ -109,6 +110,9 @@ struct Controller {
     mappings: Rc<RefCell<crate::mapping::Mappings>>,
     remap_device: RefCell<Option<String>>,
     remap_waiting: Cell<Option<u32>>,
+    nav_card: Cell<Option<usize>>,
+    nav_repeat: RefCell<crate::navigation::Repeater>,
+    nav_timer: RefCell<Option<Timer>>,
 }
 
 thread_local! {
@@ -183,10 +187,14 @@ pub fn run() -> anyhow::Result<()> {
         mappings: Rc::new(RefCell::new(mappings)),
         remap_device: RefCell::new(None),
         remap_waiting: Cell::new(None),
+        nav_card: Cell::new(None),
+        nav_repeat: RefCell::default(),
+        nav_timer: RefCell::new(None),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
     controller.wire(&ui);
+    controller.start_navigation();
     controller.start();
     ui.run()?;
     CONTROLLER.with(|c| c.borrow_mut().take());
@@ -549,11 +557,16 @@ impl Controller {
         if self.library.borrow().games == games {
             return;
         }
+        if let Some(i) = self.nav_card.get() {
+            self.nav_card
+                .set((!games.is_empty()).then(|| i.min(games.len() - 1)));
+        }
         self.library.borrow_mut().games = games;
         self.rebuild_rows();
     }
 
     fn rebuild_rows(&self) {
+        let focus = self.nav_card.get();
         let mut lib = self.library.borrow_mut();
         lib.covers.clear();
         lib.recent.clear();
@@ -561,15 +574,19 @@ impl Controller {
         let total = lib.games.len();
         let rows: Vec<GameRow> = (0..row_count(total, lib.columns))
             .map(|r| {
-                let cards: Vec<GameCard> = lib.games[row_range(r, total, lib.columns)]
+                let range = row_range(r, total, lib.columns);
+                let start = range.start;
+                let cards: Vec<GameCard> = lib.games[range]
                     .iter()
-                    .map(|g| GameCard {
+                    .enumerate()
+                    .map(|(j, g)| GameCard {
                         id: g.id as i32,
                         title: g.title.clone().into(),
                         platform: g.platform.clone().into(),
                         cover: Image::default(),
                         has_cover: false,
                         downloaded: g.downloaded,
+                        focused: focus == Some(start + j),
                     })
                     .collect();
                 GameRow {
@@ -656,6 +673,21 @@ impl Controller {
         };
         card.has_cover = image.is_some();
         card.cover = image.unwrap_or_default();
+        row_data.cards.set_row_data(col, card);
+    }
+
+    fn set_card_focused(&self, id: i64, focused: bool) {
+        let Some((row, col)) = self.position_of(id) else {
+            return;
+        };
+        let rows = self.library.borrow().rows.clone();
+        let Some(row_data) = rows.row_data(row) else {
+            return;
+        };
+        let Some(mut card) = row_data.cards.row_data(col) else {
+            return;
+        };
+        card.focused = focused;
         row_data.cards.set_row_data(col, card);
     }
 

@@ -199,6 +199,7 @@ impl Controller {
                     has_cover: image.is_some(),
                     cover: image.unwrap_or_default(),
                     downloaded: g.local_path.is_some(),
+                    focused: false,
                 }
             })
             .collect();

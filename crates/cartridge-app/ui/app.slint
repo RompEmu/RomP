@@ -6,7 +6,7 @@ export struct DeviceRow { key: string, name: string, detail: string, player: int
 export struct StorageRow { label: string, size: string }
 export struct KeyHint { keys: string, action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
-export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool }
+export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool }
 export struct GameRow { cards: [GameCard] }
 export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
@@ -216,6 +216,11 @@ component Card inherits Rectangle {
                 Text { text: "✓"; color: white; font-weight: 700; }
             }
             if touch.has-hover: Rectangle { background: #ffffff14; }
+            if root.game.focused: Rectangle {
+                border-radius: 8px;
+                border-width: 3px;
+                border-color: #8b9cff;
+            }
         }
         Text { text: root.game.title; overflow: elide; font-weight: 600; }
         HorizontalLayout {
@@ -256,6 +261,17 @@ component Library inherits Rectangle {
     in-out property <bool> downloaded-only;
     in property <bool> offline;
     callback downloaded-only-toggled(bool);
+    in property <int> focus-row: -1;
+    changed focus-row => {
+        if root.focus-row >= 0 {
+            if root.focus-row * 306px < -games.content-y {
+                games.content-y = -(root.focus-row * 306px);
+            }
+            if (root.focus-row + 1) * 306px > -games.content-y + games.visible-height {
+                games.content-y = -((root.focus-row + 1) * 306px - games.visible-height);
+            }
+        }
+    }
 
     HorizontalLayout {
         Rectangle {
@@ -345,7 +361,7 @@ component Library inherits Rectangle {
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
-                ListView {
+                games := ListView {
                     for row[i] in root.rows: HorizontalLayout {
                         property <int> index: i;
                         padding: 8px;
@@ -1127,6 +1143,8 @@ export component AppWindow inherits Window {
     callback toggle-favorite();
     callback toggle-membership(string, bool);
     callback new-collection-with-game();
+    in property <int> grid-focus-row: -1;
+    in property <string> pad-hints;
     in property <bool> dialog-open;
     in property <string> dialog-title;
     in property <string> dialog-message;
@@ -1184,6 +1202,7 @@ export component AppWindow inherits Window {
         offline: root.offline;
         downloaded-only-toggled(on) => { root.downloaded-only-toggled(on); }
         open-settings => { root.open-settings(); }
+        focus-row: root.grid-focus-row;
     }
     if root.screen == 4: SettingsPage {
         section <=> root.settings-section;
@@ -1255,6 +1274,17 @@ export component AppWindow inherits Window {
         toggle-favorite => { root.toggle-favorite(); }
         toggle-membership(key, on) => { root.toggle-membership(key, on); }
         new-collection => { root.new-collection-with-game(); }
+    }
+    if root.pad-hints != "" && !root.dialog-open: Rectangle {
+        x: parent.width - self.width - 16px;
+        y: parent.height - self.height - 12px;
+        width: hints-text.preferred-width + 24px;
+        height: 30px;
+        border-radius: 15px;
+        background: #000000c8;
+        border-width: 1px;
+        border-color: #ffffff1a;
+        hints-text := Text { text: root.pad-hints; color: #d0d4da; font-size: 12px; }
     }
     if root.dialog-open: Dialog {
         title: root.dialog-title;
