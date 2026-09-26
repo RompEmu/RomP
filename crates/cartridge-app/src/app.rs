@@ -345,6 +345,7 @@ impl Controller {
                         .lock()
                         .unwrap()
                         .set("device_uuid", &device);
+                    self.sync_pending();
                 }
             }
             Err(Error::Unauthorized) => self.needs_repair(),
