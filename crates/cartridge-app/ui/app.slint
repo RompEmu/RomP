@@ -510,16 +510,20 @@ component GamePage inherits Rectangle {
                                 }
                                 collections-popup := PopupWindow {
                                     y: parent.height + 4px;
+                                    width: 260px;
+                                    height: popup-list.preferred-height;
                                     close-policy: close-on-click-outside;
                                     Rectangle {
+                                        width: parent.width;
+                                        height: parent.height;
                                         background: #23272f;
                                         border-radius: 8px;
                                         border-width: 1px;
                                         border-color: #3a3f4b;
                                         drop-shadow-blur: 12px;
                                         drop-shadow-color: #00000080;
-                                        VerticalLayout {
-                                            width: 260px;
+                                        popup-list := VerticalLayout {
+                                            width: parent.width;
                                             padding: 12px;
                                             spacing: 6px;
                                             if root.memberships.length == 0: Text {
