@@ -85,6 +85,15 @@ impl Controller {
         })
     }
 
+    pub(super) fn clear_conflict(&self) {
+        if self.pending_launch.borrow_mut().take().is_some() {
+            self.preparing.set(false);
+        }
+        if let Some(ui) = self.ui() {
+            ui.set_save_conflict(false);
+        }
+    }
+
     pub(super) fn show_conflict(&self, pending: PendingLaunch) {
         if let Some(ui) = self.ui() {
             ui.set_conflict_text(conflict_text(&pending.conflict).into());
@@ -103,6 +112,10 @@ impl Controller {
             self.sync_device(),
             self.game_saves(&pending.detail),
         ) else {
+            self.preparing.set(false);
+            if let Some(ui) = self.ui() {
+                ui.set_save_conflict(false);
+            }
             return;
         };
         if let Some(ui) = self.ui() {
@@ -143,6 +156,7 @@ impl Controller {
         let store = self.shared.store.clone();
         let version = identity.map(|(_, v)| v);
         let id = detail.id;
+        self.syncing_game.set(Some(id));
         self.shared.rt.spawn(async move {
             let result = sync_game(&client, &store, &device, &game, version.as_deref()).await;
             on_ui(move |c| c.after_play_synced(id, result));
@@ -150,25 +164,36 @@ impl Controller {
     }
 
     fn after_play_synced(&self, id: i64, result: Result<SramOutcome, Error>) {
+        self.syncing_game.set(None);
         let status = match result {
             Ok(SramOutcome::Conflict(_)) => {
                 "A newer save is on the server. You'll be asked which to keep next time you play."
+                    .to_string()
             }
-            Ok(_) => "Saves synced.",
+            Ok(_) => "Saves synced.".to_string(),
+            Err(Error::Unreachable) => {
+                self.shared.store.lock().unwrap().add_pending(id);
+                "Saves will sync when the server is reachable.".to_string()
+            }
             Err(e) => {
                 tracing::warn!("syncing saves for {id}: {e}");
-                self.shared.store.lock().unwrap().add_pending(id);
-                "Saves will sync when the server is reachable."
+                format!("Couldn't sync saves: {e}.")
             }
         };
-        self.game_status(id, status.into());
+        self.game_status(id, status);
     }
 
     pub(super) fn sync_pending(&self) {
+        let busy = self.running.borrow().is_some()
+            || self.preparing.get()
+            || self.syncing_game.get().is_some();
         let (Some(client), Some(device)) = (self.client.borrow().clone(), self.sync_device())
         else {
             return;
         };
+        if busy {
+            return;
+        }
         let jobs: Vec<(GameSaves, Option<String>)> = {
             let store = self.shared.store.lock().unwrap();
             store
@@ -191,7 +216,11 @@ impl Controller {
             for (game, version) in jobs {
                 match sync_game(&client, &store, &device, &game, version.as_deref()).await {
                     Ok(_) => store.lock().unwrap().remove_pending(game.rom_id),
-                    Err(e) => tracing::warn!("pending save sync for {}: {e}", game.rom_id),
+                    Err(Error::Unreachable) => {}
+                    Err(e) => {
+                        tracing::warn!("pending save sync for {}: {e}", game.rom_id);
+                        store.lock().unwrap().remove_pending(game.rom_id);
+                    }
                 }
             }
         });

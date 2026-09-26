@@ -116,6 +116,8 @@ pub struct SyncOp {
     pub action: String,
     pub rom_id: i64,
     pub save_id: Option<i64>,
+    #[serde(default)]
+    pub slot: Option<String>,
     pub file_name: String,
     pub server_updated_at: Option<String>,
     pub server_content_hash: Option<String>,

@@ -178,7 +178,7 @@ pub async fn sync_sram(
     let op = negotiation
         .operations
         .into_iter()
-        .find(|o| o.rom_id == game.rom_id);
+        .find(|o| o.rom_id == game.rom_id && o.slot.as_deref() == Some(SRAM_SLOT));
     let result = match (op.as_ref().map(|o| o.action.as_str()), local) {
         (Some("upload"), Some(bytes)) => {
             match upload_sram(client, device_id, game, bytes, Some(session), false).await {
@@ -448,7 +448,7 @@ mod tests {
         #[tokio::test]
         async fn local_only_uploads() {
             let server = MockServer::start().await;
-            negotiation(&server, json!([{"action": "upload", "rom_id": 5, "save_id": null, "file_name": "Zelda- Link.srm"}])).await;
+            negotiation(&server, json!([{"action": "upload", "rom_id": 5, "slot": "autosave", "save_id": null, "file_name": "Zelda- Link.srm"}])).await;
             completion(&server, 1).await;
             Mock::given(method("POST"))
                 .and(path("/api/saves"))
@@ -470,7 +470,7 @@ mod tests {
             let server = MockServer::start().await;
             negotiation(
                 &server,
-                json!([{"action": "download", "rom_id": 5, "save_id": 4, "file_name": "x.srm"}]),
+                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 4, "file_name": "x.srm"}]),
             )
             .await;
             completion(&server, 1).await;
@@ -496,11 +496,32 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn operations_for_other_slots_are_ignored() {
+            let server = MockServer::start().await;
+            negotiation(&server, json!([
+                {"action": "download", "rom_id": 5, "save_id": 11, "file_name": "web.srm", "slot": "web"},
+                {"action": "no_op", "rom_id": 5, "save_id": 12, "file_name": "x.srm", "slot": "autosave"}
+            ])).await;
+            completion(&server, 1).await;
+            Mock::given(method("GET"))
+                .and(path("/api/saves/11/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"wrong".to_vec()))
+                .expect(0)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
+            assert_eq!(outcome.unwrap(), SramOutcome::InSync);
+            assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"mine");
+        }
+
+        #[tokio::test]
         async fn conflict_is_reported_not_resolved() {
             let server = MockServer::start().await;
             negotiation(
                 &server,
-                json!([{"action": "conflict", "rom_id": 5, "save_id": 4, "file_name": "x.srm",
+                json!([{"action": "conflict", "rom_id": 5, "slot": "autosave", "save_id": 4, "file_name": "x.srm",
                 "server_updated_at": "2026-09-26T10:00:00+00:00"}]),
             )
             .await;
@@ -527,7 +548,7 @@ mod tests {
             let server = MockServer::start().await;
             negotiation(
                 &server,
-                json!([{"action": "upload", "rom_id": 5, "save_id": null, "file_name": "x.srm"}]),
+                json!([{"action": "upload", "rom_id": 5, "slot": "autosave", "save_id": null, "file_name": "x.srm"}]),
             )
             .await;
             Mock::given(method("POST"))

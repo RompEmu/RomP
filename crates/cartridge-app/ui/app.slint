@@ -324,6 +324,7 @@ component GamePage inherits Rectangle {
                 }
                 if root.status != "": Text { text: root.status; color: #bbb; wrap: word-wrap; }
                 if root.conflict: Rectangle {
+                    vertical-stretch: 0;
                     border-radius: 8px;
                     background: #3b2f1e;
                     VerticalLayout {

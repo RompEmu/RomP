@@ -70,6 +70,7 @@ impl Controller {
     }
 
     pub(super) fn open_game(&self, id: i64) {
+        self.clear_conflict();
         let Some(detail) = self.shared.store.lock().unwrap().game(id) else {
             return;
         };
@@ -164,6 +165,7 @@ impl Controller {
     }
 
     pub(super) fn back_to_library(&self) {
+        self.clear_conflict();
         if let Some(ui) = self.ui() {
             ui.set_screen(SCREEN_LIBRARY);
         }
@@ -262,6 +264,10 @@ impl Controller {
         };
         if self.running.borrow().is_some() || self.preparing.get() {
             ui.set_game_status("A game is already running.".into());
+            return;
+        }
+        if self.syncing_game.get() == Some(detail.id) {
+            ui.set_game_status("Still syncing your saves. Try again in a moment.".into());
             return;
         }
         let Some(core) = core_for_platform(&detail.platform_slug) else {
@@ -393,7 +399,8 @@ impl Controller {
 
     fn game_closed(&self, identity: Option<CoreIdentity>) {
         self.running.borrow_mut().take();
-        if let Some(detail) = self.playing.borrow_mut().take() {
+        let playing = self.playing.borrow_mut().take();
+        if let Some(detail) = playing {
             self.after_play(detail, identity);
         }
     }

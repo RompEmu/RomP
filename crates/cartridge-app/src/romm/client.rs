@@ -346,7 +346,10 @@ impl Client {
         device_id: &str,
         session_id: Option<i64>,
     ) -> Result<Vec<u8>, Error> {
-        let mut query = vec![("device_id", device_id.to_string())];
+        let mut query = vec![
+            ("device_id", device_id.to_string()),
+            ("optimistic", "true".to_string()),
+        ];
         if let Some(session) = session_id {
             query.push(("session_id", session.to_string()));
         }
@@ -915,6 +918,7 @@ pub(crate) mod tests {
         Mock::given(method("GET"))
             .and(path("/api/saves/1/content"))
             .and(query_param("device_id", "dev"))
+            .and(query_param("optimistic", "true"))
             .and(query_param("session_id", "9"))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(b"SRAM".to_vec()))
             .mount(&server)

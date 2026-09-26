@@ -91,6 +91,7 @@ struct Controller {
     download_fraction: Cell<f32>,
     pending_launch: RefCell<Option<save_sync::PendingLaunch>>,
     playing: RefCell<Option<crate::store::GameDetail>>,
+    syncing_game: Cell<Option<i64>>,
     running: RefCell<Option<crate::play::RunningGame>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
@@ -139,6 +140,7 @@ pub fn run() -> anyhow::Result<()> {
         download_fraction: Cell::new(0.0),
         pending_launch: RefCell::new(None),
         playing: RefCell::new(None),
+        syncing_game: Cell::new(None),
         running: RefCell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
@@ -277,6 +279,7 @@ impl Controller {
                     let mut store = self.shared.store.lock().unwrap();
                     store.switch_server(&server);
                     store.set("scopes", &scopes.join(" "));
+                    store.remove("device_uuid");
                 }
                 self.enter_library(client.with_token(token));
                 return;
@@ -385,6 +388,7 @@ impl Controller {
     }
 
     fn sign_out(&self) {
+        self.clear_conflict();
         self.stop_sync();
         self.set_offline(false);
         let server = self
