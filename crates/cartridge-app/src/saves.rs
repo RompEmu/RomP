@@ -253,6 +253,24 @@ pub async fn resolve_sram(
     }
 }
 
+pub fn games_with_saves(server_saves: &Path) -> Vec<i64> {
+    let has_save = |dir: &Path| {
+        dir.join(SRAM_FILE).exists()
+            || STATE_SLOTS
+                .iter()
+                .any(|slot| dir.join(format!("{slot}.state")).exists())
+    };
+    std::fs::read_dir(server_saves)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let id = entry.file_name().to_str()?.parse::<i64>().ok()?;
+            has_save(&entry.path()).then_some(id)
+        })
+        .collect()
+}
+
 pub const STATE_SLOTS: [&str; 6] = ["auto", "slot-1", "slot-2", "slot-3", "slot-4", "slot-5"];
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -770,5 +788,25 @@ mod tests {
             assert_eq!(report, StateReport::default());
             assert!(!dir.path().join("slot-2.state").exists());
         }
+    }
+
+    #[test]
+    fn finds_game_folders_with_save_files() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, file) in [
+            ("7", Some("game.srm")),
+            ("9", Some("slot-1.state")),
+            ("11", None),
+            ("junk", Some("game.srm")),
+        ] {
+            std::fs::create_dir_all(dir.path().join(name)).unwrap();
+            if let Some(file) = file {
+                std::fs::write(dir.path().join(name).join(file), b"x").unwrap();
+            }
+        }
+        let mut ids = games_with_saves(dir.path());
+        ids.sort();
+        assert_eq!(ids, [7, 9]);
+        assert!(games_with_saves(&dir.path().join("missing")).is_empty());
     }
 }

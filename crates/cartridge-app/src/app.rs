@@ -280,6 +280,14 @@ impl Controller {
                     store.switch_server(&server);
                     store.set("scopes", &scopes.join(" "));
                     store.remove("device_uuid");
+                    let saves = paths::data_dir()
+                        .join("saves")
+                        .join(paths::server_key(&server));
+                    for id in crate::saves::games_with_saves(&saves) {
+                        if store.game(id).is_some() {
+                            store.add_pending(id);
+                        }
+                    }
                 }
                 self.enter_library(client.with_token(token));
                 return;
