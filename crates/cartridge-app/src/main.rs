@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod app;
 mod bios;
 mod cores;

@@ -257,7 +257,7 @@ impl Controller {
             pairing.client.take()
         };
         let message = match (outcome, client) {
-            (PollOutcome::Approved(token), Some(client)) => {
+            (PollOutcome::Approved { token, .. }, Some(client)) => {
                 let server = client.base().to_string();
                 if let Err(e) = self.shared.tokens.save(&server, &token) {
                     ui.set_pair_failed(true);

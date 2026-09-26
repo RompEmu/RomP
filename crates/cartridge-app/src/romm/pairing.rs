@@ -1,13 +1,15 @@
 use crate::romm::types::PollOutcome;
 use std::time::{Duration, Instant};
 
-pub const SCOPES: [&str; 6] = [
+pub const SCOPES: [&str; 8] = [
     "me.read",
     "platforms.read",
     "roms.read",
     "firmware.read",
     "assets.read",
     "assets.write",
+    "devices.read",
+    "devices.write",
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,7 +80,10 @@ mod tests {
         for o in [
             PollOutcome::Denied,
             PollOutcome::Expired,
-            PollOutcome::Approved("rmm_x".into()),
+            PollOutcome::Approved {
+                token: "rmm_x".into(),
+                scopes: vec![],
+            },
         ] {
             assert_eq!(Poller::new(5, 600, now).next(&o, now), PollStep::Done);
         }

@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Heartbeat {
@@ -27,12 +27,13 @@ pub enum PollOutcome {
     SlowDown,
     Denied,
     Expired,
-    Approved(String),
+    Approved { token: String, scopes: Vec<String> },
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct User {
     pub username: String,
+    pub current_device_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -97,6 +98,51 @@ pub struct Firmware {
     pub id: i64,
     pub file_name: String,
     pub sha1_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ClientSave {
+    pub rom_id: i64,
+    pub file_name: String,
+    pub slot: Option<String>,
+    pub emulator: Option<String>,
+    pub content_hash: Option<String>,
+    pub updated_at: String,
+    pub file_size_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct SyncOp {
+    pub action: String,
+    pub rom_id: i64,
+    pub save_id: Option<i64>,
+    pub file_name: String,
+    pub server_updated_at: Option<String>,
+    pub server_content_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Negotiation {
+    pub session_id: i64,
+    pub operations: Vec<SyncOp>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RemoteSave {
+    pub id: i64,
+    pub rom_id: i64,
+    pub file_name: String,
+    pub slot: Option<String>,
+    pub updated_at: String,
+    pub content_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RemoteState {
+    pub id: i64,
+    pub rom_id: i64,
+    pub file_name: String,
+    pub updated_at: String,
 }
 
 #[cfg(test)]

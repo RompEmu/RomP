@@ -1,5 +1,6 @@
 use crate::romm::types::{
-    DeviceAuth, Firmware, Heartbeat, Platform, PollOutcome, RomDetail, RomFile, RomPage, User,
+    ClientSave, DeviceAuth, Firmware, Heartbeat, Negotiation, Platform, PollOutcome, RemoteSave,
+    RemoteState, RomDetail, RomFile, RomPage, User,
 };
 use serde::de::DeserializeOwned;
 use std::time::Duration;
@@ -15,6 +16,8 @@ pub enum Error {
     Status(u16),
     #[error("unexpected response from the server: {0}")]
     Decode(String),
+    #[error("the server has a newer version")]
+    Conflict,
     #[error("cancelled")]
     Cancelled,
 }
@@ -60,6 +63,17 @@ pub fn check_version(version: &str) -> Result<(), String> {
         )),
         None => Err(format!("Unrecognised RomM version \"{version}\".")),
     }
+}
+
+pub struct SaveUpload<'a> {
+    pub rom_id: i64,
+    pub slot: &'a str,
+    pub emulator: &'a str,
+    pub device_id: &'a str,
+    pub session_id: Option<i64>,
+    pub overwrite: bool,
+    pub file_name: &'a str,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -144,6 +158,8 @@ impl Client {
         #[derive(serde::Deserialize)]
         struct Token {
             access_token: String,
+            #[serde(default)]
+            scopes: Vec<String>,
         }
         #[derive(serde::Deserialize)]
         struct Detail {
@@ -157,9 +173,13 @@ impl Client {
             .map_err(|_| Error::Unreachable)?;
         let decode = |e: reqwest::Error| Error::Decode(e.to_string());
         match resp.status().as_u16() {
-            200 => Ok(PollOutcome::Approved(
-                resp.json::<Token>().await.map_err(decode)?.access_token,
-            )),
+            200 => {
+                let token = resp.json::<Token>().await.map_err(decode)?;
+                Ok(PollOutcome::Approved {
+                    token: token.access_token,
+                    scopes: token.scopes,
+                })
+            }
             429 => Ok(PollOutcome::SlowDown),
             400 => Ok(
                 match resp.json::<Detail>().await.map_err(decode)?.detail.as_str() {
@@ -243,6 +263,136 @@ impl Client {
         )
     }
 
+    pub async fn negotiate(
+        &self,
+        device_id: &str,
+        saves: &[ClientSave],
+        rom_ids: &[i64],
+    ) -> Result<Negotiation, Error> {
+        let body =
+            serde_json::json!({ "device_id": device_id, "saves": saves, "rom_ids": rom_ids });
+        let resp = self
+            .send(
+                self.request(reqwest::Method::POST, "/api/sync/negotiate")
+                    .json(&body),
+            )
+            .await?;
+        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    pub async fn complete_session(
+        &self,
+        session_id: i64,
+        completed: u32,
+        failed: u32,
+    ) -> Result<(), Error> {
+        let body =
+            serde_json::json!({ "operations_completed": completed, "operations_failed": failed });
+        self.send(
+            self.request(
+                reqwest::Method::POST,
+                &format!("/api/sync/sessions/{session_id}/complete"),
+            )
+            .json(&body),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn list_saves(
+        &self,
+        rom_id: i64,
+        slot: &str,
+        device_id: &str,
+    ) -> Result<Vec<RemoteSave>, Error> {
+        self.get_json(
+            "/api/saves",
+            &[
+                ("rom_id", rom_id.to_string()),
+                ("slot", slot.to_string()),
+                ("device_id", device_id.to_string()),
+            ],
+        )
+        .await
+    }
+
+    pub async fn upload_save(&self, upload: SaveUpload<'_>) -> Result<RemoteSave, Error> {
+        let mut query = vec![
+            ("rom_id", upload.rom_id.to_string()),
+            ("slot", upload.slot.to_string()),
+            ("emulator", upload.emulator.to_string()),
+            ("device_id", upload.device_id.to_string()),
+            ("overwrite", upload.overwrite.to_string()),
+        ];
+        if let Some(session) = upload.session_id {
+            query.push(("session_id", session.to_string()));
+        }
+        let part =
+            reqwest::multipart::Part::bytes(upload.bytes).file_name(upload.file_name.to_string());
+        let form = reqwest::multipart::Form::new().part("saveFile", part);
+        let resp = self
+            .send(
+                self.request(reqwest::Method::POST, "/api/saves")
+                    .query(&query)
+                    .multipart(form),
+            )
+            .await?;
+        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    pub async fn download_save(
+        &self,
+        save_id: i64,
+        device_id: &str,
+        session_id: Option<i64>,
+    ) -> Result<Vec<u8>, Error> {
+        let mut query = vec![("device_id", device_id.to_string())];
+        if let Some(session) = session_id {
+            query.push(("session_id", session.to_string()));
+        }
+        let resp = self
+            .send(
+                self.request(
+                    reqwest::Method::GET,
+                    &format!("/api/saves/{save_id}/content"),
+                )
+                .query(&query),
+            )
+            .await?;
+        Ok(resp.bytes().await.map_err(|_| Error::Unreachable)?.to_vec())
+    }
+
+    pub async fn states(&self, rom_id: i64) -> Result<Vec<RemoteState>, Error> {
+        self.get_json("/api/states", &[("rom_id", rom_id.to_string())])
+            .await
+    }
+
+    pub async fn upload_state(
+        &self,
+        rom_id: i64,
+        emulator: &str,
+        file_name: &str,
+        bytes: Vec<u8>,
+    ) -> Result<RemoteState, Error> {
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(file_name.to_string());
+        let form = reqwest::multipart::Form::new().part("stateFile", part);
+        let resp = self
+            .send(
+                self.request(reqwest::Method::POST, "/api/states")
+                    .query(&[
+                        ("rom_id", rom_id.to_string()),
+                        ("emulator", emulator.to_string()),
+                    ])
+                    .multipart(form),
+            )
+            .await?;
+        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    pub async fn download_state(&self, id: i64) -> Result<Vec<u8>, Error> {
+        self.fetch_bytes(&format!("/api/states/{id}/content")).await
+    }
+
     pub async fn download(&self, url: Url, offset: u64) -> Result<reqwest::Response, Error> {
         let mut req = self.transfer.get(url);
         if let Some(token) = &self.token {
@@ -273,6 +423,7 @@ impl Client {
         match resp.status().as_u16() {
             200..=299 => Ok(resp),
             401 => Err(Error::Unauthorized),
+            409 => Err(Error::Conflict),
             status => Err(Error::Status(status)),
         }
     }
@@ -293,7 +444,8 @@ impl Client {
 pub(crate) mod tests {
     use super::*;
     use wiremock::matchers::{
-        body_json, header, method, path, query_param, query_param_is_missing,
+        body_json, body_string_contains, header, header_regex, method, path, query_param,
+        query_param_is_missing,
     };
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -434,10 +586,13 @@ pub(crate) mod tests {
         assert_eq!(
             poll_with(
                 200,
-                json!({"access_token": "rmm_abc", "device_id": "u", "scopes": [], "expires_at": null})
+                json!({"access_token": "rmm_abc", "device_id": "u", "scopes": ["assets.read"], "expires_at": null})
             )
             .await,
-            PollOutcome::Approved("rmm_abc".into())
+            PollOutcome::Approved {
+                token: "rmm_abc".into(),
+                scopes: vec!["assets.read".into()]
+            }
         );
     }
 
@@ -623,5 +778,206 @@ pub(crate) mod tests {
             .is_err());
         let resp = client.download(client.url("/big"), 0).await.unwrap();
         assert_eq!(resp.text().await.unwrap(), "data");
+    }
+
+    fn save_json(id: i64) -> serde_json::Value {
+        serde_json::json!({"id": id, "rom_id": 5, "file_name": "Zelda [2026-09-26_10-00-00].srm",
+            "slot": "autosave", "updated_at": "2026-09-26T10:00:00+00:00", "content_hash": "abc",
+            "emulator": "snes9x", "device_syncs": []})
+    }
+
+    #[tokio::test]
+    async fn me_reads_current_device() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/users/me"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"id": 1, "username": "b", "current_device_id": "dev-uuid"}),
+            ))
+            .mount(&server)
+            .await;
+        assert_eq!(
+            authed(&server)
+                .me()
+                .await
+                .unwrap()
+                .current_device_id
+                .as_deref(),
+            Some("dev-uuid")
+        );
+    }
+
+    #[tokio::test]
+    async fn negotiate_sends_device_and_saves() {
+        let server = MockServer::start().await;
+        let save = ClientSave {
+            rom_id: 5,
+            file_name: "Zelda.srm".into(),
+            slot: Some("autosave".into()),
+            emulator: Some("snes9x".into()),
+            content_hash: Some("abc".into()),
+            updated_at: "2026-09-26T10:00:00+00:00".into(),
+            file_size_bytes: 8192,
+        };
+        Mock::given(method("POST"))
+            .and(path("/api/sync/negotiate"))
+            .and(body_json(serde_json::json!({
+                "device_id": "dev", "rom_ids": [5],
+                "saves": [{"rom_id": 5, "file_name": "Zelda.srm", "slot": "autosave", "emulator": "snes9x",
+                           "content_hash": "abc", "updated_at": "2026-09-26T10:00:00+00:00", "file_size_bytes": 8192}]})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "session_id": 9, "operations": [{"action": "upload", "rom_id": 5, "save_id": null,
+                "file_name": "Zelda.srm", "slot": "autosave", "reason": "x"}], "total_upload": 1})))
+            .mount(&server)
+            .await;
+        let n = authed(&server)
+            .negotiate("dev", &[save], &[5])
+            .await
+            .unwrap();
+        assert_eq!(n.session_id, 9);
+        assert_eq!(n.operations[0].action, "upload");
+        Mock::given(method("POST"))
+            .and(path("/api/sync/sessions/9/complete"))
+            .and(body_json(
+                serde_json::json!({"operations_completed": 1, "operations_failed": 0}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        authed(&server).complete_session(9, 1, 0).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn upload_save_puts_metadata_in_query_and_file_in_multipart() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/saves"))
+            .and(query_param("rom_id", "5"))
+            .and(query_param("slot", "autosave"))
+            .and(query_param("emulator", "snes9x"))
+            .and(query_param("device_id", "dev"))
+            .and(query_param("session_id", "9"))
+            .and(query_param("overwrite", "false"))
+            .and(header_regex("content-type", "^multipart/form-data"))
+            .and(body_string_contains(
+                "name=\"saveFile\"; filename=\"Zelda.srm\"",
+            ))
+            .and(body_string_contains("SRAMDATA"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(save_json(1)))
+            .mount(&server)
+            .await;
+        let saved = authed(&server)
+            .upload_save(SaveUpload {
+                rom_id: 5,
+                slot: "autosave",
+                emulator: "snes9x",
+                device_id: "dev",
+                session_id: Some(9),
+                overwrite: false,
+                file_name: "Zelda.srm",
+                bytes: b"SRAMDATA".to_vec(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(saved.id, 1);
+    }
+
+    #[tokio::test]
+    async fn upload_409_is_conflict() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/saves"))
+            .respond_with(ResponseTemplate::new(409).set_body_json(
+                serde_json::json!({"detail": "Slot has a newer save since your last sync"}),
+            ))
+            .mount(&server)
+            .await;
+        let err = authed(&server)
+            .upload_save(SaveUpload {
+                rom_id: 5,
+                slot: "autosave",
+                emulator: "snes9x",
+                device_id: "dev",
+                session_id: None,
+                overwrite: false,
+                file_name: "Zelda.srm",
+                bytes: vec![1],
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::Conflict));
+    }
+
+    #[tokio::test]
+    async fn download_and_list_saves_pass_device() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/saves/1/content"))
+            .and(query_param("device_id", "dev"))
+            .and(query_param("session_id", "9"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"SRAM".to_vec()))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/saves"))
+            .and(query_param("rom_id", "5"))
+            .and(query_param("slot", "autosave"))
+            .and(query_param("device_id", "dev"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([save_json(1)])),
+            )
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        assert_eq!(
+            client.download_save(1, "dev", Some(9)).await.unwrap(),
+            b"SRAM"
+        );
+        assert_eq!(
+            client.list_saves(5, "autosave", "dev").await.unwrap()[0].id,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn states_list_upload_download() {
+        let server = MockServer::start().await;
+        let state = serde_json::json!({"id": 3, "rom_id": 5, "file_name": "slot-1.snes9x.1.63.state",
+            "updated_at": "2026-09-26T10:00:00+00:00", "emulator": "snes9x"});
+        Mock::given(method("GET"))
+            .and(path("/api/states"))
+            .and(query_param("rom_id", "5"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([state.clone()])),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/states"))
+            .and(query_param("rom_id", "5"))
+            .and(query_param("emulator", "snes9x"))
+            .and(body_string_contains(
+                "name=\"stateFile\"; filename=\"slot-1.snes9x.1.63.state\"",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(state))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/states/3/content"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"STATE".to_vec()))
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        assert_eq!(client.states(5).await.unwrap()[0].id, 3);
+        assert_eq!(
+            client
+                .upload_state(5, "snes9x", "slot-1.snes9x.1.63.state", b"S".to_vec())
+                .await
+                .unwrap()
+                .id,
+            3
+        );
+        assert_eq!(client.download_state(3).await.unwrap(), b"STATE");
     }
 }

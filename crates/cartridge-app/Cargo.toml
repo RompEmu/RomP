@@ -15,13 +15,14 @@ arboard = "3"
 dirs = "6"
 gilrs = "0.11"
 httpdate = "1"
+md-5 = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 keyring = "4"
 libc = "0.2"
 rusqlite = { version = "0.40", features = ["bundled"] }
 open = "5"
 qrcode = { version = "0.14", default-features = false }
-reqwest = { version = "0.13", features = ["json", "query"] }
+reqwest = { version = "0.13", features = ["json", "multipart", "query"] }
 sha1 = "0.10"
 sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
