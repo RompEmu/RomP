@@ -1098,6 +1098,7 @@ component SettingsPage inherits Rectangle {
     in-out property <bool> fullscreen;
     in-out property <bool> sharp;
     in-out property <float> volume;
+    in-out property <int> ui-scale;
     callback prefs-changed();
     in-out property <bool> nintendo-labels;
     in-out property <bool> stick-dpad;
@@ -1195,6 +1196,16 @@ component SettingsPage inherits Rectangle {
                                     maximum: 100;
                                     value <=> root.volume;
                                     changed => { root.prefs-changed(); }
+                                }
+                            }
+                            SettingRow {
+                                label: @tr("Interface size");
+                                detail: @tr("Makes text and controls in this window larger.");
+                                ComboBox {
+                                    width: 120px;
+                                    model: ["1×", "1.5×", "2×"];
+                                    current-index <=> root.ui-scale;
+                                    selected => { root.prefs-changed(); }
                                 }
                             }
                         }
@@ -1468,8 +1479,8 @@ export component AppWindow inherits Window {
     background: Theme.background;
     preferred-width: 1100px;
     preferred-height: 760px;
-    min-width: 640px;
-    min-height: 480px;
+    min-width: 520px;
+    min-height: 400px;
 
     in property <int> screen;
     property <bool> narrow;
@@ -1519,6 +1530,7 @@ export component AppWindow inherits Window {
     in-out property <bool> pref-fullscreen;
     in-out property <bool> pref-sharp;
     in-out property <float> pref-volume;
+    in-out property <int> pref-ui-scale;
     callback prefs-changed();
     in-out property <bool> pref-nintendo-labels;
     in-out property <bool> pref-stick-dpad;
@@ -1740,6 +1752,7 @@ export component AppWindow inherits Window {
         fullscreen <=> root.pref-fullscreen;
         sharp <=> root.pref-sharp;
         volume <=> root.pref-volume;
+        ui-scale <=> root.pref-ui-scale;
         prefs-changed => { root.prefs-changed(); }
         nintendo-labels <=> root.pref-nintendo-labels;
         stick-dpad <=> root.pref-stick-dpad;

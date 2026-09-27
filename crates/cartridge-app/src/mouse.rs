@@ -62,6 +62,9 @@ impl CustomApplicationHandler for RawMouse {
         _slint_window: Option<&slint::Window>,
         event: &WindowEvent,
     ) -> EventResult {
+        if let WindowEvent::ScaleFactorChanged { .. } = event {
+            crate::scale::system_changed(window_id);
+        }
         if let WindowEvent::MouseInput {
             state: ElementState::Pressed,
             button: MouseButton::Back,

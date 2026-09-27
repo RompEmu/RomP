@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const UI_SCALES: [u8; 3] = [100, 150, 200];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
@@ -8,6 +10,7 @@ pub struct Preferences {
     pub fullscreen: bool,
     pub sharp_pixels: bool,
     pub volume: u8,
+    pub ui_scale: u8,
 }
 
 impl Default for Preferences {
@@ -18,6 +21,7 @@ impl Default for Preferences {
             fullscreen: false,
             sharp_pixels: true,
             volume: 100,
+            ui_scale: 100,
         }
     }
 }
@@ -28,7 +32,14 @@ impl Preferences {
             .and_then(|t| serde_json::from_str(t).ok())
             .unwrap_or_default();
         prefs.volume = prefs.volume.min(100);
+        if !UI_SCALES.contains(&prefs.ui_scale) {
+            prefs.ui_scale = 100;
+        }
         prefs
+    }
+
+    pub fn scale_factor(self) -> f32 {
+        f32::from(self.ui_scale) / 100.0
     }
 
     pub fn to_json(self) -> String {
@@ -64,5 +75,25 @@ mod tests {
             Preferences::default()
         );
         assert!(Preferences::from_json(Some(r#"{"volume": 250}"#)).volume <= 100);
+    }
+
+    #[test]
+    fn interface_scale_is_one_of_the_offered_sizes() {
+        assert_eq!(Preferences::default().ui_scale, 100);
+        assert_eq!(Preferences::default().scale_factor(), 1.0);
+        let large = Preferences::from_json(Some(r#"{"ui_scale": 150}"#));
+        assert_eq!(large.scale_factor(), 1.5);
+        assert_eq!(
+            Preferences::from_json(Some(r#"{"ui_scale": 200}"#)).scale_factor(),
+            2.0
+        );
+        assert_eq!(
+            Preferences::from_json(Some(r#"{"ui_scale": 900}"#)).ui_scale,
+            100
+        );
+        assert_eq!(
+            Preferences::from_json(Some(r#"{"ui_scale": 0}"#)).ui_scale,
+            100
+        );
     }
 }

@@ -25,6 +25,7 @@ mod qr;
 mod romm;
 mod rotation;
 mod saves;
+mod scale;
 mod session;
 mod storage;
 mod store;

@@ -198,6 +198,12 @@ pub fn run() -> anyhow::Result<()> {
     ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     controller.start_navigation();
     controller.start();
+    let weak = ui.as_weak();
+    slint::Timer::single_shot(Duration::ZERO, move || {
+        if let Some(ui) = weak.upgrade() {
+            crate::scale::set(&ui, prefs.scale_factor());
+        }
+    });
     ui.run()?;
     CONTROLLER.with(|c| c.borrow_mut().take());
     Ok(())

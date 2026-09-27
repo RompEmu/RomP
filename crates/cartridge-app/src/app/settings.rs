@@ -2,7 +2,7 @@ use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY};
 use crate::details::human_size;
 use crate::mapping::{self, BUTTONS};
 use crate::players::KEYBOARD;
-use crate::prefs::Preferences;
+use crate::prefs::{Preferences, UI_SCALES};
 use crate::RemapRow;
 use crate::{paths, storage, DeviceRow, KeyHint, StorageRow};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
@@ -48,6 +48,12 @@ impl Controller {
         ui.set_pref_fullscreen(prefs.fullscreen);
         ui.set_pref_sharp(prefs.sharp_pixels);
         ui.set_pref_volume(f32::from(prefs.volume));
+        ui.set_pref_ui_scale(
+            UI_SCALES
+                .iter()
+                .position(|s| *s == prefs.ui_scale)
+                .unwrap_or(0) as i32,
+        );
         let mappings = self.mappings.borrow();
         ui.set_pref_nintendo_labels(mappings.nintendo_labels);
         ui.set_pref_stick_dpad(mappings.stick_dpad);
@@ -71,9 +77,16 @@ impl Controller {
             fullscreen: ui.get_pref_fullscreen(),
             sharp_pixels: ui.get_pref_sharp(),
             volume: ui.get_pref_volume().round().clamp(0.0, 100.0) as u8,
+            ui_scale: UI_SCALES
+                .get(ui.get_pref_ui_scale() as usize)
+                .copied()
+                .unwrap_or(100),
         };
         if prefs == self.prefs.get() {
             return;
+        }
+        if prefs.ui_scale != self.prefs.get().ui_scale {
+            crate::scale::set(&ui, prefs.scale_factor());
         }
         self.prefs.set(prefs);
         self.shared
