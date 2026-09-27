@@ -354,6 +354,7 @@ component Library inherits Rectangle {
     in property <image> app-icon;
     in property <bool> has-app-icon;
     callback open-about();
+    public function focus-search() { search-field.focus(); }
     in property <string> user-initial;
     in property <[SidebarEntry]> sidebar;
     in property <string> selected-key;
@@ -551,7 +552,7 @@ component Library inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
-                    LineEdit {
+                    search-field := LineEdit {
                         width: 240px;
                         placeholder-text: "Search games";
                         text <=> root.search;
@@ -1468,6 +1469,41 @@ export component AppWindow inherits Window {
     in property <bool> offline;
     callback downloaded-only-toggled(bool);
 
+    MenuBar {
+        Menu {
+            title: "Library";
+            MenuItem {
+                title: "Search";
+                shortcut: @keys(Control + F);
+                enabled: root.screen == 2 || root.screen == 3;
+                activated => {
+                    if root.screen == 3 { root.back-to-library(); }
+                    library.focus-search();
+                }
+            }
+            MenuItem {
+                title: "Refresh";
+                shortcut: @keys(Control + R);
+                enabled: root.screen >= 2 && !root.syncing && !root.offline;
+                activated => { root.refresh(); }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: "Settings…";
+                shortcut: @keys(Control + Comma);
+                enabled: root.screen >= 2 && root.screen != 4;
+                activated => { root.open-settings(); }
+            }
+        }
+        Menu {
+            title: "Help";
+            MenuItem {
+                title: "About " + Brand.name;
+                activated => { root.about-open = true; }
+            }
+        }
+    }
+
     if root.screen == 0: Connect {
         server-url <=> root.server-url;
         error: root.connect-error;
@@ -1486,7 +1522,7 @@ export component AppWindow inherits Window {
         cancel => { root.cancel-pairing(); }
         retry => { root.retry-pairing(); }
     }
-    Library {
+    library := Library {
         visible: root.screen == 2;
         user-label: root.user-label;
         sidebar: root.sidebar;
