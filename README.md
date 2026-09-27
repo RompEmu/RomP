@@ -15,6 +15,8 @@ Enter your RomM server address (RomM 5.0 or newer). Approve Cartridge in RomM by
 
 Open a game from your library to download and play it. Cartridge installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
 
+Original Xbox games play in [xemu](https://xemu.app), which Cartridge installs and sets up with your controls, volume and display settings. Add the Xbox boot ROM (`mcpx_1.0.bin`) and an Xbox BIOS to the Xbox platform's firmware in RomM. Games need to be in XISO format. In xemu, press Esc or your controller's Guide button for its menu.
+
 In the library, ⌘F searches, ⌘R refreshes and ⌘, opens Settings. Esc or your mouse's back button leaves a game's page.
 
 In-game saves and save states sync with RomM before and after you play, so you can continue on another device. If a save changed in both places, Cartridge asks which to keep and backs up the other.

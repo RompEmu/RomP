@@ -10,6 +10,7 @@ use crate::play::{self, CoreIdentity, GameOptions};
 use crate::romm::client::Error;
 use crate::saves::{self, SramOutcome};
 use crate::store::GameDetail;
+use crate::xemu::{self, Xemu};
 use crate::{GameCard, Shot};
 use slint::{Image, Model, ModelRc, VecModel};
 use std::path::{Path, PathBuf};
@@ -27,6 +28,10 @@ pub(super) struct GameState {
 
 fn load_image(path: &Path) -> Option<Image> {
     Image::load_from_path(path).ok()
+}
+
+fn playable(platform_slug: &str) -> bool {
+    core_for_platform(platform_slug).is_some() || platform_slug == xemu::PLATFORM
 }
 
 fn downloaded_path(detail: &GameDetail) -> Option<PathBuf> {
@@ -258,7 +263,7 @@ impl Controller {
                 }
             }
         }
-        let playable = core_for_platform(&detail.platform_slug).is_some();
+        let playable = playable(&detail.platform_slug);
         let busy = self.downloading_id() == Some(detail.id);
         ui.set_game_title(detail.title.clone().into());
         ui.set_game_category(
@@ -479,10 +484,13 @@ impl Controller {
             ui.set_game_status("Still syncing your saves. Try again in a moment.".into());
             return;
         }
-        let Some(core) = core_for_platform(&detail.platform_slug) else {
+        let Some(rom) = downloaded_path(&detail) else {
             return;
         };
-        let Some(rom) = downloaded_path(&detail) else {
+        if detail.platform_slug == xemu::PLATFORM {
+            return self.play_with_xemu(detail, rom);
+        }
+        let Some(core) = core_for_platform(&detail.platform_slug) else {
             return;
         };
         self.preparing.set(true);
@@ -546,6 +554,130 @@ impl Controller {
             };
             on_ui(move |c| c.launch_ready(detail, rom, core.jit, core_path, missing, sram));
         });
+    }
+
+    fn play_with_xemu(&self, detail: GameDetail, rom: PathBuf) {
+        self.preparing.set(true);
+        self.game_status(detail.id, "Getting ready…".into());
+        let http = self.shared.http.clone();
+        let client = self.client.borrow().clone();
+        let offline = self.offline.get();
+        self.shared.rt.spawn(async move {
+            let id = detail.id;
+            let xemu = Xemu::new(paths::cores_dir().join("xemu"));
+            let exe = match xemu.installed() {
+                Some(exe) => Ok(exe),
+                None => {
+                    on_ui(move |c| c.game_status(id, "Installing xemu…".into()));
+                    xemu.install(&http, xemu::RELEASES).await
+                }
+            };
+            let hdd = match exe {
+                Ok(_) => xemu.ensure_hdd_template(&http, xemu::HDD_IMAGE).await,
+                Err(ref e) => Err(e.clone()),
+            };
+            let system = paths::system_dir();
+            let mut missing = bios::missing(&detail.platform_slug, &system);
+            if !missing.is_empty() && !offline {
+                if let Some(client) = &client {
+                    if let Ok(still) = bios::ensure(
+                        client,
+                        detail.platform_id,
+                        &detail.platform_slug,
+                        &system,
+                        &AtomicBool::new(false),
+                    )
+                    .await
+                    {
+                        missing = still;
+                    }
+                }
+            }
+            let ready = exe.and_then(|exe| hdd.map(|hdd| (exe, hdd)));
+            on_ui(move |c| c.launch_xemu(detail, rom, ready, missing));
+        });
+    }
+
+    fn launch_xemu(
+        &self,
+        detail: GameDetail,
+        rom: PathBuf,
+        ready: Result<(PathBuf, PathBuf), String>,
+        missing: Vec<String>,
+    ) {
+        self.preparing.set(false);
+        let (exe, template) = match ready {
+            Ok(paths) => paths,
+            Err(e) => return self.game_status(detail.id, e),
+        };
+        if !missing.is_empty() {
+            return self.game_status(detail.id, bios::missing_message(&missing));
+        }
+        let bios = xemu::find_bios(&bios::xbox_dir(&paths::system_dir()));
+        let (Some(bootrom), Some(flash)) = (bios.bootrom, bios.flash) else {
+            return;
+        };
+        let save_dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
+        let hdd = match xemu::prepare_hdd(&template, &save_dir) {
+            Ok(hdd) => hdd,
+            Err(e) => {
+                return self.game_status(
+                    detail.id,
+                    format!("Could not set up the Xbox hard disk: {e}"),
+                )
+            }
+        };
+        let prefs = self.prefs.get();
+        let pads = self.gamepads.borrow().connected().len();
+        let config = xemu::LaunchConfig {
+            bootrom,
+            flash,
+            eeprom: save_dir.join("eeprom.bin"),
+            hdd,
+            dvd: rom.clone(),
+            screenshots: save_dir.join("screenshots"),
+            fullscreen: prefs.fullscreen,
+            sharp: prefs.sharp_pixels,
+            volume: prefs.volume,
+            ui_scale: prefs.scale_factor(),
+            keyboard: xemu::keyboard_map(&self.mappings.borrow()),
+            keyboard_port: xemu::keyboard_port(
+                self.players.borrow().player(crate::players::KEYBOARD),
+                pads,
+            ),
+        };
+        let config_path = save_dir.join("xemu.toml");
+        if let Err(e) = std::fs::write(&config_path, xemu::config_toml(&config)) {
+            return self.game_status(detail.id, format!("Could not write xemu's settings: {e}"));
+        }
+        let id = detail.id;
+        let on_exit = move |code: Option<i32>, log: Vec<String>| {
+            let _ = slint::invoke_from_event_loop(move || {
+                with_controller(|c| c.xemu_closed(id, code, log))
+            });
+        };
+        match xemu::launch(&exe, &config_path, &rom, prefs.fullscreen, on_exit) {
+            Ok(running) => {
+                *self.running.borrow_mut() = Some(play::RunningGame::External(running));
+                self.game_status(detail.id, String::new());
+                *self.playing.borrow_mut() = Some(detail);
+            }
+            Err(e) => self.game_status(detail.id, format!("Could not start xemu: {e}")),
+        }
+    }
+
+    fn xemu_closed(&self, id: i64, code: Option<i32>, log: Vec<String>) {
+        self.game_closed(None);
+        if code != Some(0) {
+            let detail = log.last().cloned().unwrap_or_default();
+            tracing::warn!("xemu exited with {code:?}:\n{}", log.join("\n"));
+            self.game_status(
+                id,
+                format!("xemu stopped unexpectedly. {detail}")
+                    .trim()
+                    .to_string(),
+            );
+        }
     }
 
     pub(super) fn game_status(&self, id: i64, text: String) {

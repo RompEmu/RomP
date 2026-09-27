@@ -30,6 +30,7 @@ mod session;
 mod storage;
 mod store;
 mod sync;
+mod xemu;
 
 use clap::Parser;
 use std::path::PathBuf;

@@ -140,6 +140,7 @@ pub fn run() -> anyhow::Result<()> {
         downloads: Arc::new(Semaphore::new(PARALLEL_DOWNLOADS)),
         cores: Arc::new(Cores::new(paths::cores_dir())),
         http: reqwest::Client::builder()
+            .user_agent(concat!("Cartridge/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(10))
             .read_timeout(Duration::from_secs(30))
             .build()?,

@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 const DC_FILES: [&str; 4] = ["dc_boot.bin", "dc_flash.bin", "naomi.zip", "awbios.zip"];
+const XEMU_DIR: &str = "xemu";
 pub const ARCADE: [&str; 6] = ["arcade", "neogeoaes", "neogeomvs", "cps1", "cps2", "cps3"];
 
 static REQUIRED: &[(&str, &[&[&str]])] = &[
@@ -37,6 +38,8 @@ static REQUIRED: &[(&str, &[&[&str]])] = &[
 pub fn placement(platform_slug: &str, file_name: &str) -> PathBuf {
     if ARCADE.contains(&platform_slug) {
         Path::new("fbneo").join(file_name)
+    } else if platform_slug == crate::xemu::PLATFORM {
+        Path::new(XEMU_DIR).join(file_name)
     } else if platform_slug == "philips-cd-i" {
         Path::new("same_cdi/bios").join(file_name)
     } else if DC_FILES.iter().any(|f| f.eq_ignore_ascii_case(file_name)) {
@@ -77,7 +80,25 @@ fn unmet(platform_slug: &str, system_dir: &Path) -> Vec<&'static [&'static str]>
         .collect()
 }
 
+pub fn xbox_dir(system_dir: &Path) -> PathBuf {
+    system_dir.join(XEMU_DIR)
+}
+
 pub fn missing(platform_slug: &str, system_dir: &Path) -> Vec<String> {
+    if platform_slug == crate::xemu::PLATFORM {
+        let found = crate::xemu::find_bios(&xbox_dir(system_dir));
+        return [
+            (found.bootrom.is_none(), "the Xbox boot ROM (mcpx_1.0.bin)"),
+            (
+                found.flash.is_none(),
+                "an Xbox BIOS such as Complex_4627.bin",
+            ),
+        ]
+        .into_iter()
+        .filter(|(absent, _)| *absent)
+        .map(|(_, name)| name.to_string())
+        .collect();
+    }
     unmet(platform_slug, system_dir)
         .into_iter()
         .map(join_names)
@@ -165,6 +186,21 @@ mod tests {
     use crate::romm::client::tests::base_of;
     use wiremock::matchers::{method, path, query_param, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn xbox_needs_a_boot_rom_and_a_bios_of_the_right_sizes() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            placement("xbox", "mcpx_1.0.bin"),
+            PathBuf::from("xemu/mcpx_1.0.bin")
+        );
+        assert_eq!(missing("xbox", dir.path()).len(), 2);
+        std::fs::create_dir_all(dir.path().join("xemu")).unwrap();
+        std::fs::write(dir.path().join("xemu/mcpx_1.0.bin"), vec![0u8; 512]).unwrap();
+        assert_eq!(missing("xbox", dir.path()).len(), 1);
+        std::fs::write(dir.path().join("xemu/bios.bin"), vec![0u8; 262_144]).unwrap();
+        assert!(missing("xbox", dir.path()).is_empty());
+    }
 
     #[test]
     fn dreamcast_files_go_under_dc() {

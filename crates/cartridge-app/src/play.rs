@@ -41,18 +41,28 @@ pub struct GameOptions {
     pub save_ports: SavePorts,
 }
 
-pub struct RunningGame {
+pub struct CoreGame {
     game: Rc<Game>,
     _timer: Timer,
 }
 
+pub enum RunningGame {
+    Core(CoreGame),
+    External(crate::xemu::Running),
+}
+
 impl RunningGame {
     pub fn wait_exit(&self, timeout: Duration) -> bool {
-        self.game.session.borrow().wait_exit(timeout)
+        match self {
+            Self::Core(core) => core.game.session.borrow().wait_exit(timeout),
+            Self::External(running) => running.wait_exit(timeout),
+        }
     }
 
     pub fn apply_prefs(&self, prefs: &Preferences) {
-        self.game.apply_prefs(prefs);
+        if let Self::Core(core) = self {
+            core.game.apply_prefs(prefs);
+        }
     }
 }
 
@@ -762,10 +772,10 @@ pub fn launch(
             position.y,
         ));
     }
-    Ok(RunningGame {
+    Ok(RunningGame::Core(CoreGame {
         game,
         _timer: timer,
-    })
+    }))
 }
 
 fn show_frame(window: &GameWindow, rgba: &[u8], width: u32, height: u32, aspect: f32) {
