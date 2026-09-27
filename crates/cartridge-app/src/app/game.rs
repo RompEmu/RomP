@@ -1,5 +1,5 @@
 use super::save_sync::PendingLaunch;
-use super::{on_ui, with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY};
+use super::{on_ui, with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::bios;
 use crate::cores::{core_for_platform, BUILDBOT};
 use crate::details;
@@ -341,8 +341,11 @@ impl Controller {
         ui.set_has_game_cover(true);
     }
 
-    pub(super) fn leave_game_page(&self) {
-        if self.ui().is_some_and(|ui| ui.get_screen() == SCREEN_GAME) {
+    pub(super) fn leave_page(&self) {
+        if self
+            .ui()
+            .is_some_and(|ui| matches!(ui.get_screen(), SCREEN_GAME | SCREEN_SETTINGS))
+        {
             self.back_to_library();
         }
     }

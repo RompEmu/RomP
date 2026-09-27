@@ -747,12 +747,14 @@ pub fn launch(
 
     let ui = game.primary();
     ui.show()?;
+    crate::scale::track(ui);
     if opts.prefs.fullscreen {
         ui.window().set_fullscreen(true);
         ui.set_fullscreen(true);
     }
     if let Some(window) = game.windows.get(1) {
         window.show()?;
+        crate::scale::track(window);
         let position = ui.window().position();
         let width = ui.window().size().width as i32;
         window.window().set_position(slint::PhysicalPosition::new(

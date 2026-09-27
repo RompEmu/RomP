@@ -380,7 +380,7 @@ component Library inherits Rectangle {
     in property <image> app-icon;
     in property <bool> has-app-icon;
     callback open-about();
-    in property <bool> game-open;
+    in property <bool> page-open;
     public function focus-search() { search-field.focus(); }
     in property <bool> compact;
     in property <string> user-initial;
@@ -569,7 +569,7 @@ component Library inherits Rectangle {
         Rectangle {
             horizontal-stretch: 1;
             Rectangle {
-                visible: !root.game-open;
+                visible: !root.page-open;
                 VerticalLayout {
                     padding-top: 18px;
                     padding-left: 20px;
@@ -668,6 +668,50 @@ component SectionTitle inherits Text {
     color: Theme.text;
 }
 
+component Breadcrumb inherits Rectangle {
+    in property <string> back-label;
+    in property <string> current;
+    callback back();
+    vertical-stretch: 0;
+    height: row.preferred-height;
+    row := HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 20px;
+        padding-top: 14px;
+        padding-bottom: 10px;
+        spacing: 4px;
+        IconButton { icon: @image-url("icons/back.svg"); tooltip: @tr("Back"); clicked => { root.back(); } }
+        Rectangle {
+            width: crumb-text.preferred-width + 16px;
+            height: 32px;
+            border-radius: 6px;
+            background: crumb-touch.has-hover ? Theme.hover : transparent;
+            accessible-role: button;
+            accessible-label: root.back-label;
+            accessible-action-default => { root.back(); }
+            crumb-text := Text {
+                text: root.back-label;
+                font-size: Theme.font-body;
+                color: crumb-touch.has-hover ? Theme.text-strong : Theme.text-secondary;
+            }
+            crumb-touch := TouchArea { mouse-cursor: pointer; clicked => { root.back(); } }
+            crumb-keys := KeyActivator { activate => { root.back(); } }
+            if crumb-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
+        }
+        Text { text: "›"; font-size: Theme.font-subtitle; color: Theme.text-subtle; vertical-alignment: center; }
+        Text {
+            text: root.current;
+            font-size: Theme.font-body;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            min-width: 40px;
+        }
+    }
+}
+
 component GamePage inherits FocusScope {
     in property <string> back-label;
     in property <string> title;
@@ -729,42 +773,10 @@ component GamePage inherits FocusScope {
     }
 
     VerticalLayout {
-        HorizontalLayout {
-            vertical-stretch: 0;
-            padding-left: 16px;
-            padding-right: 20px;
-            padding-top: 14px;
-            padding-bottom: 10px;
-            spacing: 4px;
-            IconButton { icon: @image-url("icons/back.svg"); tooltip: @tr("Back"); clicked => { root.back(); } }
-            Rectangle {
-                width: crumb-text.preferred-width + 16px;
-                height: 32px;
-                border-radius: 6px;
-                background: crumb-touch.has-hover ? Theme.hover : transparent;
-                accessible-role: button;
-                accessible-label: root.back-label;
-                accessible-action-default => { root.back(); }
-                crumb-text := Text {
-                    text: root.back-label;
-                    font-size: Theme.font-body;
-                    color: crumb-touch.has-hover ? Theme.text-strong : Theme.text-secondary;
-                }
-                crumb-touch := TouchArea { mouse-cursor: pointer; clicked => { root.back(); } }
-                crumb-keys := KeyActivator { activate => { root.back(); } }
-                if crumb-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
-            }
-            Text { text: "›"; font-size: Theme.font-subtitle; color: Theme.text-subtle; vertical-alignment: center; }
-            Text {
-                text: root.title;
-                font-size: Theme.font-body;
-                font-weight: 600;
-                color: Theme.text;
-                vertical-alignment: center;
-                overflow: elide;
-                horizontal-stretch: 1;
-                min-width: 40px;
-            }
+        Breadcrumb {
+            back-label: root.back-label;
+            current: root.title;
+            back => { root.back(); }
         }
         page := ScrollView {
             vertical-stretch: 1;
@@ -1012,27 +1024,6 @@ component GamePage inherits FocusScope {
     }
 }
 
-component NavItem inherits Rectangle {
-    in property <string> label;
-    in property <bool> selected;
-    callback clicked();
-    height: 34px;
-    border-radius: 6px;
-    background: root.selected ? Theme.surface-selected : touch.has-hover ? Theme.surface-muted : transparent;
-    accessible-role: tab;
-    accessible-label: root.label;
-    accessible-item-selectable: true;
-    accessible-item-selected: root.selected;
-    accessible-action-default => { root.clicked(); }
-    touch := TouchArea { clicked => { root.clicked(); } }
-    keys := KeyActivator { activate => { root.clicked(); } }
-    if keys.has-focus: FocusRing { border-radius: root.border-radius; }
-    HorizontalLayout {
-        padding-left: 12px;
-        Text { text: root.label; vertical-alignment: center; font-weight: root.selected ? 600 : 400; }
-    }
-}
-
 component Panel inherits Rectangle {
     clip: true;
     background: Theme.surface-raised;
@@ -1075,15 +1066,44 @@ component SettingRow inherits Rectangle {
 }
 
 component SectionHeading inherits VerticalLayout {
-    in property <string> title;
     in property <string> subtitle;
-    spacing: 4px;
     padding-bottom: 4px;
-    Text { text: root.title; font-size: Theme.font-heading; font-weight: 700; }
-    if root.subtitle != "": Text { text: root.subtitle; color: Theme.text-muted; wrap: word-wrap; }
+    Text { text: root.subtitle; font-size: Theme.font-body-large; color: Theme.text-secondary; wrap: word-wrap; }
 }
 
-component SettingsPage inherits Rectangle {
+component SettingsTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked();
+    width: tab-text.preferred-width + 24px;
+    height: 36px;
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => { root.clicked(); }
+    touch := TouchArea { clicked => { root.clicked(); } }
+    keys := KeyActivator { activate => { root.clicked(); } }
+    if keys.has-focus: FocusRing { border-radius: Theme.radius-small; }
+    tab-text := Text {
+        text: root.label;
+        font-size: Theme.font-body-large;
+        font-weight: root.selected ? 600 : 500;
+        color: root.selected ? Theme.text-strong : touch.has-hover ? Theme.text : Theme.text-muted;
+    }
+    Rectangle {
+        y: parent.height - self.height;
+        x: 12px;
+        width: parent.width - 24px;
+        height: 2px;
+        border-radius: 1px;
+        background: root.selected ? Theme.accent : transparent;
+    }
+}
+
+component SettingsPage inherits FocusScope {
+    in property <string> back-label;
+    in property <bool> remap-open;
     in-out property <int> section;
     in property <string> user;
     in property <string> server;
@@ -1103,16 +1123,7 @@ component SettingsPage inherits Rectangle {
     in-out property <bool> nintendo-labels;
     in-out property <bool> stick-dpad;
     callback controller-options-changed();
-    in property <bool> remap-open;
-    in property <string> remap-title;
-    in property <string> remap-hint;
-    in property <bool> remap-waiting;
-    in property <[RemapRow]> remap-rows;
     callback customize(string);
-    callback remap-pick(int);
-    callback remap-key(string);
-    callback remap-reset();
-    callback remap-close();
     callback back();
     callback sign-out();
     callback pair-again();
@@ -1121,47 +1132,54 @@ component SettingsPage inherits Rectangle {
     callback show-folder();
     callback section-changed(int);
 
+    init => { self.focus(); }
+    key-pressed(event) => {
+        if event.text == Key.Escape && !root.remap-open {
+            root.back();
+            return accept;
+        }
+        return reject;
+    }
+
     VerticalLayout {
-        HorizontalLayout {
+        Breadcrumb {
+            back-label: root.back-label;
+            current: @tr("Settings");
+            back => { root.back(); }
+        }
+        VerticalLayout {
             vertical-stretch: 0;
             padding-left: 24px;
             padding-right: 24px;
-            padding-top: 16px;
-            padding-bottom: 8px;
-            alignment: start;
-            Button { text: @tr("← Library"); clicked => { root.back(); } }
-        }
-        HorizontalLayout {
-            vertical-stretch: 1;
-            VerticalLayout {
-                width: 220px;
-                padding-left: 24px;
-                padding-right: 16px;
-                padding-top: 16px;
-                spacing: 2px;
+            spacing: 10px;
+            Text { text: @tr("Settings"); font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; }
+            HorizontalLayout {
                 alignment: start;
-                Text { text: @tr("Settings"); font-size: Theme.font-body; font-weight: 700; color: Theme.text-muted; letter-spacing: 1px; }
-                Rectangle { height: 8px; }
-                for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage")]: NavItem {
+                for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage")]: SettingsTab {
                     label: label;
                     selected: root.section == i;
                     clicked => { root.section = i; root.section-changed(i); }
                 }
             }
+            Rectangle { height: 1px; background: Theme.divider; }
+        }
+        HorizontalLayout {
+            vertical-stretch: 1;
             content := ScrollView {
                 horizontal-stretch: 1;
                 content-width: self.visible-width;
                 content-height: body.preferred-height;
                 body := VerticalLayout {
+                    x: 0;
                     width: min(content.visible-width, 760px);
-                    padding-left: 8px;
+                    padding-left: 24px;
                     padding-right: 24px;
-                    padding-top: 16px;
+                    padding-top: 20px;
                     padding-bottom: 32px;
                     spacing: 16px;
                     if root.section == 0: VerticalLayout {
                         spacing: 16px;
-                        SectionHeading { title: @tr("General"); subtitle: @tr("How games behave on this computer."); }
+                        SectionHeading { subtitle: @tr("How games behave on this computer."); }
                         Panel {
                             SettingRow {
                                 label: @tr("Pause when the game window isn't focused");
@@ -1199,6 +1217,7 @@ component SettingsPage inherits Rectangle {
                                 }
                             }
                             SettingRow {
+                                divider: true;
                                 label: @tr("Interface size");
                                 detail: @tr("Makes text and controls in this window larger.");
                                 ComboBox {
@@ -1212,7 +1231,7 @@ component SettingsPage inherits Rectangle {
                     }
                     if root.section == 1: VerticalLayout {
                         spacing: 16px;
-                        SectionHeading { title: @tr("Account"); subtitle: @tr("Your RomM server and this device's access to it."); }
+                        SectionHeading { subtitle: @tr("Your RomM server and this device's access to it."); }
                         Panel {
                             SettingRow { label: @tr("Signed in as"); detail: root.user != "" ? root.user : @tr("Unknown"); }
                             SettingRow {
@@ -1237,7 +1256,6 @@ component SettingsPage inherits Rectangle {
                     if root.section == 2: VerticalLayout {
                         spacing: 16px;
                         SectionHeading {
-                            title: @tr("Players");
                             subtitle: @tr("Choose which player each controller plays as. Press a button on a controller to find it here.");
                         }
                         Panel {
@@ -1288,7 +1306,6 @@ component SettingsPage inherits Rectangle {
                     if root.section == 3: VerticalLayout {
                         spacing: 16px;
                         SectionHeading {
-                            title: @tr("Storage");
                             subtitle: root.storage-busy ? @tr("Measuring…") : @tr("Space used on this computer: {}.", root.storage-total);
                         }
                         Panel {
@@ -1309,62 +1326,70 @@ component SettingsPage inherits Rectangle {
             }
         }
     }
+}
 
-    if root.remap-open: Rectangle {
-        background: Theme.scrim;
-        TouchArea { }
-        Rectangle {
-            width: 480px;
-            height: min(parent.height - 64px, remap-box.preferred-height);
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            background: Theme.surface-raised;
-            border-radius: 12px;
-            border-width: 1px;
-            border-color: Theme.surface-selected;
-            clip: true;
-            remap-keys := FocusScope {
-                key-pressed(event) => {
-                    if root.remap-waiting {
-                        root.remap-key(event.text);
-                        return accept;
-                    }
-                    return reject;
+component RemapDialog inherits Rectangle {
+    in property <string> title;
+    in property <string> hint;
+    in property <bool> waiting;
+    in property <[RemapRow]> rows;
+    callback pick(int);
+    callback key(string);
+    callback reset();
+    callback close();
+    background: Theme.scrim;
+    TouchArea { }
+    Rectangle {
+        width: 480px;
+        height: min(parent.height - 64px, remap-box.preferred-height);
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: Theme.surface-raised;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: Theme.surface-selected;
+        clip: true;
+        remap-keys := FocusScope {
+            key-pressed(event) => {
+                if root.waiting {
+                    root.key(event.text);
+                    return accept;
                 }
-                remap-box := VerticalLayout {
-                    padding: 20px;
-                    spacing: 12px;
-                    Text { text: root.remap-title; font-size: Theme.font-subtitle; font-weight: 700; }
-                    Text { text: root.remap-hint; color: Theme.text-secondary; wrap: word-wrap; }
-                    ScrollView {
-                        vertical-stretch: 1;
-                        min-height: 200px;
-                        preferred-height: remap-list.preferred-height;
-                        content-width: self.visible-width;
-                        content-height: remap-list.preferred-height;
-                        remap-list := VerticalLayout {
-                            width: parent.width;
-                            for row[i] in root.remap-rows: SettingRow {
-                                divider: i > 0;
-                                label: row.name;
-                                highlight: row.waiting;
-                                Button {
-                                    width: 190px;
-                                    text: row.waiting ? @tr("Press…") : row.binding;
-                                    clicked => {
-                                        root.remap-pick(i);
-                                        remap-keys.focus();
-                                    }
+                return reject;
+            }
+            remap-box := VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+                Text { text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
+                Text { text: root.hint; color: Theme.text-secondary; wrap: word-wrap; }
+                ScrollView {
+                    vertical-stretch: 1;
+                    min-height: 200px;
+                    preferred-height: remap-list.preferred-height;
+                    content-width: self.visible-width;
+                    content-height: remap-list.preferred-height;
+                    remap-list := VerticalLayout {
+                        width: parent.width;
+                        for row[i] in root.rows: SettingRow {
+                            divider: i > 0;
+                            label: row.name;
+                            highlight: row.waiting;
+                            Button {
+                                width: 190px;
+                                text: row.waiting ? @tr("Press…") : row.binding;
+                                clicked => {
+                                    root.pick(i);
+                                    remap-keys.focus();
                                 }
                             }
                         }
                     }
-                    HorizontalLayout {
-                        spacing: 10px;
-                        Button { text: @tr("Reset to default"); clicked => { root.remap-reset(); } }
-                        Rectangle { horizontal-stretch: 1; }
-                        Button { text: @tr("Done"); primary: true; clicked => { root.remap-close(); } }
-                    }
+                }
+                HorizontalLayout {
+                    spacing: 10px;
+                    Button { text: @tr("Reset to default"); clicked => { root.reset(); } }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button { text: @tr("Done"); primary: true; clicked => { root.close(); } }
                 }
             }
         }
@@ -1620,7 +1645,7 @@ export component AppWindow inherits Window {
                 shortcut: @keys(Control + F);
                 enabled: root.screen == 2 || root.screen == 3;
                 activated => {
-                    if root.screen == 3 { root.back-to-library(); }
+                    if root.screen != 2 { root.back-to-library(); }
                     library.focus-search();
                 }
             }
@@ -1666,9 +1691,9 @@ export component AppWindow inherits Window {
         retry => { root.retry-pairing(); }
     }
     library := Library {
-        visible: root.screen == 2 || root.screen == 3;
+        visible: root.screen >= 2 && root.screen <= 4;
         compact: root.narrow;
-        game-open: root.screen == 3;
+        page-open: root.screen == 3 || root.screen == 4;
         user-label: root.user-label;
         sidebar: root.sidebar;
         selected-key: root.selected-key;
@@ -1736,44 +1761,47 @@ export component AppWindow inherits Window {
             toggle-membership(key, on) => { root.toggle-membership(key, on); }
             new-collection => { root.new-collection-with-game(); }
         }
+        if root.screen == 4: SettingsPage {
+            back-label: root.heading;
+            remap-open: root.remap-open;
+            section <=> root.settings-section;
+            user: root.user-label;
+            server: root.settings-server;
+            offline: root.offline;
+            devices: root.settings-devices;
+            keys: root.settings-keys;
+            storage: root.settings-storage;
+            storage-total: root.settings-storage-total;
+            storage-busy: root.settings-storage-busy;
+            pause-unfocused <=> root.pref-pause-unfocused;
+            resume <=> root.pref-resume;
+            fullscreen <=> root.pref-fullscreen;
+            sharp <=> root.pref-sharp;
+            volume <=> root.pref-volume;
+            ui-scale <=> root.pref-ui-scale;
+            prefs-changed => { root.prefs-changed(); }
+            nintendo-labels <=> root.pref-nintendo-labels;
+            stick-dpad <=> root.pref-stick-dpad;
+            controller-options-changed => { root.controller-options-changed(); }
+            customize(key) => { root.customize(key); }
+            back => { root.back-to-library(); }
+            sign-out => { root.sign-out(); }
+            pair-again => { root.pair-again(); }
+            assign(key, player) => { root.assign-player(key, player); }
+            clear-images => { root.clear-images(); }
+            show-folder => { root.show-folder(); }
+            section-changed(i) => { root.settings-section-changed(i); }
+        }
     }
-    if root.screen == 4: SettingsPage {
-        section <=> root.settings-section;
-        user: root.user-label;
-        server: root.settings-server;
-        offline: root.offline;
-        devices: root.settings-devices;
-        keys: root.settings-keys;
-        storage: root.settings-storage;
-        storage-total: root.settings-storage-total;
-        storage-busy: root.settings-storage-busy;
-        pause-unfocused <=> root.pref-pause-unfocused;
-        resume <=> root.pref-resume;
-        fullscreen <=> root.pref-fullscreen;
-        sharp <=> root.pref-sharp;
-        volume <=> root.pref-volume;
-        ui-scale <=> root.pref-ui-scale;
-        prefs-changed => { root.prefs-changed(); }
-        nintendo-labels <=> root.pref-nintendo-labels;
-        stick-dpad <=> root.pref-stick-dpad;
-        controller-options-changed => { root.controller-options-changed(); }
-        remap-open: root.remap-open;
-        remap-title: root.remap-title;
-        remap-hint: root.remap-hint;
-        remap-waiting: root.remap-waiting;
-        remap-rows: root.remap-rows;
-        customize(key) => { root.customize(key); }
-        remap-pick(i) => { root.remap-pick(i); }
-        remap-key(text) => { root.remap-key(text); }
-        remap-reset => { root.remap-reset(); }
-        remap-close => { root.remap-close(); }
-        back => { root.back-to-library(); }
-        sign-out => { root.sign-out(); }
-        pair-again => { root.pair-again(); }
-        assign(key, player) => { root.assign-player(key, player); }
-        clear-images => { root.clear-images(); }
-        show-folder => { root.show-folder(); }
-        section-changed(i) => { root.settings-section-changed(i); }
+    if root.remap-open: RemapDialog {
+        title: root.remap-title;
+        hint: root.remap-hint;
+        waiting: root.remap-waiting;
+        rows: root.remap-rows;
+        pick(i) => { root.remap-pick(i); }
+        key(text) => { root.remap-key(text); }
+        reset => { root.remap-reset(); }
+        close => { root.remap-close(); }
     }
     if root.pad-hints != "" && !root.dialog-open: Rectangle {
         x: parent.width - self.width - 16px;

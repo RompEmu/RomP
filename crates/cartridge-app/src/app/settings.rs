@@ -1,4 +1,4 @@
-use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY};
+use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::details::human_size;
 use crate::mapping::{self, BUTTONS};
 use crate::players::KEYBOARD;
@@ -8,7 +8,6 @@ use crate::{paths, storage, DeviceRow, KeyHint, StorageRow};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::Duration;
 
-const SCREEN_SETTINGS: i32 = 4;
 const SECTION_PLAYERS: i32 = 2;
 const SECTION_STORAGE: i32 = 3;
 
@@ -86,7 +85,7 @@ impl Controller {
             return;
         }
         if prefs.ui_scale != self.prefs.get().ui_scale {
-            crate::scale::set(&ui, prefs.scale_factor());
+            crate::scale::set_factor(prefs.scale_factor());
         }
         self.prefs.set(prefs);
         self.shared

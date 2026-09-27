@@ -198,13 +198,20 @@ pub fn run() -> anyhow::Result<()> {
     ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     controller.start_navigation();
     controller.start();
+    crate::scale::set_factor(prefs.scale_factor());
     let weak = ui.as_weak();
     slint::Timer::single_shot(Duration::ZERO, move || {
-        if let Some(ui) = weak.upgrade() {
-            crate::scale::set(&ui, prefs.scale_factor());
+        let Some(ui) = weak.upgrade() else { return };
+        match ui.show() {
+            Ok(()) => crate::scale::track(&ui),
+            Err(e) => {
+                tracing::error!("could not open the window: {e}");
+                let _ = slint::quit_event_loop();
+            }
         }
     });
-    ui.run()?;
+    slint::run_event_loop()?;
+    ui.hide()?;
     CONTROLLER.with(|c| c.borrow_mut().take());
     Ok(())
 }
@@ -238,7 +245,7 @@ impl Controller {
         ui.on_select(|key| {
             with_controller(|c| {
                 c.select(key.to_string());
-                c.leave_game_page();
+                c.leave_page();
             })
         });
         ui.on_toggle_section(|key| with_controller(|c| c.toggle_section(key.to_string())));
