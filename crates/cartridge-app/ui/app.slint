@@ -1423,34 +1423,44 @@ component Dialog inherits Rectangle {
     callback cancelled();
     background: Theme.scrim;
     TouchArea { }
-    Rectangle {
-        width: 380px;
-        height: box.preferred-height;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        background: Theme.surface-raised;
-        border-radius: 10px;
-        border-width: 1px;
-        border-color: Theme.surface-selected;
-        box := VerticalLayout {
-            padding: 20px;
-            spacing: 12px;
-            Text { text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
-            if root.message != "": Text { text: root.message; color: Theme.text-secondary; wrap: word-wrap; }
-            if root.asks-name: LineEdit {
-                text <=> root.value;
-                accepted => { if root.value != "" { root.accepted(root.value); } }
-                init => { self.focus(); }
+    FocusScope {
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
             }
-            HorizontalLayout {
-                alignment: end;
-                spacing: 10px;
-                Button { text: @tr("Cancel"); clicked => { root.cancelled(); } }
-                Button {
-                    text: root.confirm-label;
-                    primary: !root.destructive;
-                    enabled: !root.asks-name || root.value != "";
-                    clicked => { root.accepted(root.value); }
+            return reject;
+        }
+        Rectangle {
+            width: 380px;
+            height: box.preferred-height;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: Theme.surface-raised;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: Theme.surface-selected;
+            box := VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+                Text { text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
+                if root.message != "": Text { text: root.message; color: Theme.text-secondary; wrap: word-wrap; }
+                if root.asks-name: LineEdit {
+                    text <=> root.value;
+                    accepted => { if root.value != "" { root.accepted(root.value); } }
+                    init => { self.focus(); }
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+                    Button { text: @tr("Cancel"); clicked => { root.cancelled(); } }
+                    Button {
+                        text: root.confirm-label;
+                        primary: !root.destructive;
+                        enabled: !root.asks-name || root.value != "";
+                        clicked => { root.accepted(root.value); }
+                    }
                 }
             }
         }
