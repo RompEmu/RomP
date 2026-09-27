@@ -42,4 +42,5 @@ jobs:
           path: |
             dist/*.zip
             dist/*.tar.gz
+            dist/*.sha512
           if-no-files-found: error

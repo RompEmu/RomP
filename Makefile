@@ -20,9 +20,14 @@ else
 PLATFORM := linux
 endif
 
+define checksum
+cd $(DIST) && shasum -a 512 $(notdir $(1)) > $(notdir $(1)).sha512
+endef
+
 define zip_app
 rm -f $(MACOS_ZIP)
 ditto -c -k --keepParent $(APP) $(MACOS_ZIP)
+$(call checksum,$(MACOS_ZIP))
 endef
 
 .PHONY: build app dist dist-macos dist-linux clean
@@ -56,6 +61,7 @@ dist-linux: build
 	cp $(BIN)/romp $(BIN)/romp-runner README.md $(DIST)/$(LINUX_NAME)/
 	tar -czf $(LINUX_TAR) -C $(DIST) $(LINUX_NAME)
 	rm -rf $(DIST)/$(LINUX_NAME)
+	$(call checksum,$(LINUX_TAR))
 
 clean:
 	rm -rf $(DIST)
