@@ -1,29 +1,134 @@
 import { Theme } from "theme.slint";
 export struct PortRow { label: string, device: string }
 
-component MenuButton inherits Rectangle {
+component KeyCap inherits Rectangle {
     in property <string> text;
-    in property <bool> primary;
+    in property <bool> on-accent;
+    height: 20px;
+    width: max(22px, cap-text.preferred-width + 10px);
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: root.on-accent ? Theme.accent-foreground.with-alpha(0.35) : Theme.border-subtle;
+    background: root.on-accent ? Theme.accent-foreground.with-alpha(0.08) : Theme.hover;
+    cap-text := Text {
+        text: root.text;
+        font-size: Theme.font-caption;
+        font-weight: 600;
+        color: root.on-accent ? Theme.accent-foreground.with-alpha(0.75) : Theme.text-muted;
+    }
+}
+
+component MenuRow inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <string> shortcut;
     in property <bool> focused;
+    in property <bool> danger;
     callback clicked();
-    height: 40px;
-    border-radius: 8px;
-    border-width: root.focused ? 2px : 0px;
-    border-color: Theme.accent-text;
-    background: root.primary
-        ? (touch.pressed ? Theme.accent-pressed : touch.has-hover ? Theme.accent-hover : Theme.accent)
-        : (touch.pressed ? Theme.surface-raised : touch.has-hover ? Theme.surface-selected : Theme.surface-muted);
+    height: 38px;
+    border-radius: Theme.radius;
+    background: touch.pressed ? Theme.pressed : root.focused ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+    border-width: root.focused ? 1px : 0px;
+    border-color: Theme.accent;
     animate background { duration: 100ms; }
     accessible-role: button;
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
-    Text {
-        text: root.text;
-        color: Theme.text-strong;
-        font-size: Theme.font-body-large;
-        font-weight: root.primary ? 600 : 500;
-    }
     touch := TouchArea { clicked => { root.clicked(); } }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 10px;
+        spacing: 12px;
+        Image {
+            source: root.icon;
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            colorize: root.danger ? Theme.danger : root.focused || touch.has-hover ? Theme.text-strong : Theme.text-secondary;
+        }
+        Text {
+            text: root.text;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+            font-size: Theme.font-body-large;
+            font-weight: root.focused ? 600 : 500;
+            color: root.danger ? Theme.danger : Theme.text-strong;
+        }
+        if root.shortcut != "": VerticalLayout {
+            alignment: center;
+            KeyCap { text: root.shortcut; }
+        }
+    }
+}
+
+component StepButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    width: 28px;
+    height: 28px;
+    border-radius: Theme.radius-small;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    Text { text: root.text; font-size: Theme.font-title; color: touch.has-hover ? Theme.text-strong : Theme.text-secondary; }
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+component Stepper inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> focused;
+    callback step(int);
+    height: 38px;
+    border-radius: Theme.radius;
+    background: root.focused ? Theme.accent-soft : transparent;
+    border-width: root.focused ? 1px : 0px;
+    border-color: Theme.accent;
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 5px;
+        spacing: 4px;
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+            font-size: Theme.font-body-large;
+            color: Theme.text-secondary;
+        }
+        VerticalLayout {
+            alignment: center;
+            StepButton { text: "‹"; clicked => { root.step(-1); } }
+        }
+        Text {
+            text: root.value;
+            min-width: 24px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            font-size: Theme.font-body-large;
+            font-weight: 600;
+            color: Theme.text-strong;
+        }
+        VerticalLayout {
+            alignment: center;
+            StepButton { text: "›"; clicked => { root.step(1); } }
+        }
+    }
+}
+
+component MenuDivider inherits Rectangle {
+    height: 9px;
+    Rectangle { height: 1px; background: Theme.divider; }
+}
+
+component MenuSection inherits Text {
+    font-size: Theme.font-caption;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: Theme.text-muted;
 }
 
 component GameMenu inherits Rectangle {
@@ -44,69 +149,165 @@ component GameMenu inherits Rectangle {
     callback open-controllers();
     callback quit();
 
+    property <bool> keyboard: root.menu-key == "Esc";
+
     background: Theme.scrim;
     TouchArea { }
     Rectangle {
-        width: 340px;
+        width: 360px;
         height: menu.preferred-height;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: Theme.surface-raised;
-        border-radius: 14px;
+        border-radius: 16px;
         border-width: 1px;
         border-color: Theme.border-subtle;
-        drop-shadow-blur: 24px;
+        drop-shadow-blur: 32px;
         drop-shadow-color: Theme.shadow;
         menu := VerticalLayout {
-            padding: 22px;
-            spacing: 10px;
-            Text { text: root.name; color: Theme.text-strong; font-size: Theme.font-subtitle; font-weight: 700; overflow: elide; }
-            Text { text: root.paused ? @tr("Paused") : @tr("Running behind this menu"); color: Theme.text-muted; font-size: Theme.font-body; }
-            Rectangle { height: 4px; }
-            MenuButton { text: @tr("Resume"); primary: true; focused: root.focused-item == 0; clicked => { root.resume(); } }
-            MenuButton { text: root.paused ? @tr("Play") : @tr("Pause"); focused: root.focused-item == 1; clicked => { root.toggle-pause(); } }
-            Rectangle { height: 1px; background: Theme.hover; }
-            HorizontalLayout {
-                spacing: 8px;
-                Text { text: @tr("Save slot"); color: Theme.text-secondary; vertical-alignment: center; horizontal-stretch: 1; }
-                MenuButton { width: 40px; text: "‹"; clicked => { root.step-slot(-1); } }
-                Rectangle {
-                    width: 36px;
-                    border-radius: 8px;
-                    border-width: root.focused-item == 2 ? 2px : 0px;
-                    border-color: Theme.accent-text;
-                    Text { text: root.slot; color: Theme.text-strong; font-size: Theme.font-subtitle; font-weight: 700; }
-                }
-                MenuButton { width: 40px; text: "›"; clicked => { root.step-slot(1); } }
-            }
-            HorizontalLayout {
-                spacing: 8px;
-                MenuButton { text: @tr("Save state"); focused: root.focused-item == 3; clicked => { root.save-state(); } }
-                MenuButton { text: @tr("Load state"); focused: root.focused-item == 4; clicked => { root.load-state(); } }
-            }
-            Rectangle { height: 1px; background: Theme.hover; }
-            MenuButton { text: root.fullscreen ? @tr("Exit full screen") : @tr("Full screen"); focused: root.focused-item == 5; clicked => { root.toggle-fullscreen(); } }
-            MenuButton { text: @tr("Controllers…"); focused: root.focused-item == 6; clicked => { root.open-controllers(); } }
-            for port[i] in root.ports: HorizontalLayout {
-                spacing: 8px;
-                Text { text: port.label; color: Theme.text-secondary; vertical-alignment: center; width: 56px; }
-                MenuButton { width: 40px; text: "‹"; clicked => { root.cycle-port(i, -1); } }
-                Rectangle {
-                    horizontal-stretch: 1;
-                    border-radius: 8px;
-                    background: Theme.surface-muted;
-                    border-width: root.focused-item == 7 + i ? 2px : 0px;
-                    border-color: Theme.accent-text;
-                    Text { text: port.device; color: Theme.text-strong; font-size: Theme.font-body-large; overflow: elide; }
-                }
-                MenuButton { width: 40px; text: "›"; clicked => { root.cycle-port(i, 1); } }
-            }
-            MenuButton { text: @tr("Quit game"); focused: root.focused-item == 7 + root.ports.length; clicked => { root.quit(); } }
+            padding: 14px;
+            padding-top: 18px;
+            spacing: 2px;
             VerticalLayout {
-                padding-top: 4px;
-                spacing: 2px;
-                Text { text: root.menu-key == "Esc" ? @tr("Esc or Guide resume  ·  P pause  ·  F11 full screen") : @tr("F12 or Guide resume  ·  your keyboard goes to the game"); color: Theme.text-subtle; font-size: Theme.font-caption; horizontal-alignment: center; }
-                if root.menu-key == "Esc": Text { text: @tr("F5 save  ·  F7 load  ·  F6 next slot"); color: Theme.text-subtle; font-size: Theme.font-caption; horizontal-alignment: center; }
+                padding-left: 6px;
+                padding-right: 6px;
+                padding-bottom: 12px;
+                spacing: 4px;
+                Text {
+                    text: root.name;
+                    color: Theme.text-strong;
+                    font-size: Theme.font-title;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 7px;
+                            height: 7px;
+                            border-radius: 3.5px;
+                            background: root.paused ? Theme.warning : Theme.success;
+                        }
+                    }
+                    Text {
+                        text: root.paused ? @tr("Paused") : @tr("Running behind this menu");
+                        color: Theme.text-muted;
+                        font-size: Theme.font-small;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+            Rectangle {
+                height: 42px;
+                border-radius: Theme.radius;
+                background: resume-touch.pressed ? Theme.accent-pressed : resume-touch.has-hover ? Theme.accent-hover : Theme.accent;
+                border-width: root.focused-item == 0 ? 2px : 0px;
+                border-color: Theme.accent-text;
+                accessible-role: button;
+                accessible-label: @tr("Resume");
+                accessible-action-default => { root.resume(); }
+                resume-touch := TouchArea { clicked => { root.resume(); } }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 10px;
+                    spacing: 12px;
+                    Image {
+                        source: @image-url("icons/play.svg");
+                        width: 18px;
+                        height: 18px;
+                        y: (parent.height - self.height) / 2;
+                        colorize: Theme.accent-foreground;
+                    }
+                    Text {
+                        text: @tr("Resume");
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        font-size: Theme.font-body-large;
+                        font-weight: 700;
+                        color: Theme.accent-foreground;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        KeyCap { text: root.menu-key; on-accent: true; }
+                    }
+                }
+            }
+            Rectangle { height: 4px; }
+            MenuRow {
+                text: root.paused ? @tr("Play") : @tr("Pause");
+                icon: root.paused ? @image-url("icons/play.svg") : @image-url("icons/pause.svg");
+                shortcut: root.keyboard ? "P" : "";
+                focused: root.focused-item == 1;
+                clicked => { root.toggle-pause(); }
+            }
+            MenuDivider { }
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-top: 2px;
+                padding-bottom: 2px;
+                MenuSection { text: @tr("SAVE STATES"); }
+            }
+            Stepper {
+                label: @tr("Slot");
+                value: root.slot;
+                focused: root.focused-item == 2;
+                step(d) => { root.step-slot(d); }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                MenuRow {
+                    text: @tr("Save");
+                    icon: @image-url("icons/save.svg");
+                    shortcut: root.keyboard ? "F5" : "";
+                    focused: root.focused-item == 3;
+                    clicked => { root.save-state(); }
+                }
+                MenuRow {
+                    text: @tr("Load");
+                    icon: @image-url("icons/load.svg");
+                    shortcut: root.keyboard ? "F7" : "";
+                    focused: root.focused-item == 4;
+                    clicked => { root.load-state(); }
+                }
+            }
+            MenuDivider { }
+            MenuRow {
+                text: root.fullscreen ? @tr("Exit full screen") : @tr("Full screen");
+                icon: root.fullscreen ? @image-url("icons/exit-fullscreen.svg") : @image-url("icons/fullscreen.svg");
+                shortcut: root.keyboard ? "F11" : "";
+                focused: root.focused-item == 5;
+                clicked => { root.toggle-fullscreen(); }
+            }
+            MenuRow {
+                text: @tr("Controllers…");
+                icon: @image-url("icons/gamepad.svg");
+                focused: root.focused-item == 6;
+                clicked => { root.open-controllers(); }
+            }
+            for port[i] in root.ports: Stepper {
+                label: port.label;
+                value: port.device;
+                focused: root.focused-item == 7 + i;
+                step(d) => { root.cycle-port(i, d); }
+            }
+            MenuDivider { }
+            MenuRow {
+                text: @tr("Quit game");
+                icon: @image-url("icons/quit.svg");
+                danger: true;
+                focused: root.focused-item == 7 + root.ports.length;
+                clicked => { root.quit(); }
+            }
+            Text {
+                text: root.keyboard ? @tr("F6 next slot  ·  Guide opens this menu") : @tr("Keyboard goes to the game  ·  Guide opens this menu");
+                color: Theme.text-subtle;
+                font-size: Theme.font-caption;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+                height: self.preferred-height + 10px;
+                vertical-alignment: bottom;
             }
         }
     }
@@ -226,11 +427,28 @@ export component GameWindow inherits Window {
         if root.paused && !root.menu-open: Rectangle {
             x: (parent.width - self.width) / 2;
             y: 16px;
-            width: paused-label.preferred-width + 28px;
-            height: 32px;
-            border-radius: 16px;
-            background: Theme.scrim-strong;
-            paused-label := Text { text: root.menu-key == "Esc" ? @tr("Paused  ·  P to resume") : @tr("Paused  ·  {} for the menu", root.menu-key); color: Theme.text-strong; font-size: Theme.font-body-large; }
+            width: paused-row.preferred-width;
+            height: 34px;
+            border-radius: 17px;
+            background: Theme.surface-raised.with-alpha(0.92);
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 16px;
+            drop-shadow-color: Theme.shadow;
+            paused-row := HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 8px;
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle { width: 7px; height: 7px; border-radius: 3.5px; background: Theme.warning; }
+                }
+                Text { text: @tr("Paused"); vertical-alignment: center; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
+                VerticalLayout {
+                    alignment: center;
+                    KeyCap { text: root.menu-key == "Esc" ? "P" : root.menu-key; }
+                }
+            }
         }
 
         if root.has-menu && root.menu-open: GameMenu {
