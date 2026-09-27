@@ -174,14 +174,6 @@ component SidebarItem inherits Rectangle {
     border-radius: 8px;
     background: root.selected ? #8b9cff24 : touch.has-hover ? #ffffff0a : transparent;
     touch := TouchArea { clicked => { root.clicked(); } }
-    if root.selected: Rectangle {
-        x: 0;
-        y: (parent.height - self.height) / 2;
-        width: 3px;
-        height: 16px;
-        border-radius: 1.5px;
-        background: #8b9cff;
-    }
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 8px;
