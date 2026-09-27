@@ -21,7 +21,7 @@ In the library, ⌘F searches, ⌘R refreshes and ⌘, opens Settings. Esc or yo
 
 In-game saves and save states sync with RomM before and after you play, so you can continue on another device. If a save changed in both places, Cartridge asks which to keep and backs up the other.
 
-Favorites and collections come from RomM, including its automatic series, franchise and genre collections. Favorite a game or add it to your collections from its page; create a collection with **+** in the sidebar, and right-click one to rename or delete it.
+Favorites and collections come from RomM, including its automatic series, franchise and genre collections. Favorite a game or add it to your collections from its page; create a collection with **+** in the sidebar, and right-click one to rename or delete it. **Recently played** lists the games you last played, here or in RomM, and the library can be sorted by name, date added or last played.
 
 When a new version of Cartridge needs more access to your server, the library shows a **Pair again** button.
 

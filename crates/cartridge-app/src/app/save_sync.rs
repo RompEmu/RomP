@@ -71,6 +71,8 @@ impl Controller {
             Some("Pair again to turn on save sync")
         } else if !self.has_scope("collections.write") {
             Some("Pair again to use favorites and collections")
+        } else if !self.has_scope("roms.user.write") {
+            Some("Pair again to share when you last played")
         } else {
             None
         };

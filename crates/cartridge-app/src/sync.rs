@@ -176,6 +176,31 @@ pub async fn sync_library(
     Ok(report)
 }
 
+pub async fn sync_played(
+    client: &Client,
+    store: &Mutex<Store>,
+    page_size: i64,
+    cancel: &AtomicBool,
+) -> Result<usize, Error> {
+    let mut offset = 0;
+    let mut merged = 0;
+    loop {
+        let page = client.played_roms(offset, page_size).await?;
+        let count = page.items.len();
+        let plays: Vec<(i64, i64)> = page
+            .items
+            .iter()
+            .filter_map(|r| Some((r.id, r.last_played()?)))
+            .collect();
+        merged += plays.len();
+        write(store, cancel, |s| s.merge_last_played(&plays))?;
+        offset += count as i64;
+        if (count as i64) < page_size {
+            return Ok(merged);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,6 +330,48 @@ mod tests {
             Some("2026-01-03T00:00:00+00:00")
         );
         assert_eq!(s.platforms(false)[0].count, 5);
+    }
+
+    #[tokio::test]
+    async fn played_times_from_the_server_are_merged_page_by_page() {
+        let server = MockServer::start().await;
+        let played = |id: i64, when: &str| {
+            let mut rom = rom_json(id, "t");
+            rom["rom_user"] = json!({"last_played": when});
+            rom
+        };
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("last_played", "true"))
+            .and(query_param("offset", "0"))
+            .respond_with(page(vec![
+                played(1, "2026-09-01T00:00:00Z"),
+                played(2, "2026-09-02T00:00:00Z"),
+            ]))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("last_played", "true"))
+            .and(query_param("offset", "2"))
+            .respond_with(page(vec![played(3, "2026-09-03T00:00:00Z")]))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let store = store();
+        store.lock().unwrap().upsert_games(&[
+            rom(1, 1, "A", "x"),
+            rom(2, 1, "B", "x"),
+            rom(3, 1, "C", "x"),
+        ]);
+        let merged = sync_played(&client(&server), &store, 2, &go())
+            .await
+            .unwrap();
+        assert_eq!(merged, 3);
+        let s = store.lock().unwrap();
+        assert_eq!(s.last_played(3), parse_iso("2026-09-03T00:00:00Z"));
+        assert_eq!(s.recent_count(false), 3);
     }
 
     #[tokio::test]

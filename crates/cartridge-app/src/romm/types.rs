@@ -110,9 +110,27 @@ pub struct Rom {
     pub metadatum: Option<RomMetadata>,
     #[serde(default)]
     pub merged_screenshots: Vec<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub rom_user: Option<RomUser>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct RomUser {
+    #[serde(default)]
+    pub last_played: Option<String>,
 }
 
 impl Rom {
+    pub fn added_at(&self) -> Option<i64> {
+        crate::sync::parse_iso(self.created_at.as_deref()?)
+    }
+
+    pub fn last_played(&self) -> Option<i64> {
+        crate::sync::parse_iso(self.rom_user.as_ref()?.last_played.as_deref()?)
+    }
+
     pub fn title(&self) -> &str {
         match self.name.as_deref().map(str::trim) {
             Some(name) if !name.is_empty() => name,
@@ -218,6 +236,8 @@ pub(crate) fn rom(id: i64, platform_id: i64, name: &str, updated_at: &str) -> Ro
         fs_size_bytes: 1024,
         metadatum: None,
         merged_screenshots: Vec::new(),
+        created_at: None,
+        rom_user: None,
     }
 }
 
@@ -243,6 +263,33 @@ mod tests {
         assert_eq!(meta.average_rating, Some(81.5));
         assert!(meta.publishers.is_empty());
         assert_eq!(rom.merged_screenshots.len(), 1);
+    }
+
+    #[test]
+    fn rom_carries_when_it_was_added_and_last_played() {
+        let rom: Rom = serde_json::from_value(serde_json::json!({
+            "id": 1, "platform_id": 2, "name": "A", "fs_name": "a.md", "summary": null,
+            "updated_at": "t", "path_cover_small": null, "path_cover_large": null,
+            "fs_size_bytes": 5, "created_at": "2026-01-02T03:04:05+00:00",
+            "rom_user": {"id": 9, "last_played": "2026-09-01T10:00:00+00:00", "rating": 0}
+        }))
+        .unwrap();
+        assert_eq!(
+            rom.added_at(),
+            crate::sync::parse_iso("2026-01-02T03:04:05+00:00")
+        );
+        assert_eq!(
+            rom.last_played(),
+            crate::sync::parse_iso("2026-09-01T10:00:00Z")
+        );
+        let bare: Rom = serde_json::from_value(serde_json::json!({
+            "id": 1, "platform_id": 2, "name": "A", "fs_name": "a.md", "summary": null,
+            "updated_at": "t", "path_cover_small": null, "path_cover_large": null,
+            "fs_size_bytes": 5, "rom_user": null
+        }))
+        .unwrap();
+        assert_eq!(bare.added_at(), None);
+        assert_eq!(bare.last_played(), None);
     }
 
     #[test]

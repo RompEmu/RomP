@@ -13,6 +13,7 @@ const AUTO_SECTIONS: [(&str, &str, CollectionKind); 3] = [
 ];
 
 const PAIR_KEY: &str = "pair";
+pub(super) const RECENT_KEY: &str = "recent";
 
 pub(super) enum DialogAction {
     Create { add_game: Option<i64> },
@@ -57,6 +58,7 @@ pub(super) fn heading_for(key: &str, entries: &[(String, String)]) -> String {
     match key {
         "all" => "All games".into(),
         "favorites" | PAIR_KEY => "Favorites".into(),
+        RECENT_KEY => "Recently played".into(),
         _ => entries
             .iter()
             .find(|(k, _)| k == key)
@@ -83,11 +85,16 @@ pub(super) fn games_label(count: usize) -> String {
 pub(super) fn scope_for(key: &str) -> Scope {
     match key {
         "all" => Scope::All,
+        RECENT_KEY => Scope::Recent,
         _ => match key.strip_prefix("p:").and_then(|id| id.parse().ok()) {
             Some(id) => Scope::Platform(id),
             None => Scope::Collection(key.to_string()),
         },
     }
+}
+
+fn recent_icon() -> Image {
+    Image::load_from_svg_data(include_bytes!("../../ui/icons/recent.svg")).unwrap_or_default()
 }
 
 fn numeric_id(item: &CollectionItem) -> Option<i64> {
@@ -113,14 +120,18 @@ impl Controller {
         let downloaded_only = self.library.borrow().filter.downloaded_only;
         let show_collections = self.has_scope("collections.read");
         let can_edit = self.can_edit_collections();
-        let (platforms, collections) = {
+        let (platforms, collections, recent) = {
             let store = self.shared.store.lock().unwrap();
             let collections = if show_collections {
                 store.collections(downloaded_only)
             } else {
                 Vec::new()
             };
-            (store.platforms(downloaded_only), collections)
+            (
+                store.platforms(downloaded_only),
+                collections,
+                store.recent_count(downloaded_only),
+            )
         };
         let expanded = self.expanded.borrow().clone();
         let total: i64 = platforms.iter().map(|p| p.count).sum();
@@ -140,6 +151,14 @@ impl Controller {
             keys.push(key.to_string());
         } else if self.client.borrow().is_some() {
             entries.push(item(PAIR_KEY, "Favorites", -1, "♥"));
+        }
+        if recent > 0 {
+            entries.push(SidebarEntry {
+                has_icon: true,
+                icon: recent_icon(),
+                ..item(RECENT_KEY, "Recently played", recent, "")
+            });
+            keys.push(RECENT_KEY.to_string());
         }
 
         let open = expanded.contains("platforms");
@@ -549,6 +568,7 @@ mod tests {
         assert_eq!(heading_for("all", &entries), "All games");
         assert_eq!(heading_for("p:3", &entries), "Super Nintendo");
         assert_eq!(heading_for("favorites", &entries), "Favorites");
+        assert_eq!(heading_for(RECENT_KEY, &entries), "Recently played");
         assert_eq!(heading_for("v:gone", &entries), "Games");
         assert_eq!(games_label(0), "No games");
         assert_eq!(games_label(1), "1 game");
@@ -567,6 +587,7 @@ mod tests {
     #[test]
     fn sidebar_keys_map_to_library_scopes() {
         assert_eq!(scope_for("all"), Scope::All);
+        assert_eq!(scope_for(RECENT_KEY), Scope::Recent);
         assert_eq!(scope_for("p:12"), Scope::Platform(12));
         assert_eq!(scope_for("c:3"), Scope::Collection("c:3".into()));
         assert_eq!(scope_for("v:eyJu"), Scope::Collection("v:eyJu".into()));

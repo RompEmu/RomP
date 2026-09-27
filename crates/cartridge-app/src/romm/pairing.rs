@@ -1,10 +1,11 @@
 use crate::romm::types::PollOutcome;
 use std::time::{Duration, Instant};
 
-pub const SCOPES: [&str; 10] = [
+pub const SCOPES: [&str; 11] = [
     "me.read",
     "platforms.read",
     "roms.read",
+    "roms.user.write",
     "firmware.read",
     "assets.read",
     "assets.write",

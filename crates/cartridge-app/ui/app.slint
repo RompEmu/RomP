@@ -415,6 +415,8 @@ component Library inherits Rectangle {
     callback pair-again();
     in-out property <bool> downloaded-only;
     in property <bool> offline;
+    in-out property <int> sort-index;
+    callback sort-changed(int);
     callback downloaded-only-toggled(bool);
     in property <int> focus-row: -1;
     in-out property <length> scroll-y <=> games.content-y;
@@ -626,6 +628,16 @@ component Library inherits Rectangle {
                                 placeholder-text: @tr("Search games");
                                 text <=> root.search;
                                 edited(text) => { root.search-edited(text); }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            ComboBox {
+                                width: 140px;
+                                model: [@tr("Name"), @tr("Date added"), @tr("Last played")];
+                                current-index <=> root.sort-index;
+                                enabled: root.selected-key != "recent";
+                                selected => { root.sort-changed(self.current-index); }
                             }
                         }
                         Switch {
@@ -1666,6 +1678,8 @@ export component AppWindow inherits Window {
     callback dialog-cancelled();
     in-out property <bool> downloaded-only;
     in property <bool> offline;
+    in-out property <int> sort-index;
+    callback sort-changed(int);
     callback downloaded-only-toggled(bool);
 
     MenuBar {
@@ -1748,6 +1762,8 @@ export component AppWindow inherits Window {
         downloaded-only <=> root.downloaded-only;
         offline: root.offline;
         downloaded-only-toggled(on) => { root.downloaded-only-toggled(on); }
+        sort-index <=> root.sort-index;
+        sort-changed(i) => { root.sort-changed(i); }
         open-settings => { root.open-settings(); }
         focus-row: root.grid-focus-row;
         focus-top: root.grid-focus-top * 1px;

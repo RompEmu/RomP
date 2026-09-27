@@ -55,6 +55,30 @@ pub enum Scope {
     All,
     Platform(i64),
     Collection(String),
+    Recent,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SortOrder {
+    #[default]
+    Name,
+    Added,
+    LastPlayed,
+}
+
+impl SortOrder {
+    const ALL: [Self; 3] = [Self::Name, Self::Added, Self::LastPlayed];
+
+    pub fn from_index(index: i32) -> Self {
+        usize::try_from(index)
+            .ok()
+            .and_then(|i| Self::ALL.get(i).copied())
+            .unwrap_or_default()
+    }
+
+    pub fn index(self) -> i32 {
+        Self::ALL.iter().position(|s| *s == self).unwrap_or(0) as i32
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -62,6 +86,7 @@ pub struct GameFilter {
     pub scope: Scope,
     pub search: String,
     pub downloaded_only: bool,
+    pub sort: SortOrder,
 }
 
 pub struct Store {
@@ -148,6 +173,16 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 5 {
+            conn.execute_batch(
+                "BEGIN;
+                 ALTER TABLE games ADD COLUMN added_at INTEGER;
+                 ALTER TABLE games ADD COLUMN last_played INTEGER;
+                 DELETE FROM kv WHERE key = 'last_sync_at';
+                 PRAGMA user_version = 5;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -193,14 +228,16 @@ impl Store {
             tx.execute(
                 "INSERT INTO games
                  (id, platform_id, title, summary, updated_at, cover_small, cover_large, size_bytes,
-                  meta, screenshots)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                  meta, screenshots, added_at, last_played)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                  ON CONFLICT(id) DO UPDATE SET
                    platform_id = excluded.platform_id, title = excluded.title,
                    summary = excluded.summary, updated_at = excluded.updated_at,
                    cover_small = excluded.cover_small, cover_large = excluded.cover_large,
                    size_bytes = excluded.size_bytes, meta = excluded.meta,
-                   screenshots = excluded.screenshots",
+                   screenshots = excluded.screenshots, added_at = excluded.added_at,
+                   last_played = NULLIF(MAX(COALESCE(last_played, 0),
+                                            COALESCE(excluded.last_played, 0)), 0)",
                 params![
                     r.id,
                     r.platform_id,
@@ -213,7 +250,9 @@ impl Store {
                     r.metadatum
                         .as_ref()
                         .and_then(|m| serde_json::to_string(m).ok()),
-                    serde_json::to_string(&r.merged_screenshots).ok()
+                    serde_json::to_string(&r.merged_screenshots).ok(),
+                    r.added_at(),
+                    r.last_played()
                 ],
             )
             .expect("upsert game");
@@ -276,9 +315,21 @@ impl Store {
                 .replace('%', "\\%")
                 .replace('_', "\\_")
         );
+        let sort = if filter.scope == Scope::Recent {
+            SortOrder::LastPlayed
+        } else {
+            filter.sort
+        };
+        let order = match sort {
+            SortOrder::Name => "g.title COLLATE NOCASE, g.id",
+            SortOrder::Added => "g.added_at IS NULL, g.added_at DESC, g.title COLLATE NOCASE, g.id",
+            SortOrder::LastPlayed => {
+                "g.last_played IS NULL, g.last_played DESC, g.title COLLATE NOCASE, g.id"
+            }
+        };
         let mut stmt = self
             .conn
-            .prepare(
+            .prepare(&format!(
                 "SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL,
                         EXISTS (SELECT 1 FROM collection_roms m JOIN collections c ON c.key = m.key
                                 WHERE m.rom_id = g.id AND c.kind = 0),
@@ -287,16 +338,24 @@ impl Store {
                  WHERE (?1 IS NULL OR g.platform_id = ?1) AND g.title LIKE ?2 ESCAPE '\\'
                    AND (?3 = 0 OR g.local_path IS NOT NULL)
                    AND (?4 IS NULL OR g.id IN (SELECT rom_id FROM collection_roms WHERE key = ?4))
-                 ORDER BY g.title COLLATE NOCASE, g.id",
-            )
+                   AND (?5 = 0 OR g.last_played IS NOT NULL)
+                 ORDER BY {order}",
+            ))
             .expect("prepare");
         let (platform, collection) = match &filter.scope {
-            Scope::All => (None, None),
+            Scope::All | Scope::Recent => (None, None),
             Scope::Platform(id) => (Some(*id), None),
             Scope::Collection(key) => (None, Some(key.as_str())),
         };
+        let recent = filter.scope == Scope::Recent;
         stmt.query_map(
-            params![platform, pattern, filter.downloaded_only, collection],
+            params![
+                platform,
+                pattern,
+                filter.downloaded_only,
+                collection,
+                recent
+            ],
             |r| {
                 Ok(GameItem {
                     id: r.get(0)?,
@@ -312,6 +371,43 @@ impl Store {
         .expect("query")
         .filter_map(Result::ok)
         .collect()
+    }
+
+    pub fn recent_count(&self, downloaded_only: bool) -> i64 {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM games WHERE last_played IS NOT NULL
+                   AND (?1 = 0 OR local_path IS NOT NULL)",
+                [downloaded_only],
+                |r| r.get(0),
+            )
+            .expect("count recent")
+    }
+
+    #[cfg(test)]
+    pub fn last_played(&self, id: i64) -> Option<i64> {
+        self.conn
+            .query_row("SELECT last_played FROM games WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .ok()
+            .flatten()
+    }
+
+    pub fn mark_played(&mut self, id: i64, when: i64) {
+        self.merge_last_played(&[(id, when)]);
+    }
+
+    pub fn merge_last_played(&mut self, plays: &[(i64, i64)]) {
+        let tx = self.conn.transaction().expect("tx");
+        for (id, when) in plays {
+            tx.execute(
+                "UPDATE games SET last_played = MAX(COALESCE(last_played, 0), ?2) WHERE id = ?1",
+                params![id, when],
+            )
+            .expect("mark played");
+        }
+        tx.commit().expect("commit");
     }
 
     pub fn game(&self, id: i64) -> Option<GameDetail> {
@@ -505,12 +601,99 @@ mod tests {
         let f = |platform: Option<i64>, search: &str| GameFilter {
             scope: platform.map_or(Scope::All, Scope::Platform),
             search: search.into(),
-            downloaded_only: false,
+            ..GameFilter::default()
         };
         assert_eq!(ids(&s, f(Some(1), "")), [11, 10]);
         assert_eq!(ids(&s, f(None, "TRI")), [11, 12]);
         assert_eq!(ids(&s, f(Some(2), "zel")), Vec::<i64>::new());
         assert_eq!(ids(&s, f(None, "50%_")), Vec::<i64>::new());
+    }
+
+    fn played(id: i64, platform: i64, name: &str, added: &str, last: Option<&str>) -> Rom {
+        let mut r = rom(id, platform, name, "t");
+        r.created_at = Some(added.into());
+        r.rom_user = Some(crate::romm::types::RomUser {
+            last_played: last.map(String::from),
+        });
+        r
+    }
+
+    fn sorted(s: &Store, scope: Scope, sort: SortOrder) -> Vec<i64> {
+        ids(
+            s,
+            GameFilter {
+                scope,
+                sort,
+                ..GameFilter::default()
+            },
+        )
+    }
+
+    #[test]
+    fn sort_order_round_trips_through_its_index() {
+        for sort in [SortOrder::Name, SortOrder::Added, SortOrder::LastPlayed] {
+            assert_eq!(SortOrder::from_index(sort.index()), sort);
+        }
+        assert_eq!(SortOrder::from_index(7), SortOrder::Name);
+        assert_eq!(SortOrder::from_index(-1), SortOrder::Name);
+    }
+
+    #[test]
+    fn games_sort_by_name_date_added_or_last_played() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.upsert_games(&[
+            played(1, 1, "Banjo", "2026-03-01T00:00:00Z", None),
+            played(
+                2,
+                1,
+                "Aladdin",
+                "2026-01-01T00:00:00Z",
+                Some("2026-09-01T00:00:00Z"),
+            ),
+            played(
+                3,
+                1,
+                "Castlevania",
+                "2026-02-01T00:00:00Z",
+                Some("2026-09-05T00:00:00Z"),
+            ),
+        ]);
+        assert_eq!(sorted(&s, Scope::All, SortOrder::Name), [2, 1, 3]);
+        assert_eq!(sorted(&s, Scope::All, SortOrder::Added), [1, 3, 2]);
+        assert_eq!(sorted(&s, Scope::All, SortOrder::LastPlayed), [3, 2, 1]);
+        assert_eq!(
+            sorted(&s, Scope::Recent, SortOrder::Name),
+            [3, 2],
+            "recent is newest first"
+        );
+        assert_eq!(s.recent_count(false), 2);
+        assert_eq!(s.recent_count(true), 0);
+    }
+
+    #[test]
+    fn a_play_here_or_on_the_server_only_moves_last_played_forward() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.upsert_games(&[played(
+            1,
+            1,
+            "A",
+            "2026-01-01T00:00:00Z",
+            Some("2026-09-01T00:00:00Z"),
+        )]);
+        let later = crate::sync::parse_iso("2026-09-10T00:00:00Z").unwrap();
+        s.mark_played(1, later);
+        s.upsert_games(&[played(
+            1,
+            1,
+            "A",
+            "2026-01-01T00:00:00Z",
+            Some("2026-09-01T00:00:00Z"),
+        )]);
+        assert_eq!(s.last_played(1), Some(later));
+        s.merge_last_played(&[(1, later + 5)]);
+        assert_eq!(s.last_played(1), Some(later + 5));
+        s.merge_last_played(&[(1, later - 5)]);
+        assert_eq!(s.last_played(1), Some(later + 5));
     }
 
     #[test]
@@ -747,6 +930,7 @@ mod tests {
             s.conn
                 .execute_batch(
                     "ALTER TABLE games DROP COLUMN meta; ALTER TABLE games DROP COLUMN screenshots;
+                     ALTER TABLE games DROP COLUMN added_at; ALTER TABLE games DROP COLUMN last_played;
                      ALTER TABLE platforms DROP COLUMN category; PRAGMA user_version = 2;",
                 )
                 .unwrap();

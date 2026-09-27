@@ -12,7 +12,7 @@ use crate::restore::{LastView, Observed, Placement, VIEW_KEY, WINDOW_KEY};
 use crate::romm::client::{check_version, server_candidates, Client, Error};
 use crate::romm::pairing::{PollStep, Poller};
 use crate::romm::types::{DeviceAuth, PollOutcome, User};
-use crate::store::{GameFilter, GameItem, Store};
+use crate::store::{GameFilter, GameItem, SortOrder, Store};
 use crate::sync::{sync_library, SyncReport, PAGE_SIZE};
 use crate::{identity, paths, qr, AppWindow, GameCard, GameRow};
 use slint::{
@@ -33,6 +33,7 @@ use tokio::task::AbortHandle;
 const PARALLEL_DOWNLOADS: usize = 6;
 const OFFLINE_RETRY: Duration = Duration::from_secs(60);
 const RESTORE_SCROLL_FOR: Duration = Duration::from_secs(3);
+const SORT_KEY: &str = "sort";
 
 const SCREEN_CONNECT: i32 = 0;
 const SCREEN_PAIRING: i32 = 1;
@@ -285,6 +286,7 @@ impl Controller {
         ui.on_dialog_accepted(|value| with_controller(|c| c.dialog_accepted(value.to_string())));
         ui.on_dialog_cancelled(|| with_controller(|c| c.close_dialog()));
         ui.on_search_edited(|text| with_controller(|c| c.set_search(text.to_string())));
+        ui.on_sort_changed(|index| with_controller(|c| c.set_sort(SortOrder::from_index(index))));
         ui.on_columns_changed(|n| with_controller(|c| c.set_columns(n)));
         ui.on_row_shown(|i| with_controller(|c| c.row_shown(i.max(0) as usize)));
         ui.on_refresh(|| with_controller(|c| c.sync()));
@@ -454,10 +456,22 @@ impl Controller {
         let selected = restore
             .as_ref()
             .map_or_else(|| "all".to_string(), |v| v.selected.clone());
+        let sort = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .get(SORT_KEY)
+            .and_then(|s| s.parse().ok())
+            .map_or_else(SortOrder::default, SortOrder::from_index);
         self.library.borrow_mut().filter = GameFilter {
             scope: collections::scope_for(&selected),
+            sort,
             ..GameFilter::default()
         };
+        if let Some(ui) = self.ui() {
+            ui.set_sort_index(sort.index());
+        }
         *self.selected.borrow_mut() = selected.clone();
         self.apply_download_filter();
         if let Some(ui) = self.ui() {
@@ -618,6 +632,38 @@ impl Controller {
             ui.set_connect_error("".into());
             ui.set_sync_status("".into());
             ui.set_screen(SCREEN_CONNECT);
+        }
+    }
+
+    fn set_sort(&self, sort: SortOrder) {
+        self.library.borrow_mut().filter.sort = sort;
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .set(SORT_KEY, &sort.index().to_string());
+        self.reload_games();
+        if let Some(ui) = self.ui() {
+            ui.set_grid_scroll(0.0);
+        }
+    }
+
+    pub(super) fn record_play(&self, id: i64) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as i64);
+        self.shared.store.lock().unwrap().mark_played(id, now);
+        self.reload_sidebar();
+        self.reload_games();
+        let client = self.client.borrow().clone();
+        if let Some(client) =
+            client.filter(|_| !self.offline.get() && self.has_scope("roms.user.write"))
+        {
+            self.shared.rt.spawn(async move {
+                if let Err(e) = client.mark_played(id).await {
+                    tracing::warn!("marking {id} as played on the server: {e}");
+                }
+            });
         }
     }
 
@@ -870,6 +916,12 @@ impl Controller {
             if result.is_ok() && collections && !cancel.load(Ordering::SeqCst) {
                 if let Err(e) = crate::collections::sync_collections(&client, &store).await {
                     tracing::warn!("syncing collections: {e}");
+                }
+            }
+            if result.is_ok() && !cancel.load(Ordering::SeqCst) {
+                if let Err(e) = crate::sync::sync_played(&client, &store, PAGE_SIZE, &cancel).await
+                {
+                    tracing::warn!("syncing recently played games: {e}");
                 }
             }
             on_ui(move |c| c.sync_finished(generation, result));

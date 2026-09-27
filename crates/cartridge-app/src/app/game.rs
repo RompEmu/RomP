@@ -666,6 +666,7 @@ impl Controller {
             Ok(running) => {
                 *self.running.borrow_mut() = Some(play::RunningGame::External(running));
                 self.game_status(detail.id, String::new());
+                self.record_play(detail.id);
                 *self.playing.borrow_mut() = Some(detail);
             }
             Err(e) => self.game_status(detail.id, format!("Could not start xemu: {e}")),
@@ -787,6 +788,7 @@ impl Controller {
             Ok(running) => {
                 *self.running.borrow_mut() = Some(running);
                 self.game_status(detail.id, String::new());
+                self.record_play(detail.id);
                 *self.playing.borrow_mut() = Some(detail);
             }
             Err(e) => self.game_status(detail.id, format!("Could not start the game: {e:#}")),

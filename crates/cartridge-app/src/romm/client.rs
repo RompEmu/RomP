@@ -222,6 +222,29 @@ impl Client {
         self.get_json("/api/roms", &query).await
     }
 
+    pub async fn played_roms(&self, offset: i64, limit: i64) -> Result<RomPage, Error> {
+        let query = [
+            ("last_played", "true".to_string()),
+            ("offset", offset.to_string()),
+            ("limit", limit.to_string()),
+            ("order_by", "id".to_string()),
+            ("with_char_index", "false".to_string()),
+            ("with_filter_values", "false".to_string()),
+            ("with_rom_id_index", "false".to_string()),
+        ];
+        self.get_json("/api/roms", &query).await
+    }
+
+    pub async fn mark_played(&self, id: i64) -> Result<(), Error> {
+        self.send(
+            self.request(reqwest::Method::PUT, &format!("/api/roms/{id}/props"))
+                .query(&[("update_last_played", "true")])
+                .json(&serde_json::json!({})),
+        )
+        .await
+        .map(|_| ())
+    }
+
     pub async fn similar(&self, id: i64, limit: u32) -> Result<Vec<i64>, Error> {
         #[derive(serde::Deserialize)]
         struct Similar {
@@ -759,6 +782,44 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(page.items[0].id, 4596);
+    }
+
+    #[tokio::test]
+    async fn played_roms_asks_for_games_with_a_last_played_time() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("last_played", "true"))
+            .and(query_param("offset", "0"))
+            .and(query_param("limit", "100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "items": [{
+                    "id": 7, "platform_id": 1, "name": "A", "fs_name": "a.md", "summary": null,
+                    "updated_at": "t", "path_cover_small": null, "path_cover_large": null,
+                    "fs_size_bytes": 1, "rom_user": {"last_played": "2026-09-01T10:00:00+00:00"}
+                }]
+            })))
+            .mount(&server)
+            .await;
+        let page = authed(&server).played_roms(0, 100).await.unwrap();
+        assert_eq!(
+            page.items[0].last_played(),
+            crate::sync::parse_iso("2026-09-01T10:00:00Z")
+        );
+    }
+
+    #[tokio::test]
+    async fn mark_played_updates_last_played_on_the_server() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/api/roms/7/props"))
+            .and(query_param("update_last_played", "true"))
+            .and(body_json(serde_json::json!({})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        authed(&server).mark_played(7).await.unwrap();
     }
 
     #[tokio::test]
