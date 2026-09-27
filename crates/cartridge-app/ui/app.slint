@@ -1,3 +1,4 @@
+import { Theme } from "theme.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
@@ -24,11 +25,11 @@ component AppTile inherits Rectangle {
     height: root.size;
     border-radius: root.size * 0.25;
     clip: true;
-    background: @linear-gradient(135deg, #8b9cff 0%, #b56bff 100%);
+    background: @linear-gradient(135deg, Theme.accent-hover 0%, Theme.accent-pressed 100%);
     if root.has-icon: Image { source: root.icon; width: parent.width; height: parent.height; }
     if !root.has-icon: Text {
         text: "▶";
-        color: white;
+        color: Theme.text-strong;
         font-size: root.size * 0.42;
     }
 }
@@ -40,12 +41,12 @@ component IconButton inherits Rectangle {
     width: 32px;
     height: 32px;
     border-radius: 8px;
-    background: touch.pressed ? #ffffff1f : touch.has-hover && root.enabled ? #ffffff12 : transparent;
+    background: touch.pressed ? Theme.pressed : touch.has-hover && root.enabled ? Theme.hover : transparent;
     Image {
         source: root.icon;
         width: 18px;
         height: 18px;
-        colorize: root.enabled ? (touch.has-hover ? #ffffff : #b8bec8) : #5c616b;
+        colorize: root.enabled ? (touch.has-hover ? Theme.text-strong : Theme.text-secondary) : Theme.text-subtle;
     }
     touch := TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
 }
@@ -56,11 +57,11 @@ component CountPill inherits Rectangle {
     height: 18px;
     width: max(24px, count-text.preferred-width + 12px);
     border-radius: 9px;
-    background: root.selected ? #8b9cff40 : #ffffff0d;
+    background: root.selected ? Theme.accent-soft-strong : Theme.hover;
     count-text := Text {
         text: root.count;
-        font-size: 11px;
-        color: root.selected ? #e6e8ff : #8a8f98;
+        font-size: Theme.font-caption;
+        color: root.selected ? Theme.text-strong : Theme.text-muted;
     }
 }
 
@@ -77,15 +78,15 @@ component Connect inherits Rectangle {
             VerticalLayout {
                 width: 420px;
                 spacing: 14px;
-                Text { text: "Connect to RomM"; font-size: 26px; font-weight: 700; }
-                Text { text: "Enter the address of your RomM server."; color: #888; }
+                Text { text: "Connect to RomM"; font-size: Theme.font-heading; font-weight: 700; }
+                Text { text: "Enter the address of your RomM server."; color: Theme.text-muted; }
                 url := LineEdit {
                     placeholder-text: "romm.example.com";
                     text <=> root.server-url;
                     enabled: !root.busy;
                     accepted => { root.connect(); }
                 }
-                if root.error != "": Text { text: root.error; color: #e5484d; wrap: word-wrap; }
+                if root.error != "": Text { text: root.error; color: Theme.danger; wrap: word-wrap; }
                 HorizontalLayout {
                     alignment: end;
                     spacing: 10px;
@@ -122,10 +123,10 @@ component Pairing inherits Rectangle {
             VerticalLayout {
                 width: 460px;
                 spacing: 14px;
-                Text { text: "Approve this device"; font-size: 26px; font-weight: 700; }
+                Text { text: "Approve this device"; font-size: Theme.font-heading; font-weight: 700; }
                 Text {
                     text: "Scan the code or open the link on a device signed in to RomM, then approve Cartridge.";
-                    color: #888;
+                    color: Theme.text-muted;
                     wrap: word-wrap;
                 }
                 HorizontalLayout {
@@ -134,9 +135,9 @@ component Pairing inherits Rectangle {
                 }
                 HorizontalLayout {
                     alignment: center;
-                    Text { text: root.user-code; font-size: 30px; font-weight: 700; letter-spacing: 4px; }
+                    Text { text: root.user-code; font-size: Theme.font-display; font-weight: 700; letter-spacing: 4px; }
                 }
-                Text { text: root.link; horizontal-alignment: center; color: #888; wrap: word-wrap; }
+                Text { text: root.link; horizontal-alignment: center; color: Theme.text-muted; wrap: word-wrap; }
                 HorizontalLayout {
                     alignment: center;
                     spacing: 10px;
@@ -145,7 +146,7 @@ component Pairing inherits Rectangle {
                 }
                 Text {
                     horizontal-alignment: center;
-                    color: root.failed ? #e5484d : #888;
+                    color: root.failed ? Theme.danger : Theme.text-muted;
                     text: root.status != "" ? root.status
                         : "Waiting for approval… (" + floor(root.seconds-left / 60) + ":"
                           + (mod(root.seconds-left, 60) < 10 ? "0" : "") + mod(root.seconds-left, 60) + ")";
@@ -172,7 +173,7 @@ component SidebarItem inherits Rectangle {
     callback clicked();
     height: 34px;
     border-radius: 8px;
-    background: root.selected ? #8b9cff24 : touch.has-hover ? #ffffff0a : transparent;
+    background: root.selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
     touch := TouchArea { clicked => { root.clicked(); } }
     HorizontalLayout {
         padding-left: 12px;
@@ -181,16 +182,16 @@ component SidebarItem inherits Rectangle {
         Rectangle {
             width: 18px;
             if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; }
-            if !root.has-icon: Text { text: root.glyph; color: #ff6b81; font-size: 13px; }
+            if !root.has-icon: Text { text: root.glyph; color: Theme.favorite; font-size: Theme.font-body; }
         }
         Text {
             text: root.label;
             vertical-alignment: center;
             overflow: elide;
             horizontal-stretch: 1;
-            font-size: 13px;
+            font-size: Theme.font-body;
             font-weight: root.selected ? 600 : 400;
-            color: root.selected ? #ffffff : #c9ced6;
+            color: root.selected ? Theme.text-strong : Theme.text-secondary;
         }
         if root.count >= 0: VerticalLayout {
             alignment: center;
@@ -218,15 +219,15 @@ component SectionHeader inherits Rectangle {
                 width: 6px;
                 height: 6px;
                 commands: root.expanded ? "M 0 2 L 8 2 L 4 7 Z" : "M 2 0 L 7 4 L 2 8 Z";
-                fill: #6b7280;
+                fill: Theme.text-subtle;
             }
         }
         Text {
             text: root.label;
-            font-size: 11px;
+            font-size: Theme.font-caption;
             font-weight: 700;
             letter-spacing: 1px;
-            color: touch.has-hover ? #c9d1d9 : #7d8590;
+            color: touch.has-hover ? Theme.text-secondary : Theme.text-muted;
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
@@ -234,8 +235,8 @@ component SectionHeader inherits Rectangle {
             width: 22px;
             height: 22px;
             border-radius: 4px;
-            background: add-touch.has-hover ? #2a2e36 : transparent;
-            Text { text: "+"; font-size: 16px; color: #c9d1d9; }
+            background: add-touch.has-hover ? Theme.surface-muted : transparent;
+            Text { text: "+"; font-size: Theme.font-subtitle; color: Theme.text-secondary; }
             add-touch := TouchArea { clicked => { root.add(); } }
         }
     }
@@ -254,7 +255,7 @@ component Card inherits Rectangle {
             height: 230px;
             border-radius: 8px;
             clip: true;
-            background: #2a2e36;
+            background: Theme.surface-muted;
             if root.game.has-cover: Image {
                 source: root.game.cover;
                 width: parent.width;
@@ -263,7 +264,7 @@ component Card inherits Rectangle {
             }
             if !root.game.has-cover: Text {
                 text: root.game.title;
-                color: #aaa;
+                color: Theme.text-muted;
                 wrap: word-wrap;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -276,8 +277,8 @@ component Card inherits Rectangle {
                 width: 24px;
                 height: 24px;
                 border-radius: 12px;
-                background: #000000a0;
-                Text { text: "♥"; color: #ff5c7a; font-size: 13px; }
+                background: Theme.scrim;
+                Text { text: "♥"; color: Theme.favorite; font-size: Theme.font-body; }
             }
             if root.game.downloaded: Rectangle {
                 x: parent.width - self.width - 8px;
@@ -285,24 +286,24 @@ component Card inherits Rectangle {
                 width: 22px;
                 height: 22px;
                 border-radius: 11px;
-                background: #2f9e44;
-                Text { text: "✓"; color: white; font-weight: 700; }
+                background: Theme.success;
+                Text { text: "✓"; color: Theme.text-strong; font-weight: 700; }
             }
-            if touch.has-hover: Rectangle { background: #ffffff14; }
+            if touch.has-hover: Rectangle { background: Theme.hover; }
             if root.game.focused: Rectangle {
                 border-radius: 8px;
                 border-width: 3px;
-                border-color: #8b9cff;
+                border-color: Theme.accent;
             }
         }
         Text { text: root.game.title; overflow: elide; font-weight: 600; }
         HorizontalLayout {
             spacing: 4px;
-            Text { text: root.game.platform; overflow: elide; color: #888; font-size: 12px; horizontal-stretch: 1; }
+            Text { text: root.game.platform; overflow: elide; color: Theme.text-muted; font-size: Theme.font-small; horizontal-stretch: 1; }
             Text {
                 text: root.game.downloaded ? "Downloaded" : "On server";
-                color: root.game.downloaded ? #40c057 : #777;
-                font-size: 12px;
+                color: root.game.downloaded ? Theme.success : Theme.text-muted;
+                font-size: Theme.font-small;
                 font-weight: root.game.downloaded ? 600 : 400;
             }
         }
@@ -342,7 +343,7 @@ component Library inherits Rectangle {
     in property <bool> offline;
     callback downloaded-only-toggled(bool);
     in property <int> focus-row: -1;
-    background: #15171c;
+    background: Theme.background;
     changed focus-row => {
         if root.focus-row >= 0 {
             if root.focus-row * 306px < -games.content-y {
@@ -357,11 +358,11 @@ component Library inherits Rectangle {
     HorizontalLayout {
         Rectangle {
             width: 248px;
-            background: #111317;
+            background: Theme.sidebar;
             Rectangle {
                 x: parent.width - 1px;
                 width: 1px;
-                background: #20242b;
+                background: Theme.divider;
             }
             VerticalLayout {
                 padding-top: 16px;
@@ -377,7 +378,7 @@ component Library inherits Rectangle {
                     VerticalLayout {
                         alignment: center;
                         spacing: 2px;
-                        Text { text: Brand.name; font-size: 16px; font-weight: 700; color: #ffffff; }
+                        Text { text: Brand.name; font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
                         HorizontalLayout {
                             spacing: 6px;
                             VerticalLayout {
@@ -386,13 +387,13 @@ component Library inherits Rectangle {
                                     width: 7px;
                                     height: 7px;
                                     border-radius: 3.5px;
-                                    background: root.offline ? #f0a33c : root.syncing ? #8b9cff : #3fbf6b;
+                                    background: root.offline ? Theme.warning : root.syncing ? Theme.accent : Theme.success;
                                 }
                             }
                             Text {
                                 text: root.offline ? "Offline" : root.syncing ? "Syncing…" : root.server-label;
-                                font-size: 11px;
-                                color: #8a8f98;
+                                font-size: Theme.font-caption;
+                                color: Theme.text-muted;
                                 overflow: elide;
                             }
                         }
@@ -440,7 +441,7 @@ component Library inherits Rectangle {
                 }
                 Rectangle {
                     height: 1px;
-                    background: #20242b;
+                    background: Theme.divider;
                 }
                 HorizontalLayout {
                     padding-top: 6px;
@@ -450,11 +451,11 @@ component Library inherits Rectangle {
                         width: 30px;
                         height: 30px;
                         border-radius: 15px;
-                        background: #2a2f3a;
+                        background: Theme.surface-muted;
                         Text {
                             text: root.user-initial;
-                            color: #c7d0ff;
-                            font-size: 13px;
+                            color: Theme.accent-text;
+                            font-size: Theme.font-body;
                             font-weight: 700;
                         }
                     }
@@ -463,9 +464,9 @@ component Library inherits Rectangle {
                         horizontal-stretch: 1;
                         Text {
                             text: root.user-label != "" ? root.user-label : "Signed in";
-                            font-size: 13px;
+                            font-size: Theme.font-body;
                             font-weight: 600;
-                            color: #e6e8eb;
+                            color: Theme.text;
                             overflow: elide;
                         }
                     }
@@ -488,11 +489,11 @@ component Library inherits Rectangle {
                     horizontal-stretch: 1;
                     alignment: center;
                     spacing: 2px;
-                    Text { text: root.heading; font-size: 22px; font-weight: 800; color: #ffffff; overflow: elide; }
+                    Text { text: root.heading; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; overflow: elide; }
                     Text {
                         text: root.sync-status != "" ? root.heading-detail + "  ·  " + root.sync-status : root.heading-detail;
-                        font-size: 12px;
-                        color: #8a8f98;
+                        font-size: Theme.font-small;
+                        color: Theme.text-muted;
                         overflow: elide;
                     }
                 }
@@ -502,8 +503,8 @@ component Library inherits Rectangle {
                         height: 30px;
                         width: pair-text.preferred-width + 24px;
                         border-radius: 15px;
-                        background: pair-touch.has-hover ? #8b9cff40 : #8b9cff26;
-                        pair-text := Text { text: root.pair-prompt; font-size: 12px; font-weight: 600; color: #d6dcff; }
+                        background: pair-touch.has-hover ? Theme.accent-soft-strong : Theme.accent-soft;
+                        pair-text := Text { text: root.pair-prompt; font-size: Theme.font-small; font-weight: 600; color: Theme.accent-text; }
                         pair-touch := TouchArea { clicked => { root.pair-again(); } }
                     }
                 }
@@ -513,18 +514,18 @@ component Library inherits Rectangle {
                         width: 240px;
                         height: 32px;
                         border-radius: 8px;
-                        background: #1c1f26;
+                        background: Theme.surface;
                         border-width: 1px;
-                        border-color: search-input.has-focus ? #8b9cff : #262a33;
+                        border-color: search-input.has-focus ? Theme.accent : Theme.border;
                         HorizontalLayout {
                             padding-left: 10px;
                             padding-right: 10px;
                             spacing: 8px;
-                            Image { source: @image-url("icons/search.svg"); width: 15px; colorize: #8a8f98; }
+                            Image { source: @image-url("icons/search.svg"); width: 15px; colorize: Theme.text-muted; }
                             search-input := TextInput {
                                 text <=> root.search;
-                                font-size: 13px;
-                                color: #e6e8eb;
+                                font-size: Theme.font-body;
+                                color: Theme.text;
                                 vertical-alignment: center;
                                 single-line: true;
                                 edited => { root.search-edited(self.text); }
@@ -533,8 +534,8 @@ component Library inherits Rectangle {
                                     width: parent.width;
                                     height: parent.height;
                                     text: "Search games";
-                                    color: #6b7280;
-                                    font-size: 13px;
+                                    color: Theme.text-subtle;
+                                    font-size: Theme.font-body;
                                     vertical-alignment: center;
                                 }
                             }
@@ -560,7 +561,7 @@ component Library inherits Rectangle {
                 init => { root.columns-changed(self.columns); }
                 if root.rows.length == 0: Text {
                     text: root.syncing ? "Loading your library…" : "No games found.";
-                    color: #888;
+                    color: Theme.text-muted;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -585,9 +586,9 @@ component Library inherits Rectangle {
 
 
 component SectionTitle inherits Text {
-    font-size: 20px;
+    font-size: Theme.font-title;
     font-weight: 700;
-    color: #e6e8eb;
+    color: Theme.text;
 }
 
 component GamePage inherits Rectangle {
@@ -657,7 +658,7 @@ component GamePage inherits Rectangle {
                             height: 347px;
                             border-radius: 10px;
                             clip: true;
-                            background: #2a2e36;
+                            background: Theme.surface-muted;
                             if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: contain; }
                         }
                     }
@@ -667,13 +668,13 @@ component GamePage inherits Rectangle {
                         spacing: 10px;
                         if root.category != "": Text {
                             text: root.category;
-                            font-size: 11px;
+                            font-size: Theme.font-caption;
                             font-weight: 700;
                             letter-spacing: 1.5px;
-                            color: #8b9cff;
+                            color: Theme.accent;
                         }
-                        Text { text: root.title; font-size: 34px; font-weight: 800; wrap: word-wrap; }
-                        Text { text: root.subtitle; font-size: 16px; color: #9aa3b2; wrap: word-wrap; }
+                        Text { text: root.title; font-size: Theme.font-display; font-weight: 800; wrap: word-wrap; }
+                        Text { text: root.subtitle; font-size: Theme.font-subtitle; color: Theme.text-muted; wrap: word-wrap; }
                         HorizontalLayout {
                             padding-top: 8px;
                             alignment: start;
@@ -710,19 +711,19 @@ component GamePage inherits Rectangle {
                                     Rectangle {
                                         width: parent.width;
                                         height: parent.height;
-                                        background: #23272f;
+                                        background: Theme.surface-raised;
                                         border-radius: 8px;
                                         border-width: 1px;
-                                        border-color: #3a3f4b;
+                                        border-color: Theme.surface-selected;
                                         drop-shadow-blur: 12px;
-                                        drop-shadow-color: #00000080;
+                                        drop-shadow-color: Theme.shadow;
                                         popup-list := VerticalLayout {
                                             width: parent.width;
                                             padding: 12px;
                                             spacing: 6px;
                                             if root.memberships.length == 0: Text {
                                                 text: "You don't have any collections yet.";
-                                                color: #8a8f98;
+                                                color: Theme.text-muted;
                                                 wrap: word-wrap;
                                             }
                                             for m in root.memberships: CheckBox {
@@ -742,15 +743,15 @@ component GamePage inherits Rectangle {
                                 }
                             }
                         }
-                        if root.status != "": Text { text: root.status; color: #bbb; wrap: word-wrap; }
+                        if root.status != "": Text { text: root.status; color: Theme.text-secondary; wrap: word-wrap; }
                         if root.conflict: Rectangle {
                             border-radius: 8px;
-                            background: #3b2f1e;
+                            background: Theme.warning-surface;
                             VerticalLayout {
                                 padding: 14px;
                                 spacing: 10px;
                                 Text { text: "Your save changed on this computer and on the server."; font-weight: 700; wrap: word-wrap; }
-                                Text { text: root.conflict-text; color: #ccc; wrap: word-wrap; }
+                                Text { text: root.conflict-text; color: Theme.text-secondary; wrap: word-wrap; }
                                 HorizontalLayout {
                                     alignment: start;
                                     spacing: 10px;
@@ -764,8 +765,8 @@ component GamePage inherits Rectangle {
                             spacing: 11px;
                             for fact in root.facts: HorizontalLayout {
                                 spacing: 18px;
-                                Text { text: fact.label; width: 110px; font-size: 14px; color: #8a8f98; line-height-factor: 1.3; }
-                                Text { text: fact.value; font-size: 14px; color: #e6e8eb; wrap: word-wrap; horizontal-stretch: 1; line-height-factor: 1.3; }
+                                Text { text: fact.label; width: 110px; font-size: Theme.font-body-large; color: Theme.text-muted; line-height-factor: 1.3; }
+                                Text { text: fact.value; font-size: Theme.font-body-large; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; line-height-factor: 1.3; }
                             }
                         }
                     }
@@ -779,9 +780,9 @@ component GamePage inherits Rectangle {
                             text: root.summary;
                             max-width: 720px;
                             wrap: word-wrap;
-                            font-size: 16px;
+                            font-size: Theme.font-subtitle;
                             line-height-factor: 1.55;
-                            color: #d6dae0;
+                            color: Theme.text-secondary;
                         }
                     }
                 }
@@ -800,10 +801,10 @@ component GamePage inherits Rectangle {
                                 height: 200px;
                                 border-radius: 8px;
                                 clip: true;
-                                background: #2a2e36;
+                                background: Theme.surface-muted;
                                 if shot.loaded: Image { source: shot.image; width: parent.width; height: parent.height; image-fit: ImageFit.cover; }
                                 shot-touch := TouchArea { clicked => { root.viewing = i; } }
-                                if shot-touch.has-hover: Rectangle { background: #ffffff14; }
+                                if shot-touch.has-hover: Rectangle { background: Theme.hover; }
                             }
                         }
                     }
@@ -830,7 +831,7 @@ component GamePage inherits Rectangle {
     }
 
     if root.viewing >= 0 && root.viewing < root.shots.length: Rectangle {
-        background: #000000e6;
+        background: Theme.scrim-strong;
         TouchArea { clicked => { root.viewing = -1; } }
         Image {
             x: 72px;
@@ -867,7 +868,7 @@ component NavItem inherits Rectangle {
     callback clicked();
     height: 34px;
     border-radius: 6px;
-    background: root.selected ? #3a3f4b : touch.has-hover ? #2a2e36 : transparent;
+    background: root.selected ? Theme.surface-selected : touch.has-hover ? Theme.surface-muted : transparent;
     touch := TouchArea { clicked => { root.clicked(); } }
     HorizontalLayout {
         padding-left: 12px;
@@ -877,10 +878,10 @@ component NavItem inherits Rectangle {
 
 component Panel inherits Rectangle {
     clip: true;
-    background: #23272f;
+    background: Theme.surface-raised;
     border-radius: 10px;
     border-width: 1px;
-    border-color: #2f343d;
+    border-color: Theme.surface-muted;
     VerticalLayout {
         padding-top: 4px;
         padding-bottom: 4px;
@@ -893,11 +894,11 @@ component SettingRow inherits Rectangle {
     in property <string> detail;
     in property <bool> divider;
     in property <bool> highlight;
-    in property <color> detail-color: #8a8f98;
-    background: root.highlight ? #2b3a55 : transparent;
+    in property <color> detail-color: Theme.text-muted;
+    background: root.highlight ? Theme.accent-soft-strong : transparent;
     animate background { duration: 150ms; }
     VerticalLayout {
-        if root.divider: Rectangle { height: 1px; background: #2f343d; }
+        if root.divider: Rectangle { height: 1px; background: Theme.surface-muted; }
         HorizontalLayout {
             padding-left: 16px;
             padding-right: 12px;
@@ -908,8 +909,8 @@ component SettingRow inherits Rectangle {
                 horizontal-stretch: 1;
                 alignment: center;
                 spacing: 2px;
-                Text { text: root.label; font-size: 14px; overflow: elide; }
-                if root.detail != "": Text { text: root.detail; font-size: 12px; color: root.detail-color; wrap: word-wrap; }
+                Text { text: root.label; font-size: Theme.font-body-large; overflow: elide; }
+                if root.detail != "": Text { text: root.detail; font-size: Theme.font-small; color: root.detail-color; wrap: word-wrap; }
             }
             @children
         }
@@ -921,8 +922,8 @@ component SectionHeading inherits VerticalLayout {
     in property <string> subtitle;
     spacing: 4px;
     padding-bottom: 4px;
-    Text { text: root.title; font-size: 22px; font-weight: 700; }
-    if root.subtitle != "": Text { text: root.subtitle; color: #8a8f98; wrap: word-wrap; }
+    Text { text: root.title; font-size: Theme.font-heading; font-weight: 700; }
+    if root.subtitle != "": Text { text: root.subtitle; color: Theme.text-muted; wrap: word-wrap; }
 }
 
 component SettingsPage inherits Rectangle {
@@ -981,7 +982,7 @@ component SettingsPage inherits Rectangle {
                 padding-top: 16px;
                 spacing: 2px;
                 alignment: start;
-                Text { text: "Settings"; font-size: 13px; font-weight: 700; color: #7d8590; letter-spacing: 1px; }
+                Text { text: "Settings"; font-size: Theme.font-body; font-weight: 700; color: Theme.text-muted; letter-spacing: 1px; }
                 Rectangle { height: 8px; }
                 for label[i] in ["General", "Account", "Players", "Storage"]: NavItem {
                     label: label;
@@ -1076,7 +1077,7 @@ component SettingsPage inherits Rectangle {
                                 divider: i > 0;
                                 label: device.name;
                                 detail: device.active ? "Button pressed" : device.detail;
-                                detail-color: device.active ? #8b9cff : #8a8f98;
+                                detail-color: device.active ? Theme.accent : Theme.text-muted;
                                 highlight: device.active;
                                 Button { text: "Customize…"; clicked => { root.customize(device.key); } }
                                 ComboBox {
@@ -1087,7 +1088,7 @@ component SettingsPage inherits Rectangle {
                                 }
                             }
                         }
-                        Text { text: "Controller options"; font-size: 15px; font-weight: 700; }
+                        Text { text: "Controller options"; font-size: Theme.font-body-large; font-weight: 700; }
                         Panel {
                             SettingRow {
                                 label: "Match button labels on Nintendo systems";
@@ -1101,7 +1102,7 @@ component SettingsPage inherits Rectangle {
                                 Switch { checked <=> root.stick-dpad; toggled => { root.controller-options-changed(); } }
                             }
                         }
-                        Text { text: "Shortcuts"; font-size: 15px; font-weight: 700; }
+                        Text { text: "Shortcuts"; font-size: Theme.font-body-large; font-weight: 700; }
                         Panel {
                             for hint[i] in root.keys: SettingRow {
                                 divider: i > 0;
@@ -1110,8 +1111,8 @@ component SettingsPage inherits Rectangle {
                                     width: key-text.preferred-width + 16px;
                                     height: 24px;
                                     border-radius: 5px;
-                                    background: #2f343d;
-                                    key-text := Text { text: hint.keys; font-size: 12px; color: #d0d4da; }
+                                    background: Theme.surface-muted;
+                                    key-text := Text { text: hint.keys; font-size: Theme.font-small; color: Theme.text-secondary; }
                                 }
                             }
                         }
@@ -1126,7 +1127,7 @@ component SettingsPage inherits Rectangle {
                             for row[i] in root.storage: SettingRow {
                                 divider: i > 0;
                                 label: row.label;
-                                Text { text: row.size; color: #b8bec8; vertical-alignment: center; }
+                                Text { text: row.size; color: Theme.text-secondary; vertical-alignment: center; }
                             }
                         }
                         HorizontalLayout {
@@ -1142,17 +1143,17 @@ component SettingsPage inherits Rectangle {
     }
 
     if root.remap-open: Rectangle {
-        background: #000000a0;
+        background: Theme.scrim;
         TouchArea { }
         Rectangle {
             width: 480px;
             height: min(parent.height - 64px, remap-box.preferred-height);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            background: #23272f;
+            background: Theme.surface-raised;
             border-radius: 12px;
             border-width: 1px;
-            border-color: #3a3f4b;
+            border-color: Theme.surface-selected;
             clip: true;
             remap-keys := FocusScope {
                 key-pressed(event) => {
@@ -1165,8 +1166,8 @@ component SettingsPage inherits Rectangle {
                 remap-box := VerticalLayout {
                     padding: 20px;
                     spacing: 12px;
-                    Text { text: root.remap-title; font-size: 17px; font-weight: 700; }
-                    Text { text: root.remap-hint; color: #b8bec8; wrap: word-wrap; }
+                    Text { text: root.remap-title; font-size: Theme.font-subtitle; font-weight: 700; }
+                    Text { text: root.remap-hint; color: Theme.text-secondary; wrap: word-wrap; }
                     ScrollView {
                         vertical-stretch: 1;
                         min-height: 200px;
@@ -1211,22 +1212,22 @@ component Dialog inherits Rectangle {
     in property <bool> destructive;
     callback accepted(string);
     callback cancelled();
-    background: #000000a0;
+    background: Theme.scrim;
     TouchArea { }
     Rectangle {
         width: 380px;
         height: box.preferred-height;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        background: #23272f;
+        background: Theme.surface-raised;
         border-radius: 10px;
         border-width: 1px;
-        border-color: #3a3f4b;
+        border-color: Theme.surface-selected;
         box := VerticalLayout {
             padding: 20px;
             spacing: 12px;
-            Text { text: root.title; font-size: 17px; font-weight: 700; }
-            if root.message != "": Text { text: root.message; color: #b8bec8; wrap: word-wrap; }
+            Text { text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
+            if root.message != "": Text { text: root.message; color: Theme.text-secondary; wrap: word-wrap; }
             if root.asks-name: LineEdit {
                 text <=> root.value;
                 accepted => { if root.value != "" { root.accepted(root.value); } }
@@ -1252,19 +1253,19 @@ component AboutDialog inherits Rectangle {
     in property <image> icon;
     in property <bool> has-icon;
     callback close();
-    background: #000000a8;
+    background: Theme.scrim;
     TouchArea { clicked => { root.close(); } }
     Rectangle {
         width: 340px;
         height: about-box.preferred-height;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        background: #1c1f26;
+        background: Theme.surface;
         border-radius: 16px;
         border-width: 1px;
-        border-color: #2c313b;
+        border-color: Theme.border;
         drop-shadow-blur: 30px;
-        drop-shadow-color: #00000090;
+        drop-shadow-color: Theme.shadow;
         TouchArea { }
         about-box := VerticalLayout {
             padding: 28px;
@@ -1275,24 +1276,24 @@ component AboutDialog inherits Rectangle {
                 AppTile { size: 76px; icon: root.icon; has-icon: root.has-icon; }
             }
             Rectangle { height: 8px; }
-            Text { text: Brand.name; font-size: 24px; font-weight: 800; color: #ffffff; horizontal-alignment: center; }
-            Text { text: "Version " + root.version; font-size: 12px; color: #8a8f98; horizontal-alignment: center; }
+            Text { text: Brand.name; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; horizontal-alignment: center; }
+            Text { text: "Version " + root.version; font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
             Rectangle { height: 6px; }
             Text {
                 text: Brand.tagline;
-                font-size: 13px;
-                color: #c9ced6;
+                font-size: Theme.font-body;
+                color: Theme.text-secondary;
                 horizontal-alignment: center;
                 wrap: word-wrap;
                 line-height-factor: 1.35;
             }
             Rectangle { height: 10px; }
-            Rectangle { height: 1px; background: #2a2f38; }
+            Rectangle { height: 1px; background: Theme.border; }
             Rectangle { height: 10px; }
             Text {
                 text: "Games and saves from RomM. Emulation by libretro cores.";
-                font-size: 11px;
-                color: #8a8f98;
+                font-size: Theme.font-caption;
+                color: Theme.text-muted;
                 horizontal-alignment: center;
                 wrap: word-wrap;
             }
@@ -1307,7 +1308,7 @@ component AboutDialog inherits Rectangle {
 
 export component AppWindow inherits Window {
     title: Brand.name;
-    background: #15171c;
+    background: Theme.background;
     preferred-width: 1100px;
     preferred-height: 760px;
     min-width: 640px;
@@ -1569,10 +1570,10 @@ export component AppWindow inherits Window {
         width: hints-text.preferred-width + 24px;
         height: 30px;
         border-radius: 15px;
-        background: #000000c8;
+        background: Theme.scrim-strong;
         border-width: 1px;
-        border-color: #ffffff1a;
-        hints-text := Text { text: root.pad-hints; color: #d0d4da; font-size: 12px; }
+        border-color: Theme.border-subtle;
+        hints-text := Text { text: root.pad-hints; color: Theme.text-secondary; font-size: Theme.font-small; }
     }
     if root.about-open: AboutDialog {
         version: root.app-version;

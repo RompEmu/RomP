@@ -1,0 +1,51 @@
+import { Palette } from "std-widgets.slint";
+
+export global Theme {
+    out property <color> background: #15171c;
+    out property <color> sidebar: #111317;
+    out property <color> surface: #1c1f26;
+    out property <color> surface-raised: #23272f;
+    out property <color> surface-muted: #2a2e36;
+    out property <color> surface-selected: #3a3f4b;
+    out property <color> hover: #ffffff0d;
+    out property <color> pressed: #ffffff1f;
+    out property <color> border: #2a2f38;
+    out property <color> border-subtle: #ffffff1a;
+    out property <color> divider: #20242b;
+    out property <color> scrim: #000000a8;
+    out property <color> scrim-strong: #000000c8;
+    out property <color> shadow: #00000090;
+
+    out property <color> text-strong: #ffffff;
+    out property <color> text: #e6e8eb;
+    out property <color> text-secondary: #c2c7cf;
+    out property <color> text-muted: #8a8f98;
+    out property <color> text-subtle: #6b7280;
+
+    out property <brush> accent: Palette.accent-background;
+    out property <brush> accent-hover: Palette.accent-background.brighter(0.15);
+    out property <brush> accent-pressed: Palette.accent-background.darker(0.15);
+    out property <brush> accent-foreground: Palette.accent-foreground;
+    out property <brush> accent-soft: Palette.accent-background.with-alpha(0.16);
+    out property <brush> accent-soft-strong: Palette.accent-background.with-alpha(0.28);
+    out property <brush> accent-text: Palette.accent-background.brighter(0.5);
+
+    out property <color> success: #3fbf6b;
+    out property <color> warning: #f0a33c;
+    out property <color> warning-surface: #3b2f1e;
+    out property <color> danger: #e5484d;
+    out property <color> favorite: #ff5c7a;
+
+    out property <length> font-caption: 11px;
+    out property <length> font-small: 12px;
+    out property <length> font-body: 13px;
+    out property <length> font-body-large: 14px;
+    out property <length> font-subtitle: 16px;
+    out property <length> font-title: 20px;
+    out property <length> font-heading: 24px;
+    out property <length> font-display: 32px;
+
+    out property <length> radius-small: 6px;
+    out property <length> radius: 8px;
+    out property <length> radius-large: 12px;
+}

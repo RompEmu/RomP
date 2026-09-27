@@ -1,3 +1,4 @@
+import { Theme } from "theme.slint";
 export struct PortRow { label: string, device: string }
 
 component MenuButton inherits Rectangle {
@@ -8,15 +9,15 @@ component MenuButton inherits Rectangle {
     height: 40px;
     border-radius: 8px;
     border-width: root.focused ? 2px : 0px;
-    border-color: #c7d0ff;
+    border-color: Theme.accent-text;
     background: root.primary
-        ? (touch.pressed ? #4a61e0 : touch.has-hover ? #6f86ff : #5b73f5)
-        : (touch.pressed ? #23272f : touch.has-hover ? #3a3f4b : #2c313a);
+        ? (touch.pressed ? Theme.accent-pressed : touch.has-hover ? Theme.accent-hover : Theme.accent)
+        : (touch.pressed ? Theme.surface-raised : touch.has-hover ? Theme.surface-selected : Theme.surface-muted);
     animate background { duration: 100ms; }
     Text {
         text: root.text;
-        color: white;
-        font-size: 15px;
+        color: Theme.text-strong;
+        font-size: Theme.font-body-large;
         font-weight: root.primary ? 600 : 500;
     }
     touch := TouchArea { clicked => { root.clicked(); } }
@@ -40,38 +41,38 @@ component GameMenu inherits Rectangle {
     callback open-controllers();
     callback quit();
 
-    background: #000000b8;
+    background: Theme.scrim;
     TouchArea { }
     Rectangle {
         width: 340px;
         height: menu.preferred-height;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        background: #1b1e24f2;
+        background: Theme.surface-raised;
         border-radius: 14px;
         border-width: 1px;
-        border-color: #ffffff1c;
+        border-color: Theme.border-subtle;
         drop-shadow-blur: 24px;
-        drop-shadow-color: #00000090;
+        drop-shadow-color: Theme.shadow;
         menu := VerticalLayout {
             padding: 22px;
             spacing: 10px;
-            Text { text: root.name; color: white; font-size: 18px; font-weight: 700; overflow: elide; }
-            Text { text: root.paused ? "Paused" : "Running behind this menu"; color: #9aa3b2; font-size: 13px; }
+            Text { text: root.name; color: Theme.text-strong; font-size: Theme.font-subtitle; font-weight: 700; overflow: elide; }
+            Text { text: root.paused ? "Paused" : "Running behind this menu"; color: Theme.text-muted; font-size: Theme.font-body; }
             Rectangle { height: 4px; }
             MenuButton { text: "Resume"; primary: true; focused: root.focused-item == 0; clicked => { root.resume(); } }
             MenuButton { text: root.paused ? "Play" : "Pause"; focused: root.focused-item == 1; clicked => { root.toggle-pause(); } }
-            Rectangle { height: 1px; background: #ffffff14; }
+            Rectangle { height: 1px; background: Theme.hover; }
             HorizontalLayout {
                 spacing: 8px;
-                Text { text: "Save slot"; color: #b8bec8; vertical-alignment: center; horizontal-stretch: 1; }
+                Text { text: "Save slot"; color: Theme.text-secondary; vertical-alignment: center; horizontal-stretch: 1; }
                 MenuButton { width: 40px; text: "‹"; clicked => { root.step-slot(-1); } }
                 Rectangle {
                     width: 36px;
                     border-radius: 8px;
                     border-width: root.focused-item == 2 ? 2px : 0px;
-                    border-color: #c7d0ff;
-                    Text { text: root.slot; color: white; font-size: 16px; font-weight: 700; }
+                    border-color: Theme.accent-text;
+                    Text { text: root.slot; color: Theme.text-strong; font-size: Theme.font-subtitle; font-weight: 700; }
                 }
                 MenuButton { width: 40px; text: "›"; clicked => { root.step-slot(1); } }
             }
@@ -80,20 +81,20 @@ component GameMenu inherits Rectangle {
                 MenuButton { text: "Save state"; focused: root.focused-item == 3; clicked => { root.save-state(); } }
                 MenuButton { text: "Load state"; focused: root.focused-item == 4; clicked => { root.load-state(); } }
             }
-            Rectangle { height: 1px; background: #ffffff14; }
+            Rectangle { height: 1px; background: Theme.hover; }
             MenuButton { text: root.fullscreen ? "Exit full screen" : "Full screen"; focused: root.focused-item == 5; clicked => { root.toggle-fullscreen(); } }
             MenuButton { text: "Controllers…"; focused: root.focused-item == 6; clicked => { root.open-controllers(); } }
             for port[i] in root.ports: HorizontalLayout {
                 spacing: 8px;
-                Text { text: port.label; color: #b8bec8; vertical-alignment: center; width: 56px; }
+                Text { text: port.label; color: Theme.text-secondary; vertical-alignment: center; width: 56px; }
                 MenuButton { width: 40px; text: "‹"; clicked => { root.cycle-port(i, -1); } }
                 Rectangle {
                     horizontal-stretch: 1;
                     border-radius: 8px;
-                    background: #2c313a;
+                    background: Theme.surface-muted;
                     border-width: root.focused-item == 7 + i ? 2px : 0px;
-                    border-color: #c7d0ff;
-                    Text { text: port.device; color: white; font-size: 14px; overflow: elide; }
+                    border-color: Theme.accent-text;
+                    Text { text: port.device; color: Theme.text-strong; font-size: Theme.font-body-large; overflow: elide; }
                 }
                 MenuButton { width: 40px; text: "›"; clicked => { root.cycle-port(i, 1); } }
             }
@@ -101,8 +102,8 @@ component GameMenu inherits Rectangle {
             VerticalLayout {
                 padding-top: 4px;
                 spacing: 2px;
-                Text { text: root.menu-key == "Esc" ? "Esc or Guide resume  ·  P pause  ·  F11 full screen" : "F12 or Guide resume  ·  your keyboard goes to the game"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
-                if root.menu-key == "Esc": Text { text: "F5 save  ·  F7 load  ·  F6 next slot"; color: #6b7280; font-size: 11px; horizontal-alignment: center; }
+                Text { text: root.menu-key == "Esc" ? "Esc or Guide resume  ·  P pause  ·  F11 full screen" : "F12 or Guide resume  ·  your keyboard goes to the game"; color: Theme.text-subtle; font-size: Theme.font-caption; horizontal-alignment: center; }
+                if root.menu-key == "Esc": Text { text: "F5 save  ·  F7 load  ·  F6 next slot"; color: Theme.text-subtle; font-size: Theme.font-caption; horizontal-alignment: center; }
             }
         }
     }
@@ -225,8 +226,8 @@ export component GameWindow inherits Window {
             width: paused-label.preferred-width + 28px;
             height: 32px;
             border-radius: 16px;
-            background: #000000c0;
-            paused-label := Text { text: root.menu-key == "Esc" ? "Paused  ·  P to resume" : "Paused  ·  " + root.menu-key + " for the menu"; color: white; font-size: 14px; }
+            background: Theme.scrim-strong;
+            paused-label := Text { text: root.menu-key == "Esc" ? "Paused  ·  P to resume" : "Paused  ·  " + root.menu-key + " for the menu"; color: Theme.text-strong; font-size: Theme.font-body-large; }
         }
 
         if root.has-menu && root.menu-open: GameMenu {
@@ -255,14 +256,14 @@ export component GameWindow inherits Window {
             y: parent.height - self.height - 16px;
             width: parent.width - 32px;
             height: label.preferred-height + 16px;
-            background: #000000c0;
+            background: Theme.scrim-strong;
             border-radius: 6px;
             label := Text {
                 x: 8px;
                 width: parent.width - 16px;
                 text: root.status;
-                color: white;
-                font-size: 15px;
+                color: Theme.text-strong;
+                font-size: Theme.font-body-large;
                 wrap: word-wrap;
             }
         }
