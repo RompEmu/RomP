@@ -216,6 +216,7 @@ impl Controller {
                     downloaded: g.local_path.is_some(),
                     focused: false,
                     favorite: false,
+                    aspect: details::box_aspect(&g.platform_slug),
                 }
             })
             .collect();
@@ -275,6 +276,7 @@ impl Controller {
                 .into(),
         );
         ui.set_game_subtitle(details::subtitle(&detail).into());
+        ui.set_game_cover_aspect(details::box_aspect(&detail.platform_slug));
         ui.set_game_summary(detail.summary.clone().unwrap_or_default().into());
         ui.set_game_facts(ModelRc::new(VecModel::from(
             details::facts(&detail)

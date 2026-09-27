@@ -40,6 +40,30 @@ fn release_ms(detail: &GameDetail) -> Option<i64> {
     detail.meta.first_release_date
 }
 
+const DVD_CASE: f32 = 0.71;
+
+const BOX_SHAPES: [(&[&str], f32); 12] = [
+    (&["gb", "gbc", "gba", "dc"], 1.0),
+    (&["snes"], 1.38),
+    (&["n64"], 1.37),
+    (&["psx"], 1.16),
+    (&["nds", "3ds"], 1.11),
+    (&["virtualboy"], 1.12),
+    (&["sfam"], 0.55),
+    (&["psp"], 0.58),
+    (&["saturn"], 0.65),
+    (&["wonderswan", "wonderswan-color"], 0.69),
+    (&["nes", "famicom", "gamegear", "atari2600", "arcade"], 0.73),
+    (&["lynx", "dos"], 0.8),
+];
+
+pub fn box_aspect(platform_slug: &str) -> f32 {
+    BOX_SHAPES
+        .iter()
+        .find(|(slugs, _)| slugs.contains(&platform_slug))
+        .map_or(DVD_CASE, |(_, aspect)| *aspect)
+}
+
 pub fn subtitle(detail: &GameDetail) -> String {
     let year = release_ms(detail)
         .and_then(date_parts)
@@ -91,6 +115,21 @@ pub fn facts(detail: &GameDetail) -> Vec<(&'static str, String)> {
 mod tests {
     use super::*;
     use crate::romm::types::RomMetadata;
+
+    #[test]
+    fn boxes_take_the_shape_of_each_consoles_packaging() {
+        for slug in ["gb", "gbc", "gba", "dc"] {
+            assert_eq!(box_aspect(slug), 1.0, "{slug}");
+        }
+        assert_eq!(box_aspect("snes"), 1.38);
+        assert_eq!(box_aspect("n64"), 1.37);
+        assert_eq!(box_aspect("nds"), 1.11);
+        assert_eq!(box_aspect("sfam"), 0.55);
+        assert_eq!(box_aspect("psp"), 0.58);
+        assert_eq!(box_aspect("nes"), 0.73);
+        assert_eq!(box_aspect("ps2"), 0.71);
+        assert_eq!(box_aspect("unknown-console"), 0.71);
+    }
 
     fn detail(meta: RomMetadata) -> GameDetail {
         GameDetail {

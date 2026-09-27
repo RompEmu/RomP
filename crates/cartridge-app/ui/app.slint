@@ -8,7 +8,7 @@ export struct DeviceRow { key: string, name: string, detail: string, player: int
 export struct StorageRow { label: string, size: string }
 export struct KeyHint { keys: string, action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
-export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool }
+export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool, aspect: float }
 export struct GameRow { cards: [GameCard] }
 export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
@@ -315,47 +315,55 @@ component Card inherits Rectangle {
         spacing: 6px;
         Rectangle {
             height: 230px;
-            border-radius: 8px;
-            clip: true;
-            background: Theme.surface-muted;
-            if root.game.has-cover: Image {
-                source: root.game.cover;
-                width: parent.width;
-                height: parent.height;
-                image-fit: cover;
-            }
-            if !root.game.has-cover: Text {
-                text: root.game.title;
-                color: Theme.text-muted;
-                wrap: word-wrap;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                width: parent.width - 16px;
-                x: 8px;
-            }
-            if root.game.favorite: Rectangle {
-                x: 8px;
-                y: 8px;
-                width: 24px;
-                height: 24px;
-                border-radius: 12px;
-                background: Theme.scrim;
-                Text { text: "♥"; color: Theme.favorite; font-size: Theme.font-body; }
-            }
-            if root.game.downloaded: Rectangle {
-                x: parent.width - self.width - 8px;
-                y: 8px;
-                width: 22px;
-                height: 22px;
-                border-radius: 11px;
-                background: Theme.success;
-                Text { text: "✓"; color: Theme.text-strong; font-weight: 700; }
-            }
-            if touch.has-hover: Rectangle { background: Theme.hover; }
-            if root.game.focused || keys.has-focus: Rectangle {
+            property <float> aspect: root.game.aspect > 0 ? root.game.aspect : 0.71;
+            property <length> box-width: min(self.width, self.height * self.aspect);
+            Rectangle {
+                width: parent.box-width;
+                height: parent.box-width / parent.aspect;
+                x: (parent.width - self.width) / 2;
+                y: parent.height - self.height;
                 border-radius: 8px;
-                border-width: 3px;
-                border-color: Theme.accent;
+                clip: true;
+                background: Theme.surface-muted;
+                if root.game.has-cover: Image {
+                    source: root.game.cover;
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: cover;
+                }
+                if !root.game.has-cover: Text {
+                    text: root.game.title;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: parent.width - 16px;
+                    x: 8px;
+                }
+                if root.game.favorite: Rectangle {
+                    x: 8px;
+                    y: 8px;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 12px;
+                    background: Theme.scrim;
+                    Text { text: "♥"; color: Theme.favorite; font-size: Theme.font-body; }
+                }
+                if root.game.downloaded: Rectangle {
+                    x: parent.width - self.width - 8px;
+                    y: 8px;
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: Theme.success;
+                    Text { text: "✓"; color: Theme.text-strong; font-weight: 700; }
+                }
+                if touch.has-hover: Rectangle { background: Theme.hover; }
+                if root.game.focused || keys.has-focus: Rectangle {
+                    border-radius: 8px;
+                    border-width: 3px;
+                    border-color: Theme.accent;
+                }
             }
         }
         Text { text: root.game.title; overflow: elide; font-weight: 600; }
@@ -722,6 +730,7 @@ component GamePage inherits FocusScope {
     in property <[Shot]> shots;
     in property <[GameCard]> similar;
     in property <image> cover;
+    in property <float> cover-aspect: 0.71;
     in property <bool> has-cover;
     in property <bool> downloaded;
     in property <bool> busy;
@@ -811,12 +820,12 @@ component GamePage inherits FocusScope {
                     VerticalLayout {
                         alignment: start;
                         Rectangle {
-                            width: 260px;
-                            height: 347px;
+                            width: min(260px, 347px * root.cover-aspect);
+                            height: self.width / root.cover-aspect;
                             border-radius: 10px;
                             clip: true;
                             background: Theme.surface-muted;
-                            if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: contain; }
+                            if root.has-cover: Image { source: root.cover; width: parent.width; height: parent.height; image-fit: ImageFit.cover; }
                         }
                     }
                     VerticalLayout {
@@ -1596,6 +1605,7 @@ export component AppWindow inherits Window {
     in property <[Shot]> game-shots;
     in property <[GameCard]> game-similar;
     in property <image> game-cover;
+    in property <float> game-cover-aspect: 0.71;
     in property <bool> has-game-cover;
     in property <bool> game-downloaded;
     in property <bool> game-busy;
@@ -1737,6 +1747,7 @@ export component AppWindow inherits Window {
             similar: root.game-similar;
             open-game(id) => { root.open-game(id); }
             cover: root.game-cover;
+            cover-aspect: root.game-cover-aspect;
             has-cover: root.has-game-cover;
             downloaded: root.game-downloaded;
             busy: root.game-busy;
