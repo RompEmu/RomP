@@ -34,6 +34,10 @@ pub fn track<C: ComponentHandle + 'static>(component: &C) {
     });
 }
 
+pub fn window_event() {
+    refresh(None);
+}
+
 pub fn system_changed(id: WindowId) {
     slint::Timer::single_shot(Duration::ZERO, move || refresh(Some(id)));
 }

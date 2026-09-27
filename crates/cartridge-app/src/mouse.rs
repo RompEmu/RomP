@@ -64,6 +64,8 @@ impl CustomApplicationHandler for RawMouse {
     ) -> EventResult {
         if let WindowEvent::ScaleFactorChanged { .. } = event {
             crate::scale::system_changed(window_id);
+        } else {
+            crate::scale::window_event();
         }
         if let WindowEvent::MouseInput {
             state: ElementState::Pressed,
