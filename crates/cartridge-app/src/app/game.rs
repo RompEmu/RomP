@@ -220,8 +220,12 @@ impl Controller {
                 }
             })
             .collect();
+        let shelf = details::shelf_height(cards.iter().map(|c| c.aspect));
         if self.with_game(id, |g| g.similar.set_vec(cards)).is_none() {
             return;
+        }
+        if let Some(ui) = self.ui() {
+            ui.set_game_similar_shelf(shelf);
         }
         let Some(client) = self.client.borrow().clone() else {
             return;

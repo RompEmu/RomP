@@ -9,7 +9,7 @@ export struct StorageRow { label: string, size: string }
 export struct KeyHint { keys: string, action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool, aspect: float }
-export struct GameRow { cards: [GameCard] }
+export struct GameRow { cards: [GameCard], shelf: float }
 export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
 
@@ -301,9 +301,10 @@ component SectionHeader inherits Rectangle {
 
 component Card inherits Rectangle {
     in property <GameCard> game;
+    in property <length> shelf: 230px;
     callback clicked();
     width: 172px;
-    height: 290px;
+    height: root.shelf + 60px;
     accessible-role: button;
     accessible-label: root.game.title;
     accessible-description: root.game.platform + (root.game.downloaded ? ", " + @tr("downloaded") : "") + (root.game.favorite ? ", " + @tr("favorite") : "");
@@ -314,9 +315,9 @@ component Card inherits Rectangle {
         alignment: start;
         spacing: 6px;
         Rectangle {
-            height: 230px;
+            height: root.shelf;
             property <float> aspect: root.game.aspect > 0 ? root.game.aspect : 0.71;
-            property <length> box-width: min(self.width, self.height * self.aspect);
+            property <length> box-width: min(self.width, 230px * self.aspect);
             Rectangle {
                 width: parent.box-width;
                 height: parent.box-width / parent.aspect;
@@ -416,14 +417,16 @@ component Library inherits Rectangle {
     in property <bool> offline;
     callback downloaded-only-toggled(bool);
     in property <int> focus-row: -1;
+    in property <length> focus-top;
+    in property <length> focus-bottom;
     background: Theme.background;
     changed focus-row => {
         if root.focus-row >= 0 {
-            if root.focus-row * 306px < -games.content-y {
-                games.content-y = -(root.focus-row * 306px);
+            if root.focus-top < -games.content-y {
+                games.content-y = -root.focus-top;
             }
-            if (root.focus-row + 1) * 306px > -games.content-y + games.visible-height {
-                games.content-y = -((root.focus-row + 1) * 306px - games.visible-height);
+            if root.focus-bottom > -games.content-y + games.visible-height {
+                games.content-y = -(root.focus-bottom - games.visible-height);
             }
         }
     }
@@ -657,6 +660,7 @@ component Library inherits Rectangle {
                                 changed index => { root.row-shown(self.index); }
                                 for game in row.cards: Card {
                                     game: game;
+                                    shelf: row.shelf * 1px;
                                     clicked => { root.open-game(game.id); }
                                 }
                             }
@@ -729,6 +733,7 @@ component GamePage inherits FocusScope {
     in property <[Fact]> facts;
     in property <[Shot]> shots;
     in property <[GameCard]> similar;
+    in property <float> similar-shelf: 230;
     in property <image> cover;
     in property <float> cover-aspect: 0.71;
     in property <bool> has-cover;
@@ -984,7 +989,7 @@ component GamePage inherits FocusScope {
                     spacing: 10px;
                     SectionTitle { text: @tr("Similar in your library"); }
                     ScrollView {
-                        height: 304px;
+                        height: root.similar-shelf * 1px + 74px;
                         content-width: similar-row.preferred-width;
                         content-height: self.visible-height;
                         similar-row := HorizontalLayout {
@@ -992,6 +997,7 @@ component GamePage inherits FocusScope {
                             padding-bottom: 14px;
                             for game in root.similar: Card {
                                 game: game;
+                                shelf: root.similar-shelf * 1px;
                                 clicked => { root.open-game(game.id); }
                             }
                         }
@@ -1604,6 +1610,7 @@ export component AppWindow inherits Window {
     in property <[Fact]> game-facts;
     in property <[Shot]> game-shots;
     in property <[GameCard]> game-similar;
+    in property <float> game-similar-shelf: 230;
     in property <image> game-cover;
     in property <float> game-cover-aspect: 0.71;
     in property <bool> has-game-cover;
@@ -1633,6 +1640,8 @@ export component AppWindow inherits Window {
     callback toggle-membership(string, bool);
     callback new-collection-with-game();
     in property <int> grid-focus-row: -1;
+    in property <float> grid-focus-top;
+    in property <float> grid-focus-bottom;
     in property <string> pad-hints;
     in property <bool> dialog-open;
     in property <string> dialog-title;
@@ -1729,6 +1738,8 @@ export component AppWindow inherits Window {
         downloaded-only-toggled(on) => { root.downloaded-only-toggled(on); }
         open-settings => { root.open-settings(); }
         focus-row: root.grid-focus-row;
+        focus-top: root.grid-focus-top * 1px;
+        focus-bottom: root.grid-focus-bottom * 1px;
         user-initial: root.user-initial;
         server-label: root.server-label;
         heading: root.heading;
@@ -1745,6 +1756,7 @@ export component AppWindow inherits Window {
             facts: root.game-facts;
             shots: root.game-shots;
             similar: root.game-similar;
+            similar-shelf: root.game-similar-shelf;
             open-game(id) => { root.open-game(id); }
             cover: root.game-cover;
             cover-aspect: root.game-cover-aspect;

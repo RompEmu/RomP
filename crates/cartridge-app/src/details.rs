@@ -64,6 +64,21 @@ pub fn box_aspect(platform_slug: &str) -> f32 {
         .map_or(DVD_CASE, |(_, aspect)| *aspect)
 }
 
+pub const CARD_WIDTH: f32 = 172.0;
+pub const SHELF_HEIGHT: f32 = 230.0;
+
+pub fn box_height(aspect: f32) -> f32 {
+    (CARD_WIDTH.min(SHELF_HEIGHT * aspect) / aspect).round()
+}
+
+pub fn shelf_height(aspects: impl IntoIterator<Item = f32>) -> f32 {
+    aspects
+        .into_iter()
+        .map(box_height)
+        .reduce(f32::max)
+        .unwrap_or(SHELF_HEIGHT)
+}
+
 pub fn subtitle(detail: &GameDetail) -> String {
     let year = release_ms(detail)
         .and_then(date_parts)
@@ -115,6 +130,16 @@ pub fn facts(detail: &GameDetail) -> Vec<(&'static str, String)> {
 mod tests {
     use super::*;
     use crate::romm::types::RomMetadata;
+
+    #[test]
+    fn a_row_is_as_tall_as_its_tallest_box() {
+        assert_eq!(box_height(1.0), 172.0);
+        assert_eq!(box_height(1.38), 125.0);
+        assert_eq!(box_height(0.55), 230.0);
+        assert_eq!(shelf_height([1.0, 1.38]), 172.0);
+        assert_eq!(shelf_height([1.0, 0.71]), 230.0);
+        assert_eq!(shelf_height([]), 230.0);
+    }
 
     #[test]
     fn boxes_take_the_shape_of_each_consoles_packaging() {

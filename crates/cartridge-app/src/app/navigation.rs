@@ -156,8 +156,13 @@ impl Controller {
             }
         }
         if let (Some(ui), Some(i)) = (self.ui(), index) {
-            let columns = self.library.borrow().columns.max(1);
-            ui.set_grid_focus_row((i / columns) as i32);
+            let lib = self.library.borrow();
+            let row = i / lib.columns.max(1);
+            if let Some((top, bottom)) = crate::grid::row_span(&lib.shelves, row) {
+                ui.set_grid_focus_top(top);
+                ui.set_grid_focus_bottom(bottom);
+            }
+            ui.set_grid_focus_row(row as i32);
         }
     }
 

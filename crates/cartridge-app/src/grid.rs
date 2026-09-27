@@ -14,6 +14,14 @@ pub fn row_range(row: usize, items: usize, columns: usize) -> Range<usize> {
     start..(start + columns).min(items)
 }
 
+pub const ROW_CHROME: f32 = 76.0;
+
+pub fn row_span(shelves: &[f32], row: usize) -> Option<(f32, f32)> {
+    let height = shelves.get(row)? + ROW_CHROME;
+    let top: f32 = shelves[..row].iter().map(|s| s + ROW_CHROME).sum();
+    Some((top, top + height))
+}
+
 pub struct CoverSlots {
     capacity: usize,
     order: VecDeque<i64>,
@@ -92,6 +100,15 @@ impl RecentRows {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rows_stack_by_their_own_heights() {
+        let shelves = [230.0, 172.0, 125.0];
+        assert_eq!(row_span(&shelves, 0), Some((0.0, 306.0)));
+        assert_eq!(row_span(&shelves, 1), Some((306.0, 554.0)));
+        assert_eq!(row_span(&shelves, 2), Some((554.0, 755.0)));
+        assert_eq!(row_span(&shelves, 3), None);
+    }
 
     #[test]
     fn rows_cover_all_items() {

@@ -53,6 +53,7 @@ struct Library {
     columns: usize,
     games: Vec<GameItem>,
     rows: Rc<VecModel<GameRow>>,
+    shelves: Vec<f32>,
     covers: CoverSlots,
     loading: HashSet<i64>,
     recent: RecentRows,
@@ -66,6 +67,7 @@ impl Default for Library {
             columns: 1,
             games: Vec::new(),
             rows: Rc::new(VecModel::default()),
+            shelves: Vec::new(),
             covers: CoverSlots::with_default_capacity(),
             loading: HashSet::new(),
             recent: RecentRows::new(RECENT_ROWS),
@@ -627,10 +629,12 @@ impl Controller {
                     })
                     .collect();
                 GameRow {
+                    shelf: crate::details::shelf_height(cards.iter().map(|c| c.aspect)),
                     cards: ModelRc::new(VecModel::from(cards)),
                 }
             })
             .collect();
+        lib.shelves = rows.iter().map(|r| r.shelf).collect();
         lib.rows.set_vec(rows);
     }
 
