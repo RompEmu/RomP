@@ -8,6 +8,7 @@ use crate::cores::Cores;
 use crate::covers::Covers;
 use crate::credentials::{Keychain, TokenStore};
 use crate::grid::{row_count, row_range, CoverSlots, RecentRows, RECENT_ROWS};
+use crate::restore::{LastView, Observed, Placement, VIEW_KEY, WINDOW_KEY};
 use crate::romm::client::{check_version, server_candidates, Client, Error};
 use crate::romm::pairing::{PollStep, Poller};
 use crate::romm::types::{DeviceAuth, PollOutcome, User};
@@ -116,6 +117,7 @@ struct Controller {
     nav_card: Cell<Option<usize>>,
     nav_repeat: RefCell<crate::navigation::Repeater>,
     nav_timer: RefCell<Option<Timer>>,
+    restore_view: RefCell<Option<LastView>>,
 }
 
 thread_local! {
@@ -153,6 +155,8 @@ pub fn run() -> anyhow::Result<()> {
     );
     let prefs =
         crate::prefs::Preferences::from_json(shared.store.lock().unwrap().get("prefs").as_deref());
+    let placement = Placement::from_json(shared.store.lock().unwrap().get(WINDOW_KEY).as_deref());
+    let last_view = LastView::from_json(shared.store.lock().unwrap().get(VIEW_KEY).as_deref());
     let mappings = crate::mapping::Mappings::from_json(
         shared.store.lock().unwrap().get("mappings").as_deref(),
     );
@@ -194,6 +198,7 @@ pub fn run() -> anyhow::Result<()> {
         nav_card: Cell::new(None),
         nav_repeat: RefCell::default(),
         nav_timer: RefCell::new(None),
+        restore_view: RefCell::new(last_view),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -202,6 +207,17 @@ pub fn run() -> anyhow::Result<()> {
     controller.start_navigation();
     controller.start();
     crate::scale::set_factor(prefs.scale_factor());
+    if let Some(p) = placement {
+        ui.window()
+            .set_size(slint::PhysicalSize::new(p.width, p.height));
+        ui.window()
+            .set_position(slint::PhysicalPosition::new(p.x, p.y));
+        ui.window().set_maximized(p.maximized);
+    }
+    ui.window().on_close_requested(|| {
+        with_controller(|c| c.save_session());
+        slint::CloseRequestResponse::HideWindow
+    });
     let weak = ui.as_weak();
     slint::Timer::single_shot(Duration::ZERO, move || {
         let Some(ui) = weak.upgrade() else { return };
@@ -214,6 +230,7 @@ pub fn run() -> anyhow::Result<()> {
         }
     });
     slint::run_event_loop()?;
+    controller.save_session();
     ui.hide()?;
     CONTROLLER.with(|c| c.borrow_mut().take());
     Ok(())
@@ -429,21 +446,61 @@ impl Controller {
         }
         *self.client.borrow_mut() = Some(client.clone());
         self.set_offline(false);
-        self.library.borrow_mut().filter = GameFilter::default();
-        *self.selected.borrow_mut() = "all".into();
+        let restore = self.restore_view.borrow_mut().take();
+        let selected = restore
+            .as_ref()
+            .map_or_else(|| "all".to_string(), |v| v.selected.clone());
+        self.library.borrow_mut().filter = GameFilter {
+            scope: collections::scope_for(&selected),
+            ..GameFilter::default()
+        };
+        *self.selected.borrow_mut() = selected.clone();
         self.apply_download_filter();
         if let Some(ui) = self.ui() {
-            ui.set_selected_key("all".into());
+            ui.set_selected_key(selected.into());
             ui.set_search("".into());
             ui.set_screen(SCREEN_LIBRARY);
         }
         self.reload_sidebar();
         self.reload_games();
+        if let Some(id) = restore.and_then(|v| v.game) {
+            self.open_game(id);
+        }
         self.sync();
         self.shared.rt.spawn(async move {
             let me = client.me().await;
             on_ui(move |c| c.signed_in(me));
         });
+    }
+
+    fn save_session(&self) {
+        let Some(ui) = self.ui() else { return };
+        let window = ui.window();
+        let position = window.position();
+        let size = window.size();
+        let observed = Observed {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+            maximized: window.is_maximized(),
+            fullscreen: window.is_fullscreen(),
+            minimized: window.is_minimized(),
+        };
+        let store = self.shared.store.lock().unwrap();
+        let previous = Placement::from_json(store.get(WINDOW_KEY).as_deref());
+        if let Some(placement) = Placement::update(previous, &observed) {
+            store.set(WINDOW_KEY, &placement.to_json());
+        }
+        if self.client.borrow().is_some() {
+            let view = LastView {
+                selected: self.selected.borrow().clone(),
+                game: (ui.get_screen() == SCREEN_GAME)
+                    .then(|| self.current_game_id())
+                    .flatten(),
+            };
+            store.set(VIEW_KEY, &view.to_json());
+        }
     }
 
     fn signed_in(&self, me: Result<User, Error>) {

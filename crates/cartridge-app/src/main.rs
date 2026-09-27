@@ -22,6 +22,7 @@ mod players;
 mod ports;
 mod prefs;
 mod qr;
+mod restore;
 mod romm;
 mod rotation;
 mod saves;
