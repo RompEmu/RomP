@@ -552,6 +552,7 @@ impl Controller {
                     .map(|c| c.to_uppercase().to_string())
                     .unwrap_or_default();
                 ui.set_user_initial(initial.into());
+                self.load_avatar(&user);
                 ui.set_user_label(user.username.into());
                 if let Some(device) = user.current_device_id {
                     self.shared
@@ -566,6 +567,47 @@ impl Controller {
             Err(_) => {}
         }
         self.update_pairing_prompt();
+    }
+
+    fn load_avatar(&self, user: &User) {
+        let path = crate::avatar::cache_path(&paths::data_dir(), &self.server());
+        if !user.has_avatar() {
+            let _ = std::fs::remove_file(&path);
+            if let Some(ui) = self.ui() {
+                ui.set_has_user_avatar(false);
+            }
+            return;
+        }
+        let client = self.client.borrow().clone();
+        let id = user.id;
+        let offline = self.offline.get();
+        self.shared.rt.spawn(async move {
+            if let Some(picture) = std::fs::read(&path)
+                .ok()
+                .and_then(|b| crate::avatar::decode(&b))
+            {
+                on_ui(move |c| c.show_avatar(picture));
+            }
+            let (Some(client), Some(id)) = (client.filter(|_| !offline), id) else {
+                return;
+            };
+            match client.avatar(id).await {
+                Ok(bytes) => {
+                    if let Some(picture) = crate::avatar::decode(&bytes) {
+                        let _ = std::fs::write(&path, &bytes);
+                        on_ui(move |c| c.show_avatar(picture));
+                    }
+                }
+                Err(e) => tracing::warn!("fetching the profile picture: {e}"),
+            }
+        });
+    }
+
+    fn show_avatar(&self, picture: slint::SharedPixelBuffer<slint::Rgba8Pixel>) {
+        if let Some(ui) = self.ui() {
+            ui.set_user_avatar(Image::from_rgba8(picture));
+            ui.set_has_user_avatar(true);
+        }
     }
 
     fn needs_repair(&self) {
@@ -643,6 +685,7 @@ impl Controller {
         if let Some(ui) = self.ui() {
             ui.set_user_label("".into());
             ui.set_user_initial("".into());
+            ui.set_has_user_avatar(false);
             ui.set_connect_error("".into());
             ui.set_sync_status("".into());
             ui.set_screen(SCREEN_CONNECT);

@@ -1,4 +1,5 @@
 mod app;
+mod avatar;
 mod bios;
 mod collections;
 mod cores;

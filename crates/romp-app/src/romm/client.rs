@@ -336,6 +336,11 @@ impl Client {
             .map(|_| ())
     }
 
+    pub async fn avatar(&self, user_id: i64) -> Result<Vec<u8>, Error> {
+        self.fetch_bytes(&format!("/api/users/{user_id}/avatar"))
+            .await
+    }
+
     pub async fn rom_ids(&self) -> Result<Vec<i64>, Error> {
         self.get_json("/api/roms/identifiers", &[]).await
     }
@@ -806,6 +811,17 @@ pub(crate) mod tests {
             page.items[0].last_played(),
             crate::sync::parse_iso("2026-09-01T10:00:00Z")
         );
+    }
+
+    #[tokio::test]
+    async fn avatar_downloads_the_users_picture() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/users/3/avatar"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"png".to_vec()))
+            .mount(&server)
+            .await;
+        assert_eq!(authed(&server).avatar(3).await.unwrap(), b"png");
     }
 
     #[tokio::test]

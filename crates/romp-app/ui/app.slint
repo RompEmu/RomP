@@ -175,15 +175,24 @@ component Pairing inherits Rectangle {
 
 component Avatar inherits Rectangle {
     in property <string> initial;
+    in property <image> picture;
+    in property <bool> has-picture;
     width: 30px;
     height: 30px;
     border-radius: 15px;
+    clip: true;
     background: Theme.surface-muted;
-    Text {
+    if !root.has-picture: Text {
         text: root.initial;
         color: Theme.accent-text;
         font-size: Theme.font-body;
         font-weight: 700;
+    }
+    if root.has-picture: Image {
+        source: root.picture;
+        width: parent.width;
+        height: parent.height;
+        image-fit: ImageFit.cover;
     }
 }
 
@@ -394,6 +403,8 @@ component Library inherits Rectangle {
     in property <bool> page-open;
     public function focus-search() { search-field.focus(); }
     in property <bool> compact;
+    in property <image> user-avatar;
+    in property <bool> has-user-avatar;
     in property <string> user-initial;
     in property <[SidebarEntry]> sidebar;
     in property <string> selected-key;
@@ -548,6 +559,8 @@ component Library inherits Rectangle {
                         alignment: center;
                         Avatar {
                             initial: root.user-initial;
+                            picture: root.user-avatar;
+                            has-picture: root.has-user-avatar;
                             Tooltip { text: @markdown("\{root.user-label != "" ? root.user-label : @tr("Signed in")}"); }
                         }
                     }
@@ -564,7 +577,11 @@ component Library inherits Rectangle {
                     padding-top: 6px;
                     padding-left: 4px;
                     spacing: 10px;
-                    Avatar { initial: root.user-initial; }
+                    Avatar {
+                        initial: root.user-initial;
+                        picture: root.user-avatar;
+                        has-picture: root.has-user-avatar;
+                    }
                     VerticalLayout {
                         alignment: center;
                         horizontal-stretch: 1;
@@ -1591,6 +1608,8 @@ export component AppWindow inherits Window {
     callback retry-pairing();
 
     in property <string> user-label;
+    in property <image> user-avatar;
+    in property <bool> has-user-avatar;
     in property <string> user-initial;
     in property <string> server-label;
     in property <string> heading: @tr("All games");
@@ -1798,6 +1817,8 @@ export component AppWindow inherits Window {
         focus-top: root.grid-focus-top * 1px;
         focus-bottom: root.grid-focus-bottom * 1px;
         user-initial: root.user-initial;
+        user-avatar: root.user-avatar;
+        has-user-avatar: root.has-user-avatar;
         server-label: root.server-label;
         heading: root.heading;
         heading-detail: root.heading-detail;

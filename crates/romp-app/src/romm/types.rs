@@ -36,6 +36,16 @@ pub struct User {
     pub id: Option<i64>,
     pub username: String,
     pub current_device_id: Option<String>,
+    #[serde(default)]
+    pub avatar_path: Option<String>,
+}
+
+impl User {
+    pub fn has_avatar(&self) -> bool {
+        self.avatar_path
+            .as_deref()
+            .is_some_and(|p| !p.trim().is_empty())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -290,6 +300,26 @@ mod tests {
         .unwrap();
         assert_eq!(bare.added_at(), None);
         assert_eq!(bare.last_played(), None);
+    }
+
+    #[test]
+    fn users_with_a_profile_picture_say_so() {
+        let user: User = serde_json::from_value(serde_json::json!({
+            "id": 1, "username": "beshr", "current_device_id": null,
+            "avatar_path": "users/1/avatar.png"
+        }))
+        .unwrap();
+        assert!(user.has_avatar());
+        let plain: User = serde_json::from_value(serde_json::json!({
+            "id": 1, "username": "beshr", "current_device_id": null, "avatar_path": ""
+        }))
+        .unwrap();
+        assert!(!plain.has_avatar());
+        let older: User = serde_json::from_value(serde_json::json!({
+            "username": "beshr", "current_device_id": null
+        }))
+        .unwrap();
+        assert!(!older.has_avatar());
     }
 
     #[test]
