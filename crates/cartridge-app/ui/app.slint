@@ -15,7 +15,7 @@ export struct Shot { image: image, loaded: bool }
 
 export global Brand {
     out property <string> name: "Cartridge";
-    out property <string> tagline: "Play your RomM library, each game in its own sandboxed emulator.";
+    out property <string> tagline: @tr("Play your RomM library, each game in its own sandboxed emulator.");
 }
 
 component AppTile inherits Rectangle {
@@ -87,8 +87,8 @@ component Connect inherits Rectangle {
             VerticalLayout {
                 width: 420px;
                 spacing: 14px;
-                Text { text: "Connect to RomM"; font-size: Theme.font-heading; font-weight: 700; }
-                Text { text: "Enter the address of your RomM server."; color: Theme.text-muted; }
+                Text { text: @tr("Connect to RomM"); font-size: Theme.font-heading; font-weight: 700; }
+                Text { text: @tr("Enter the address of your RomM server."); color: Theme.text-muted; }
                 url := LineEdit {
                     placeholder-text: "romm.example.com";
                     text <=> root.server-url;
@@ -101,7 +101,7 @@ component Connect inherits Rectangle {
                     spacing: 10px;
                     if root.busy: Spinner { indeterminate: true; width: 24px; height: 24px; }
                     Button {
-                        text: "Continue";
+                        text: @tr("Continue");
                         primary: true;
                         enabled: !root.busy && root.server-url != "";
                         clicked => { root.connect(); }
@@ -132,9 +132,9 @@ component Pairing inherits Rectangle {
             VerticalLayout {
                 width: 460px;
                 spacing: 14px;
-                Text { text: "Approve this device"; font-size: Theme.font-heading; font-weight: 700; }
+                Text { text: @tr("Approve this device"); font-size: Theme.font-heading; font-weight: 700; }
                 Text {
-                    text: "Scan the code or open the link on a device signed in to RomM, then approve Cartridge.";
+                    text: @tr("Scan the code or open the link on a device signed in to RomM, then approve Cartridge.");
                     color: Theme.text-muted;
                     wrap: word-wrap;
                 }
@@ -150,21 +150,20 @@ component Pairing inherits Rectangle {
                 HorizontalLayout {
                     alignment: center;
                     spacing: 10px;
-                    Button { text: "Copy link"; clicked => { root.copy-link(); } }
-                    Button { text: "Open in browser"; clicked => { root.open-link(); } }
+                    Button { text: @tr("Copy link"); clicked => { root.copy-link(); } }
+                    Button { text: @tr("Open in browser"); clicked => { root.open-link(); } }
                 }
                 Text {
                     horizontal-alignment: center;
                     color: root.failed ? Theme.danger : Theme.text-muted;
                     text: root.status != "" ? root.status
-                        : "Waiting for approval… (" + floor(root.seconds-left / 60) + ":"
-                          + (mod(root.seconds-left, 60) < 10 ? "0" : "") + mod(root.seconds-left, 60) + ")";
+                        : @tr("Waiting for approval… ({}:{}{})", floor(root.seconds-left / 60), mod(root.seconds-left, 60) < 10 ? "0" : "", mod(root.seconds-left, 60));
                 }
                 HorizontalLayout {
                     alignment: center;
                     spacing: 10px;
-                    Button { text: "Back"; clicked => { root.cancel(); } }
-                    if root.failed: Button { text: "Try again"; primary: true; clicked => { root.retry(); } }
+                    Button { text: @tr("Back"); clicked => { root.cancel(); } }
+                    if root.failed: Button { text: @tr("Try again"); primary: true; clicked => { root.retry(); } }
                 }
             }
         }
@@ -201,7 +200,7 @@ component SidebarItem inherits Rectangle {
     background: root.selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
     accessible-role: list-item;
     accessible-label: root.label;
-    accessible-description: root.count >= 0 ? root.count + " games" : "";
+    accessible-description: root.count >= 0 ? @tr("{n} game" | "{n} games" % root.count) : "";
     accessible-item-selectable: true;
     accessible-item-selected: root.selected;
     accessible-action-default => { root.clicked(); }
@@ -290,12 +289,12 @@ component SectionHeader inherits Rectangle {
             background: add-touch.has-hover ? Theme.surface-muted : transparent;
             Text { text: "+"; font-size: Theme.font-subtitle; color: Theme.text-secondary; }
             accessible-role: button;
-            accessible-label: "New collection";
+            accessible-label: @tr("New collection");
             accessible-action-default => { root.add(); }
             add-touch := TouchArea { clicked => { root.add(); } }
             add-keys := KeyActivator { activate => { root.add(); } }
             if add-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
-            Tooltip { text: @markdown("New collection"); }
+            Tooltip { text: @markdown("\{@tr("New collection")}"); }
         }
     }
 }
@@ -307,7 +306,7 @@ component Card inherits Rectangle {
     height: 290px;
     accessible-role: button;
     accessible-label: root.game.title;
-    accessible-description: root.game.platform + (root.game.downloaded ? ", downloaded" : "") + (root.game.favorite ? ", favorite" : "");
+    accessible-description: root.game.platform + (root.game.downloaded ? ", " + @tr("downloaded") : "") + (root.game.favorite ? ", " + @tr("favorite") : "");
     accessible-action-default => { root.clicked(); }
     touch := TouchArea { clicked => { root.clicked(); } }
     keys := KeyActivator { activate => { root.clicked(); } }
@@ -364,7 +363,7 @@ component Card inherits Rectangle {
             spacing: 4px;
             Text { text: root.game.platform; overflow: elide; color: Theme.text-muted; font-size: Theme.font-small; horizontal-stretch: 1; }
             Text {
-                text: root.game.downloaded ? "Downloaded" : "On server";
+                text: root.game.downloaded ? @tr("Downloaded") : @tr("On server");
                 color: root.game.downloaded ? Theme.success : Theme.text-muted;
                 font-size: Theme.font-small;
                 font-weight: root.game.downloaded ? 600 : 400;
@@ -445,7 +444,7 @@ component Library inherits Rectangle {
                     AppTile {
                         icon: root.app-icon;
                         has-icon: root.has-app-icon;
-                        if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? "Offline" : root.server-label}"); }
+                        if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
                     }
                     if !root.compact: VerticalLayout {
                         alignment: center;
@@ -463,7 +462,7 @@ component Library inherits Rectangle {
                                 }
                             }
                             Text {
-                                text: root.offline ? "Offline" : root.syncing ? "Syncing…" : root.server-label;
+                                text: root.offline ? @tr("Offline") : root.syncing ? @tr("Syncing…") : root.server-label;
                                 font-size: Theme.font-caption;
                                 color: Theme.text-muted;
                                 overflow: elide;
@@ -493,8 +492,8 @@ component Library inherits Rectangle {
                         if !e.header && e.editable: ContextMenuArea {
                             height: 34px;
                             Menu {
-                                MenuItem { title: "Rename…"; activated => { root.rename-collection(e.key); } }
-                                MenuItem { title: "Delete…"; activated => { root.delete-collection(e.key); } }
+                                MenuItem { title: @tr("Rename…"); activated => { root.rename-collection(e.key); } }
+                                MenuItem { title: @tr("Delete…"); activated => { root.delete-collection(e.key); } }
                             }
                             SidebarItem {
                                 width: parent.width;
@@ -533,16 +532,16 @@ component Library inherits Rectangle {
                         alignment: center;
                         Avatar {
                             initial: root.user-initial;
-                            Tooltip { text: @markdown("\{root.user-label != "" ? root.user-label : "Signed in"}"); }
+                            Tooltip { text: @markdown("\{root.user-label != "" ? root.user-label : @tr("Signed in")}"); }
                         }
                     }
                     HorizontalLayout {
                         alignment: center;
-                        IconButton { icon: @image-url("icons/info.svg"); tooltip: "About"; clicked => { root.open-about(); } }
+                        IconButton { icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
                     }
                     HorizontalLayout {
                         alignment: center;
-                        IconButton { icon: @image-url("icons/settings.svg"); tooltip: "Settings"; clicked => { root.open-settings(); } }
+                        IconButton { icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
                     }
                 }
                 if !root.compact: HorizontalLayout {
@@ -554,15 +553,15 @@ component Library inherits Rectangle {
                         alignment: center;
                         horizontal-stretch: 1;
                         Text {
-                            text: root.user-label != "" ? root.user-label : "Signed in";
+                            text: root.user-label != "" ? root.user-label : @tr("Signed in");
                             font-size: Theme.font-body;
                             font-weight: 600;
                             color: Theme.text;
                             overflow: elide;
                         }
                     }
-                    IconButton { icon: @image-url("icons/info.svg"); tooltip: "About"; clicked => { root.open-about(); } }
-                    IconButton { icon: @image-url("icons/settings.svg"); tooltip: "Settings"; clicked => { root.open-settings(); } }
+                    IconButton { icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
+                    IconButton { icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
                 }
 
             }
@@ -612,13 +611,13 @@ component Library inherits Rectangle {
                             alignment: center;
                             search-field := LineEdit {
                                 width: 240px;
-                                placeholder-text: "Search games";
+                                placeholder-text: @tr("Search games");
                                 text <=> root.search;
                                 edited(text) => { root.search-edited(text); }
                             }
                         }
                         Switch {
-                            text: "Downloaded";
+                            text: @tr("Downloaded");
                             checked <=> root.downloaded-only;
                             enabled: !root.offline;
                             toggled => { root.downloaded-only-toggled(self.checked); }
@@ -626,7 +625,7 @@ component Library inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
-                            if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); tooltip: "Refresh library"; clicked => { root.refresh(); } }
+                            if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); tooltip: @tr("Refresh library"); clicked => { root.refresh(); } }
                         }
                     }
                     grid := Rectangle {
@@ -635,7 +634,7 @@ component Library inherits Rectangle {
                         changed columns => { root.columns-changed(self.columns); }
                         init => { root.columns-changed(self.columns); }
                         if root.rows.length == 0: Text {
-                            text: root.syncing ? "Loading your library…" : "No games found.";
+                            text: root.syncing ? @tr("Loading your library…") : @tr("No games found.");
                             color: Theme.text-muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -737,7 +736,7 @@ component GamePage inherits FocusScope {
             padding-top: 14px;
             padding-bottom: 10px;
             spacing: 4px;
-            IconButton { icon: @image-url("icons/back.svg"); tooltip: "Back"; clicked => { root.back(); } }
+            IconButton { icon: @image-url("icons/back.svg"); tooltip: @tr("Back"); clicked => { root.back(); } }
             Rectangle {
                 width: crumb-text.preferred-width + 16px;
                 height: 32px;
@@ -826,17 +825,17 @@ component GamePage inherits FocusScope {
                             alignment: start;
                             spacing: 10px;
                             if !root.downloaded && !root.busy && root.playable: Button {
-                                text: "Download";
+                                text: @tr("Download");
                                 primary: true;
                                 enabled: root.can-download;
                                 clicked => { root.download(); }
                             }
                             if root.busy: ProgressIndicator { width: 220px; progress: root.progress; }
-                            if root.busy: Button { text: "Cancel"; clicked => { root.cancel(); } }
-                            if root.downloaded && !root.busy: Button { text: "Play"; primary: true; clicked => { root.play(); } }
-                            if root.downloaded && !root.busy: Button { text: "Delete download"; clicked => { root.delete(); } }
+                            if root.busy: Button { text: @tr("Cancel"); clicked => { root.cancel(); } }
+                            if root.downloaded && !root.busy: Button { text: @tr("Play"); primary: true; clicked => { root.play(); } }
+                            if root.downloaded && !root.busy: Button { text: @tr("Delete download"); clicked => { root.delete(); } }
                             if root.show-collections: Button {
-                                text: root.favorite ? "♥ In favorites" : "♡ Add to favorites";
+                                text: root.favorite ? @tr("♥ In favorites") : @tr("♡ Add to favorites");
                                 enabled: root.can-edit-collections;
                                 clicked => { root.toggle-favorite(); }
                             }
@@ -845,7 +844,7 @@ component GamePage inherits FocusScope {
                                 collections-button := Button {
                                     width: parent.width;
                                     height: parent.height;
-                                    text: "Collections…";
+                                    text: @tr("Collections…");
                                     enabled: root.can-edit-collections;
                                     clicked => { collections-popup.show(); }
                                 }
@@ -868,7 +867,7 @@ component GamePage inherits FocusScope {
                                             padding: 12px;
                                             spacing: 6px;
                                             if root.memberships.length == 0: Text {
-                                                text: "You don't have any collections yet.";
+                                                text: @tr("You don't have any collections yet.");
                                                 color: Theme.text-muted;
                                                 wrap: word-wrap;
                                             }
@@ -878,7 +877,7 @@ component GamePage inherits FocusScope {
                                                 toggled => { root.toggle-membership(m.key, self.checked); }
                                             }
                                             Button {
-                                                text: "New collection…";
+                                                text: @tr("New collection…");
                                                 clicked => {
                                                     collections-popup.close();
                                                     root.new-collection();
@@ -896,13 +895,13 @@ component GamePage inherits FocusScope {
                             VerticalLayout {
                                 padding: 14px;
                                 spacing: 10px;
-                                Text { text: "Your save changed on this computer and on the server."; font-weight: 700; wrap: word-wrap; }
+                                Text { text: @tr("Your save changed on this computer and on the server."); font-weight: 700; wrap: word-wrap; }
                                 Text { text: root.conflict-text; color: Theme.text-secondary; wrap: word-wrap; }
                                 HorizontalLayout {
                                     alignment: start;
                                     spacing: 10px;
-                                    Button { text: "Use this computer's save"; clicked => { root.keep-local(); } }
-                                    Button { text: "Use the server's save"; clicked => { root.keep-server(); } }
+                                    Button { text: @tr("Use this computer's save"); clicked => { root.keep-local(); } }
+                                    Button { text: @tr("Use the server's save"); clicked => { root.keep-server(); } }
                                 }
                             }
                         }
@@ -919,7 +918,7 @@ component GamePage inherits FocusScope {
                 }
                 if root.summary != "": VerticalLayout {
                     spacing: 12px;
-                    SectionTitle { text: "Overview"; }
+                    SectionTitle { text: @tr("Overview"); }
                     HorizontalLayout {
                         alignment: start;
                         Text {
@@ -934,7 +933,7 @@ component GamePage inherits FocusScope {
                 }
                 if root.shots.length > 0: VerticalLayout {
                     spacing: 10px;
-                    SectionTitle { text: "Screenshots"; }
+                    SectionTitle { text: @tr("Screenshots"); }
                     shots-view := ScrollView {
                         height: 214px;
                         content-width: shot-row.preferred-width;
@@ -950,7 +949,7 @@ component GamePage inherits FocusScope {
                                 background: Theme.surface-muted;
                                 if shot.loaded: Image { source: shot.image; width: parent.width; height: parent.height; image-fit: ImageFit.cover; }
                                 accessible-role: button;
-                                accessible-label: "Screenshot " + (i + 1);
+                                accessible-label: @tr("Screenshot {}", i + 1);
                                 accessible-action-default => { root.viewing = i; }
                                 shot-touch := TouchArea { clicked => { root.viewing = i; } }
                                 shot-keys := KeyActivator { activate => { root.viewing = i; } }
@@ -962,7 +961,7 @@ component GamePage inherits FocusScope {
                 }
                 if root.similar.length > 0: VerticalLayout {
                     spacing: 10px;
-                    SectionTitle { text: "Similar in your library"; }
+                    SectionTitle { text: @tr("Similar in your library"); }
                     ScrollView {
                         height: 304px;
                         content-width: similar-row.preferred-width;
@@ -1007,7 +1006,7 @@ component GamePage inherits FocusScope {
         Button {
             x: parent.width - self.width - 16px;
             y: 12px;
-            text: "Close";
+            text: @tr("Close");
             clicked => { root.viewing = -1; }
         }
     }
@@ -1129,7 +1128,7 @@ component SettingsPage inherits Rectangle {
             padding-top: 16px;
             padding-bottom: 8px;
             alignment: start;
-            Button { text: "← Library"; clicked => { root.back(); } }
+            Button { text: @tr("← Library"); clicked => { root.back(); } }
         }
         HorizontalLayout {
             vertical-stretch: 1;
@@ -1140,9 +1139,9 @@ component SettingsPage inherits Rectangle {
                 padding-top: 16px;
                 spacing: 2px;
                 alignment: start;
-                Text { text: "Settings"; font-size: Theme.font-body; font-weight: 700; color: Theme.text-muted; letter-spacing: 1px; }
+                Text { text: @tr("Settings"); font-size: Theme.font-body; font-weight: 700; color: Theme.text-muted; letter-spacing: 1px; }
                 Rectangle { height: 8px; }
-                for label[i] in ["General", "Account", "Players", "Storage"]: NavItem {
+                for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage")]: NavItem {
                     label: label;
                     selected: root.section == i;
                     clicked => { root.section = i; root.section-changed(i); }
@@ -1161,34 +1160,34 @@ component SettingsPage inherits Rectangle {
                     spacing: 16px;
                     if root.section == 0: VerticalLayout {
                         spacing: 16px;
-                        SectionHeading { title: "General"; subtitle: "How games behave on this computer."; }
+                        SectionHeading { title: @tr("General"); subtitle: @tr("How games behave on this computer."); }
                         Panel {
                             SettingRow {
-                                label: "Pause when the game window isn't focused";
-                                detail: "Switching to another window pauses the game. Coming back resumes it.";
+                                label: @tr("Pause when the game window isn't focused");
+                                detail: @tr("Switching to another window pauses the game. Coming back resumes it.");
                                 Switch { checked <=> root.pause-unfocused; toggled => { root.prefs-changed(); } }
                             }
                             SettingRow {
                                 divider: true;
-                                label: "Resume where you left off";
-                                detail: "Starting a game continues from the automatic save made when you last quit it.";
+                                label: @tr("Resume where you left off");
+                                detail: @tr("Starting a game continues from the automatic save made when you last quit it.");
                                 Switch { checked <=> root.resume; toggled => { root.prefs-changed(); } }
                             }
                             SettingRow {
                                 divider: true;
-                                label: "Start games in full screen";
-                                detail: "Press F11 in a game to switch at any time.";
+                                label: @tr("Start games in full screen");
+                                detail: @tr("Press F11 in a game to switch at any time.");
                                 Switch { checked <=> root.fullscreen; toggled => { root.prefs-changed(); } }
                             }
                             SettingRow {
                                 divider: true;
-                                label: "Sharp pixels";
-                                detail: "Keeps pixel art crisp. Turn off for smoother scaling.";
+                                label: @tr("Sharp pixels");
+                                detail: @tr("Keeps pixel art crisp. Turn off for smoother scaling.");
                                 Switch { checked <=> root.sharp; toggled => { root.prefs-changed(); } }
                             }
                             SettingRow {
                                 divider: true;
-                                label: "Game volume";
+                                label: @tr("Game volume");
                                 detail: round(root.volume) + "%";
                                 Slider {
                                     width: 200px;
@@ -1202,65 +1201,65 @@ component SettingsPage inherits Rectangle {
                     }
                     if root.section == 1: VerticalLayout {
                         spacing: 16px;
-                        SectionHeading { title: "Account"; subtitle: "Your RomM server and this device's access to it."; }
+                        SectionHeading { title: @tr("Account"); subtitle: @tr("Your RomM server and this device's access to it."); }
                         Panel {
-                            SettingRow { label: "Signed in as"; detail: root.user != "" ? root.user : "Unknown"; }
+                            SettingRow { label: @tr("Signed in as"); detail: root.user != "" ? root.user : @tr("Unknown"); }
                             SettingRow {
                                 divider: true;
-                                label: "Server";
-                                detail: root.server + (root.offline ? "  ·  Offline" : "");
+                                label: @tr("Server");
+                                detail: root.server + (root.offline ? "  ·  " + @tr("Offline") : "");
                             }
                             SettingRow {
                                 divider: true;
-                                label: "Device access";
-                                detail: "Approve this device again, for example after an update that needs new permissions.";
-                                Button { text: "Pair again"; enabled: !root.offline; clicked => { root.pair-again(); } }
+                                label: @tr("Device access");
+                                detail: @tr("Approve this device again, for example after an update that needs new permissions.");
+                                Button { text: @tr("Pair again"); enabled: !root.offline; clicked => { root.pair-again(); } }
                             }
                             SettingRow {
                                 divider: true;
-                                label: "Sign out";
-                                detail: "Signs this device out and clears the library list. Downloaded files stay on disk.";
-                                Button { text: "Sign out"; clicked => { root.sign-out(); } }
+                                label: @tr("Sign out");
+                                detail: @tr("Signs this device out and clears the library list. Downloaded files stay on disk.");
+                                Button { text: @tr("Sign out"); clicked => { root.sign-out(); } }
                             }
                         }
                     }
                     if root.section == 2: VerticalLayout {
                         spacing: 16px;
                         SectionHeading {
-                            title: "Players";
-                            subtitle: "Choose which player each controller plays as. Press a button on a controller to find it here.";
+                            title: @tr("Players");
+                            subtitle: @tr("Choose which player each controller plays as. Press a button on a controller to find it here.");
                         }
                         Panel {
                             for device[i] in root.devices: SettingRow {
                                 divider: i > 0;
                                 label: device.name;
-                                detail: device.active ? "Button pressed" : device.detail;
+                                detail: device.active ? @tr("Button pressed") : device.detail;
                                 detail-color: device.active ? Theme.accent : Theme.text-muted;
                                 highlight: device.active;
-                                Button { text: "Customize…"; clicked => { root.customize(device.key); } }
+                                Button { text: @tr("Customize…"); clicked => { root.customize(device.key); } }
                                 ComboBox {
                                     width: 150px;
-                                    model: ["Off", "Player 1", "Player 2", "Player 3", "Player 4"];
+                                    model: [@tr("Off"), @tr("Player {}", 1), @tr("Player {}", 2), @tr("Player {}", 3), @tr("Player {}", 4)];
                                     current-index: device.player;
                                     selected => { root.assign(device.key, self.current-index); }
                                 }
                             }
                         }
-                        Text { text: "Controller options"; font-size: Theme.font-body-large; font-weight: 700; }
+                        Text { text: @tr("Controller options"); font-size: Theme.font-body-large; font-weight: 700; }
                         Panel {
                             SettingRow {
-                                label: "Match button labels on Nintendo systems";
-                                detail: "On other controllers, the button labelled A presses A instead of the one in its place on a Nintendo pad.";
+                                label: @tr("Match button labels on Nintendo systems");
+                                detail: @tr("On other controllers, the button labelled A presses A instead of the one in its place on a Nintendo pad.");
                                 Switch { checked <=> root.nintendo-labels; toggled => { root.controller-options-changed(); } }
                             }
                             SettingRow {
                                 divider: true;
-                                label: "Left stick also moves the D-pad";
-                                detail: "Handy for games made for a D-pad.";
+                                label: @tr("Left stick also moves the D-pad");
+                                detail: @tr("Handy for games made for a D-pad.");
                                 Switch { checked <=> root.stick-dpad; toggled => { root.controller-options-changed(); } }
                             }
                         }
-                        Text { text: "Shortcuts"; font-size: Theme.font-body-large; font-weight: 700; }
+                        Text { text: @tr("Shortcuts"); font-size: Theme.font-body-large; font-weight: 700; }
                         Panel {
                             for hint[i] in root.keys: SettingRow {
                                 divider: i > 0;
@@ -1278,8 +1277,8 @@ component SettingsPage inherits Rectangle {
                     if root.section == 3: VerticalLayout {
                         spacing: 16px;
                         SectionHeading {
-                            title: "Storage";
-                            subtitle: root.storage-busy ? "Measuring…" : "Space used on this computer: " + root.storage-total + ".";
+                            title: @tr("Storage");
+                            subtitle: root.storage-busy ? @tr("Measuring…") : @tr("Space used on this computer: {}.", root.storage-total);
                         }
                         Panel {
                             for row[i] in root.storage: SettingRow {
@@ -1291,8 +1290,8 @@ component SettingsPage inherits Rectangle {
                         HorizontalLayout {
                             alignment: start;
                             spacing: 10px;
-                            Button { text: "Clear image cache"; clicked => { root.clear-images(); } }
-                            Button { text: "Show folder"; clicked => { root.show-folder(); } }
+                            Button { text: @tr("Clear image cache"); clicked => { root.clear-images(); } }
+                            Button { text: @tr("Show folder"); clicked => { root.show-folder(); } }
                         }
                     }
                 }
@@ -1340,7 +1339,7 @@ component SettingsPage inherits Rectangle {
                                 highlight: row.waiting;
                                 Button {
                                     width: 190px;
-                                    text: row.waiting ? "Press…" : row.binding;
+                                    text: row.waiting ? @tr("Press…") : row.binding;
                                     clicked => {
                                         root.remap-pick(i);
                                         remap-keys.focus();
@@ -1351,9 +1350,9 @@ component SettingsPage inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 10px;
-                        Button { text: "Reset to default"; clicked => { root.remap-reset(); } }
+                        Button { text: @tr("Reset to default"); clicked => { root.remap-reset(); } }
                         Rectangle { horizontal-stretch: 1; }
-                        Button { text: "Done"; primary: true; clicked => { root.remap-close(); } }
+                        Button { text: @tr("Done"); primary: true; clicked => { root.remap-close(); } }
                     }
                 }
             }
@@ -1394,7 +1393,7 @@ component Dialog inherits Rectangle {
             HorizontalLayout {
                 alignment: end;
                 spacing: 10px;
-                Button { text: "Cancel"; clicked => { root.cancelled(); } }
+                Button { text: @tr("Cancel"); clicked => { root.cancelled(); } }
                 Button {
                     text: root.confirm-label;
                     primary: !root.destructive;
@@ -1435,7 +1434,7 @@ component AboutDialog inherits Rectangle {
             }
             Rectangle { height: 8px; }
             Text { text: Brand.name; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; horizontal-alignment: center; }
-            Text { text: "Version " + root.version; font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
+            Text { text: @tr("Version {}", root.version); font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
             Rectangle { height: 6px; }
             Text {
                 text: Brand.tagline;
@@ -1449,7 +1448,7 @@ component AboutDialog inherits Rectangle {
             Rectangle { height: 1px; background: Theme.border; }
             Rectangle { height: 10px; }
             Text {
-                text: "Games and saves from RomM. Emulation by libretro cores.";
+                text: @tr("Games and saves from RomM. Emulation by libretro cores.");
                 font-size: Theme.font-caption;
                 color: Theme.text-muted;
                 horizontal-alignment: center;
@@ -1458,7 +1457,7 @@ component AboutDialog inherits Rectangle {
             Rectangle { height: 12px; }
             HorizontalLayout {
                 alignment: center;
-                Button { text: "Close"; clicked => { root.close(); } }
+                Button { text: @tr("Close"); clicked => { root.close(); } }
             }
         }
     }
@@ -1496,7 +1495,7 @@ export component AppWindow inherits Window {
     in property <string> user-label;
     in property <string> user-initial;
     in property <string> server-label;
-    in property <string> heading: "All games";
+    in property <string> heading: @tr("All games");
     in property <string> heading-detail;
     in property <image> app-icon;
     in property <bool> has-app-icon;
@@ -1603,9 +1602,9 @@ export component AppWindow inherits Window {
 
     MenuBar {
         Menu {
-            title: "Library";
+            title: @tr("Library");
             MenuItem {
-                title: "Search";
+                title: @tr("Search");
                 shortcut: @keys(Control + F);
                 enabled: root.screen == 2 || root.screen == 3;
                 activated => {
@@ -1614,23 +1613,23 @@ export component AppWindow inherits Window {
                 }
             }
             MenuItem {
-                title: "Refresh";
+                title: @tr("Refresh");
                 shortcut: @keys(Control + R);
                 enabled: root.screen >= 2 && !root.syncing && !root.offline;
                 activated => { root.refresh(); }
             }
             MenuSeparator { }
             MenuItem {
-                title: "Settings…";
+                title: @tr("Settings…");
                 shortcut: @keys(Control + Comma);
                 enabled: root.screen >= 2 && root.screen != 4;
                 activated => { root.open-settings(); }
             }
         }
         Menu {
-            title: "Help";
+            title: @tr("Help");
             MenuItem {
-                title: "About " + Brand.name;
+                title: @tr("About {}", Brand.name);
                 activated => { root.about-open = true; }
             }
         }
