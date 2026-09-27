@@ -6,7 +6,7 @@
 
 Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
 
-Source and releases: [github.com/RompEmu/RompEmu](https://github.com/RompEmu/RompEmu)
+Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS and Linux. Nightly builds aren't notarized: on macOS, right-click Romp and choose Open the first time.
 
 ## Running
 
@@ -16,6 +16,8 @@ Requires [rustup](https://rustup.rs) and CMake.
 cargo build --release
 ./target/release/romp
 ```
+
+`make dist` packages the app into `dist/`: `Romp.app` and a zip on macOS, a tarball on Linux.
 
 Enter your RomM server address (RomM 5.0 or newer). Approve Romp in RomM by scanning the code or opening the link.
 

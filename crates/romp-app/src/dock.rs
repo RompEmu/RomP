@@ -8,7 +8,7 @@ pub fn set_icon() {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
-    let data = NSData::with_bytes(include_bytes!("../assets/dock-icon.png"));
+    let data = NSData::with_bytes(include_bytes!("../assets/icon-macos.png"));
     let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) else {
         return;
     };
