@@ -235,6 +235,7 @@ struct Input<'a> {
 
 #[derive(Serialize)]
 struct Display {
+    renderer: &'static str,
     filtering: &'static str,
     window: Window,
     ui: Ui,
@@ -299,6 +300,11 @@ pub fn config_toml(cfg: &LaunchConfig) -> String {
             keyboard_controller_scancode_map: &cfg.keyboard,
         },
         display: Display {
+            renderer: if cfg!(target_os = "macos") {
+                "OPENGL"
+            } else {
+                "VULKAN"
+            },
             filtering: if cfg.sharp { "nearest" } else { "linear" },
             window: Window {
                 fullscreen_on_startup: cfg.fullscreen,
@@ -743,6 +749,12 @@ mod tests {
             Some(true)
         );
         assert_eq!(get("display.filtering").as_str(), Some("nearest"));
+        let renderer = if cfg!(target_os = "macos") {
+            "OPENGL"
+        } else {
+            "VULKAN"
+        };
+        assert_eq!(get("display.renderer").as_str(), Some(renderer));
         assert_eq!(get("display.ui.show_menubar").as_bool(), Some(false));
         assert_eq!(get("display.ui.scale").as_float(), Some(1.5));
         assert_eq!(get("display.ui.auto_scale").as_bool(), Some(false));
