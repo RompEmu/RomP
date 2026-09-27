@@ -166,6 +166,7 @@ struct Symbols {
     unload_game: unsafe extern "C" fn(),
     run: unsafe extern "C" fn(),
     set_controller_port_device: unsafe extern "C" fn(c_uint, c_uint),
+    reset: unsafe extern "C" fn(),
     serialize_size: unsafe extern "C" fn() -> usize,
     serialize: unsafe extern "C" fn(*mut c_void, usize) -> bool,
     unserialize: unsafe extern "C" fn(*const c_void, usize) -> bool,
@@ -308,6 +309,11 @@ impl Core {
         unsafe { (self.syms.set_controller_port_device)(port, device) };
     }
 
+    pub fn reset<F: Frontend>(&mut self, frontend: &mut F) {
+        let _g = FrontendGuard::install(frontend);
+        unsafe { (self.syms.reset)() };
+    }
+
     pub fn unload_game<F: Frontend>(&mut self, frontend: &mut F) {
         if !self.game_loaded {
             return;
@@ -412,6 +418,7 @@ unsafe fn resolve(lib: &Library) -> Result<Symbols, Error> {
             unload_game: *lib.get(b"retro_unload_game\0")?,
             run: *lib.get(b"retro_run\0")?,
             set_controller_port_device: *lib.get(b"retro_set_controller_port_device\0")?,
+            reset: *lib.get(b"retro_reset\0")?,
             serialize_size: *lib.get(b"retro_serialize_size\0")?,
             serialize: *lib.get(b"retro_serialize\0")?,
             unserialize: *lib.get(b"retro_unserialize\0")?,

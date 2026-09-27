@@ -48,6 +48,7 @@ mod tests {
         )
         .unwrap();
         write_msg(&mut buf, &AppMsg::SaveSlot(3)).unwrap();
+        write_msg(&mut buf, &AppMsg::Reset).unwrap();
         let mut r = Cursor::new(buf);
         assert_eq!(
             read_msg::<_, AppMsg>(&mut r).unwrap(),
@@ -57,6 +58,7 @@ mod tests {
             }
         );
         assert_eq!(read_msg::<_, AppMsg>(&mut r).unwrap(), AppMsg::SaveSlot(3));
+        assert_eq!(read_msg::<_, AppMsg>(&mut r).unwrap(), AppMsg::Reset);
     }
 
     #[test]

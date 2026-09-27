@@ -19,6 +19,7 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 pub type SavePorts = Box<dyn Fn(Vec<(u8, u32)>)>;
+pub type VolumeChanged = Box<dyn Fn(u8)>;
 
 pub struct GameOptions {
     pub core: PathBuf,
@@ -39,6 +40,7 @@ pub struct GameOptions {
     pub computer: bool,
     pub port_devices: Vec<(u8, u32)>,
     pub save_ports: SavePorts,
+    pub volume_changed: VolumeChanged,
 }
 
 pub struct CoreGame {
@@ -97,6 +99,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             computer: false,
             port_devices: Vec::new(),
             save_ports: Box::new(|_| {}),
+            volume_changed: Box::new(|_| {}),
         },
         |_| {},
         || {},
@@ -131,6 +134,8 @@ struct Game {
     port_devices: RefCell<Vec<u32>>,
     saved_ports: Vec<(u8, u32)>,
     save_ports: SavePorts,
+    volume: Cell<u8>,
+    volume_changed: VolumeChanged,
     computer: bool,
     held_keys: RefCell<HashSet<u32>>,
     modifiers: Cell<u16>,
@@ -138,10 +143,50 @@ struct Game {
     aim: Cell<(i16, i16)>,
 }
 
-const MENU_PORTS_START: i32 = 7;
-const MENU_SLOT: i32 = 2;
-const MENU_SAVE: i32 = 3;
-const MENU_LOAD: i32 = 4;
+const MENU_RESUME: i32 = 0;
+const MENU_PAUSE: i32 = 1;
+const MENU_RESTART: i32 = 2;
+const MENU_SLOT: i32 = 3;
+const MENU_SAVE: i32 = 4;
+const MENU_LOAD: i32 = 5;
+const MENU_VOLUME: i32 = 6;
+const MENU_FULLSCREEN: i32 = 7;
+const MENU_CONTROLLERS: i32 = 8;
+const MENU_PORTS_START: i32 = 9;
+const VOLUME_STEP: i32 = 10;
+
+fn menu_move(focus: i32, button: u32, items: i32) -> Option<i32> {
+    let directional = matches!(button, input::UP | input::DOWN | input::LEFT | input::RIGHT);
+    if focus < 0 {
+        return directional.then_some(MENU_RESUME);
+    }
+    match button {
+        input::UP => Some(match focus {
+            MENU_LOAD => MENU_SLOT,
+            MENU_VOLUME => MENU_SAVE,
+            f => (f - 1).max(0),
+        }),
+        input::DOWN => Some(match focus {
+            MENU_SAVE | MENU_LOAD => MENU_VOLUME,
+            f => (f + 1).min(items - 1),
+        }),
+        input::LEFT if focus == MENU_LOAD => Some(MENU_SAVE),
+        input::RIGHT if focus == MENU_SAVE => Some(MENU_LOAD),
+        _ => None,
+    }
+}
+
+fn stepped_volume(volume: u8, delta: i32) -> u8 {
+    let volume = i32::from(volume);
+    let stepped = if delta > 0 {
+        (volume / VOLUME_STEP + 1) * VOLUME_STEP
+    } else if volume % VOLUME_STEP != 0 {
+        volume / VOLUME_STEP * VOLUME_STEP
+    } else {
+        volume - VOLUME_STEP
+    };
+    stepped.clamp(0, 100) as u8
+}
 
 impl Game {
     fn primary(&self) -> &GameWindow {
@@ -381,39 +426,50 @@ impl Game {
             return (self.finish)();
         }
         match item {
-            0 => self.set_menu(false),
-            1 => self.set_paused(!self.paused.get()),
+            MENU_RESUME => self.set_menu(false),
+            MENU_PAUSE => self.set_paused(!self.paused.get()),
+            MENU_RESTART => self.restart(),
             MENU_SLOT => self.step_slot(1),
             MENU_SAVE => self.send(&AppMsg::SaveSlot(self.controls.borrow().slot())),
             MENU_LOAD => self.send(&AppMsg::LoadSlot(self.controls.borrow().slot())),
-            5 => self.toggle_fullscreen(),
-            6 => (self.open_controllers)(),
+            MENU_VOLUME => self.step_volume(1),
+            MENU_FULLSCREEN => self.toggle_fullscreen(),
+            MENU_CONTROLLERS => (self.open_controllers)(),
             _ => {}
         }
     }
 
+    fn restart(&self) {
+        self.send(&AppMsg::Reset);
+        self.set_menu(false);
+    }
+
+    fn step_volume(&self, delta: i32) {
+        let volume = stepped_volume(self.volume.get(), delta);
+        self.volume.set(volume);
+        self.send(&AppMsg::Volume(volume));
+        for window in &self.windows {
+            window.set_volume(i32::from(volume));
+        }
+        (self.volume_changed)(volume);
+    }
+
     fn menu_button(&self, button: u32) {
         let focus = self.menu_focus.get();
-        if focus < 0 && matches!(button, input::UP | input::DOWN | input::LEFT | input::RIGHT) {
-            return self.set_menu_focus(0);
+        if let Some(next) = menu_move(focus, button, self.menu_items()) {
+            return self.set_menu_focus(next);
         }
+        let step = if button == input::LEFT { -1 } else { 1 };
         match button {
-            input::UP => self.set_menu_focus(match focus {
-                MENU_LOAD => MENU_SLOT,
-                f => (f - 1).max(0),
-            }),
-            input::DOWN => self.set_menu_focus(match focus {
-                MENU_SAVE => 5,
-                f => (f + 1).min(self.menu_items() - 1),
-            }),
-            input::LEFT | input::RIGHT if self.port_row(focus).is_some() => {
-                let port = self.port_row(focus).expect("port row");
-                self.cycle_port(port, if button == input::LEFT { -1 } else { 1 });
+            input::LEFT | input::RIGHT => {
+                if let Some(port) = self.port_row(focus) {
+                    self.cycle_port(port, step);
+                } else if focus == MENU_SLOT {
+                    self.step_slot(step);
+                } else if focus == MENU_VOLUME {
+                    self.step_volume(step);
+                }
             }
-            input::LEFT if focus == MENU_SLOT => self.step_slot(-1),
-            input::RIGHT if focus == MENU_SLOT => self.step_slot(1),
-            input::LEFT if focus == MENU_LOAD => self.set_menu_focus(MENU_SAVE),
-            input::RIGHT if focus == MENU_SAVE => self.set_menu_focus(MENU_LOAD),
             input::A | input::START => self.activate(focus.max(0)),
             input::B => self.set_menu(false),
             _ => {}
@@ -536,8 +592,10 @@ impl Game {
 
     fn apply_prefs(&self, prefs: &Preferences) {
         self.pause_unfocused.set(prefs.pause_unfocused);
+        self.volume.set(prefs.volume);
         for window in &self.windows {
             window.set_sharp(prefs.sharp_pixels);
+            window.set_volume(i32::from(prefs.volume));
         }
         self.send(&AppMsg::Volume(prefs.volume));
     }
@@ -577,6 +635,7 @@ pub fn launch(
     }
     for window in &windows {
         window.set_sharp(opts.prefs.sharp_pixels);
+        window.set_volume(i32::from(opts.prefs.volume));
     }
 
     let finished = Rc::new(Cell::new(false));
@@ -620,6 +679,8 @@ pub fn launch(
             port_devices: RefCell::default(),
             saved_ports: opts.port_devices.clone(),
             save_ports: opts.save_ports,
+            volume: Cell::new(opts.prefs.volume),
+            volume_changed: opts.volume_changed,
             computer: opts.computer,
             held_keys: RefCell::default(),
             modifiers: Cell::new(0),
@@ -871,6 +932,14 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
         let with = with.clone();
         move |delta| with(&|g| g.step_slot(delta))
     });
+    window.on_restart({
+        let with = with.clone();
+        move || with(&|g| g.restart())
+    });
+    window.on_step_volume({
+        let with = with.clone();
+        move |delta| with(&|g| g.step_volume(delta))
+    });
     window.on_toggle_fullscreen({
         let with = with.clone();
         move || with(&|g| g.toggle_fullscreen())
@@ -963,6 +1032,38 @@ pub fn split_frame(rgba: &[u8], width: u32, height: u32) -> Option<(&[u8], &[u8]
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn menu_focus_moves_through_rows_and_across_save_and_load() {
+        let items = MENU_PORTS_START + 1;
+        assert_eq!(menu_move(-1, input::DOWN, items), Some(MENU_RESUME));
+        assert_eq!(
+            menu_move(MENU_PAUSE, input::DOWN, items),
+            Some(MENU_RESTART)
+        );
+        assert_eq!(menu_move(MENU_RESTART, input::DOWN, items), Some(MENU_SLOT));
+        assert_eq!(menu_move(MENU_SLOT, input::DOWN, items), Some(MENU_SAVE));
+        assert_eq!(menu_move(MENU_SAVE, input::DOWN, items), Some(MENU_VOLUME));
+        assert_eq!(menu_move(MENU_LOAD, input::DOWN, items), Some(MENU_VOLUME));
+        assert_eq!(menu_move(MENU_VOLUME, input::UP, items), Some(MENU_SAVE));
+        assert_eq!(menu_move(MENU_LOAD, input::UP, items), Some(MENU_SLOT));
+        assert_eq!(menu_move(MENU_SAVE, input::RIGHT, items), Some(MENU_LOAD));
+        assert_eq!(menu_move(MENU_LOAD, input::LEFT, items), Some(MENU_SAVE));
+        assert_eq!(menu_move(MENU_RESUME, input::UP, items), Some(MENU_RESUME));
+        assert_eq!(menu_move(items - 1, input::DOWN, items), Some(items - 1));
+        assert_eq!(menu_move(MENU_VOLUME, input::LEFT, items), None);
+    }
+
+    #[test]
+    fn volume_steps_in_tens_and_stays_in_range() {
+        assert_eq!(stepped_volume(70, 1), 80);
+        assert_eq!(stepped_volume(70, -1), 60);
+        assert_eq!(stepped_volume(95, 1), 100);
+        assert_eq!(stepped_volume(100, 1), 100);
+        assert_eq!(stepped_volume(5, -1), 0);
+        assert_eq!(stepped_volume(73, 1), 80, "lands on the next step");
+        assert_eq!(stepped_volume(73, -1), 70);
+    }
 
     #[test]
     fn stacked_screens_split_at_half_height() {

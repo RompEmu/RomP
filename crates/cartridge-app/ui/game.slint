@@ -25,7 +25,7 @@ component MenuRow inherits Rectangle {
     in property <bool> focused;
     in property <bool> danger;
     callback clicked();
-    height: 38px;
+    height: 32px;
     border-radius: Theme.radius;
     background: touch.pressed ? Theme.pressed : root.focused ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
     border-width: root.focused ? 1px : 0px;
@@ -65,8 +65,8 @@ component MenuRow inherits Rectangle {
 component StepButton inherits Rectangle {
     in property <string> text;
     callback clicked();
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     border-radius: Theme.radius-small;
     background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
     accessible-role: button;
@@ -81,7 +81,7 @@ component Stepper inherits Rectangle {
     in property <string> value;
     in property <bool> focused;
     callback step(int);
-    height: 38px;
+    height: 32px;
     border-radius: Theme.radius;
     background: root.focused ? Theme.accent-soft : transparent;
     border-width: root.focused ? 1px : 0px;
@@ -120,21 +120,15 @@ component Stepper inherits Rectangle {
 }
 
 component MenuDivider inherits Rectangle {
-    height: 9px;
+    height: 7px;
     Rectangle { height: 1px; background: Theme.divider; }
-}
-
-component MenuSection inherits Text {
-    font-size: Theme.font-caption;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: Theme.text-muted;
 }
 
 component GameMenu inherits Rectangle {
     in property <string> name;
     in property <bool> paused;
     in property <int> slot;
+    in property <int> volume;
     in property <bool> fullscreen;
     in property <int> focused-item: -1;
     in property <[PortRow]> ports;
@@ -142,6 +136,8 @@ component GameMenu inherits Rectangle {
     callback cycle-port(int, int);
     callback resume();
     callback toggle-pause();
+    callback restart();
+    callback step-volume(int);
     callback save-state();
     callback load-state();
     callback step-slot(int);
@@ -165,42 +161,41 @@ component GameMenu inherits Rectangle {
         drop-shadow-blur: 32px;
         drop-shadow-color: Theme.shadow;
         menu := VerticalLayout {
-            padding: 14px;
-            padding-top: 18px;
+            padding: 12px;
+            padding-top: 14px;
             spacing: 2px;
-            VerticalLayout {
+            HorizontalLayout {
                 padding-left: 6px;
                 padding-right: 6px;
-                padding-bottom: 12px;
-                spacing: 4px;
+                padding-bottom: 8px;
+                spacing: 8px;
                 Text {
                     text: root.name;
                     color: Theme.text-strong;
-                    font-size: Theme.font-title;
+                    font-size: Theme.font-subtitle;
                     font-weight: 700;
                     overflow: elide;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
                 }
-                HorizontalLayout {
-                    spacing: 6px;
-                    VerticalLayout {
-                        alignment: center;
-                        Rectangle {
-                            width: 7px;
-                            height: 7px;
-                            border-radius: 3.5px;
-                            background: root.paused ? Theme.warning : Theme.success;
-                        }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 7px;
+                        height: 7px;
+                        border-radius: 3.5px;
+                        background: root.paused ? Theme.warning : Theme.success;
                     }
-                    Text {
-                        text: root.paused ? @tr("Paused") : @tr("Running behind this menu");
-                        color: Theme.text-muted;
-                        font-size: Theme.font-small;
-                        horizontal-stretch: 1;
-                    }
+                }
+                Text {
+                    text: root.paused ? @tr("Paused") : @tr("Running");
+                    color: Theme.text-muted;
+                    font-size: Theme.font-small;
+                    vertical-alignment: center;
                 }
             }
             Rectangle {
-                height: 42px;
+                height: 36px;
                 border-radius: Theme.radius;
                 background: resume-touch.pressed ? Theme.accent-pressed : resume-touch.has-hover ? Theme.accent-hover : Theme.accent;
                 border-width: root.focused-item == 0 ? 2px : 0px;
@@ -234,7 +229,6 @@ component GameMenu inherits Rectangle {
                     }
                 }
             }
-            Rectangle { height: 4px; }
             MenuRow {
                 text: root.paused ? @tr("Play") : @tr("Pause");
                 icon: root.paused ? @image-url("icons/play.svg") : @image-url("icons/pause.svg");
@@ -242,17 +236,17 @@ component GameMenu inherits Rectangle {
                 focused: root.focused-item == 1;
                 clicked => { root.toggle-pause(); }
             }
-            MenuDivider { }
-            HorizontalLayout {
-                padding-left: 12px;
-                padding-top: 2px;
-                padding-bottom: 2px;
-                MenuSection { text: @tr("SAVE STATES"); }
-            }
-            Stepper {
-                label: @tr("Slot");
-                value: root.slot;
+            MenuRow {
+                text: @tr("Restart");
+                icon: @image-url("icons/refresh.svg");
                 focused: root.focused-item == 2;
+                clicked => { root.restart(); }
+            }
+            MenuDivider { }
+            Stepper {
+                label: @tr("Save slot");
+                value: root.slot;
+                focused: root.focused-item == 3;
                 step(d) => { root.step-slot(d); }
             }
             HorizontalLayout {
@@ -261,35 +255,41 @@ component GameMenu inherits Rectangle {
                     text: @tr("Save");
                     icon: @image-url("icons/save.svg");
                     shortcut: root.keyboard ? "F5" : "";
-                    focused: root.focused-item == 3;
+                    focused: root.focused-item == 4;
                     clicked => { root.save-state(); }
                 }
                 MenuRow {
                     text: @tr("Load");
                     icon: @image-url("icons/load.svg");
                     shortcut: root.keyboard ? "F7" : "";
-                    focused: root.focused-item == 4;
+                    focused: root.focused-item == 5;
                     clicked => { root.load-state(); }
                 }
             }
             MenuDivider { }
+            Stepper {
+                label: @tr("Volume");
+                value: root.volume + "%";
+                focused: root.focused-item == 6;
+                step(d) => { root.step-volume(d); }
+            }
             MenuRow {
                 text: root.fullscreen ? @tr("Exit full screen") : @tr("Full screen");
                 icon: root.fullscreen ? @image-url("icons/exit-fullscreen.svg") : @image-url("icons/fullscreen.svg");
                 shortcut: root.keyboard ? "F11" : "";
-                focused: root.focused-item == 5;
+                focused: root.focused-item == 7;
                 clicked => { root.toggle-fullscreen(); }
             }
             MenuRow {
                 text: @tr("Controllers…");
                 icon: @image-url("icons/gamepad.svg");
-                focused: root.focused-item == 6;
+                focused: root.focused-item == 8;
                 clicked => { root.open-controllers(); }
             }
             for port[i] in root.ports: Stepper {
                 label: port.label;
                 value: port.device;
-                focused: root.focused-item == 7 + i;
+                focused: root.focused-item == 9 + i;
                 step(d) => { root.cycle-port(i, d); }
             }
             MenuDivider { }
@@ -297,7 +297,7 @@ component GameMenu inherits Rectangle {
                 text: @tr("Quit game");
                 icon: @image-url("icons/quit.svg");
                 danger: true;
-                focused: root.focused-item == 7 + root.ports.length;
+                focused: root.focused-item == 9 + root.ports.length;
                 clicked => { root.quit(); }
             }
             Text {
@@ -306,7 +306,7 @@ component GameMenu inherits Rectangle {
                 font-size: Theme.font-caption;
                 horizontal-alignment: center;
                 wrap: word-wrap;
-                height: self.preferred-height + 10px;
+                height: self.preferred-height + 6px;
                 vertical-alignment: bottom;
             }
         }
@@ -320,6 +320,7 @@ export component GameWindow inherits Window {
     in property <bool> menu-open;
     in property <bool> paused;
     in property <int> slot: 1;
+    in property <int> volume: 100;
     in property <bool> fullscreen;
     in property <bool> sharp: true;
     in property <int> menu-focus: -1;
@@ -334,6 +335,8 @@ export component GameWindow inherits Window {
     callback window-active(bool);
     callback resume();
     callback toggle-pause();
+    callback restart();
+    callback step-volume(int);
     callback save-state();
     callback load-state();
     callback step-slot(int);
@@ -457,6 +460,7 @@ export component GameWindow inherits Window {
             name: root.game-name;
             paused: root.paused;
             slot: root.slot;
+            volume: root.volume;
             fullscreen: root.fullscreen;
             focused-item: root.menu-focus;
             ports: root.ports;
@@ -464,6 +468,8 @@ export component GameWindow inherits Window {
             cycle-port(i, step) => { root.cycle-port(i, step); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
+            restart => { root.restart(); }
+            step-volume(d) => { root.step-volume(d); }
             save-state => { root.save-state(); }
             load-state => { root.load-state(); }
             step-slot(d) => { root.step-slot(d); }

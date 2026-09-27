@@ -37,6 +37,7 @@ pub enum AppMsg {
     SaveSlot(u8),
     LoadSlot(u8),
     Shutdown,
+    Reset,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

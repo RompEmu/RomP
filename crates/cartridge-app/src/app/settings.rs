@@ -98,6 +98,22 @@ impl Controller {
         }
     }
 
+    pub(super) fn set_game_volume(&self, volume: u8) {
+        let prefs = Preferences {
+            volume,
+            ..self.prefs.get()
+        };
+        self.prefs.set(prefs);
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .set("prefs", &prefs.to_json());
+        if let Some(ui) = self.ui() {
+            ui.set_pref_volume(f32::from(volume));
+        }
+    }
+
     pub(super) fn settings_section_changed(&self, section: i32) {
         let watching = section == SECTION_PLAYERS;
         if watching {

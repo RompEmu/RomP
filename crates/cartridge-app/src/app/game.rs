@@ -762,6 +762,11 @@ impl Controller {
             computer: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| crate::cores::is_computer(core.id)),
             port_devices: self.saved_ports(detail.id),
+            volume_changed: Box::new(|volume| {
+                let _ = slint::invoke_from_event_loop(move || {
+                    with_controller(|c| c.set_game_volume(volume))
+                });
+            }),
             save_ports: {
                 let store = self.shared.store.clone();
                 let id = detail.id;
