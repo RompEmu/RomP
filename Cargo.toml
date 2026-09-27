@@ -7,8 +7,8 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
-cartridge-libretro = { path = "crates/cartridge-libretro" }
-cartridge-proto = { path = "crates/cartridge-proto" }
+romp-libretro = { path = "crates/romp-libretro" }
+romp-proto = { path = "crates/romp-proto" }
 
 [profile.release]
 codegen-units = 1

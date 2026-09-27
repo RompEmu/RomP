@@ -1,6 +1,8 @@
-# Cartridge
+# Romp
 
 Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
+
+Source and releases: [github.com/RompEmu/RompEmu](https://github.com/RompEmu/RompEmu)
 
 ## Running
 
@@ -8,27 +10,27 @@ Requires [rustup](https://rustup.rs) and CMake.
 
 ```sh
 cargo build --release
-./target/release/cartridge
+./target/release/romp
 ```
 
-Enter your RomM server address (RomM 5.0 or newer). Approve Cartridge in RomM by scanning the code or opening the link.
+Enter your RomM server address (RomM 5.0 or newer). Approve Romp in RomM by scanning the code or opening the link.
 
-Open a game from your library to download and play it. Cartridge installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
+Open a game from your library to download and play it. Romp installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
 
-Original Xbox games play in [xemu](https://xemu.app), which Cartridge installs and sets up with your controls, volume and display settings. Add the Xbox boot ROM (`mcpx_1.0.bin`) and an Xbox BIOS to the Xbox platform's firmware in RomM. Games need to be in XISO format. In xemu, press Esc or your controller's Guide button for its menu.
+Original Xbox games play in [xemu](https://xemu.app), which Romp installs and sets up with your controls, volume and display settings. Add the Xbox boot ROM (`mcpx_1.0.bin`) and an Xbox BIOS to the Xbox platform's firmware in RomM. Games need to be in XISO format. In xemu, press Esc or your controller's Guide button for its menu.
 
 In the library, ⌘F searches, ⌘R refreshes and ⌘, opens Settings. Esc or your mouse's back button leaves a game's page.
 
-In-game saves and save states sync with RomM before and after you play, so you can continue on another device. If a save changed in both places, Cartridge asks which to keep and backs up the other.
+In-game saves and save states sync with RomM before and after you play, so you can continue on another device. If a save changed in both places, Romp asks which to keep and backs up the other.
 
 Favorites and collections come from RomM, including its automatic series, franchise and genre collections. Favorite a game or add it to your collections from its page; create a collection with **+** in the sidebar, and right-click one to rename or delete it. **Recently played** lists the games you last played, here or in RomM, and the library can be sorted by name, date added or last played.
 
-When a new version of Cartridge needs more access to your server, the library shows a **Pair again** button.
+When a new version of Romp needs more access to your server, the library shows a **Pair again** button.
 
 To play a game file directly with a libretro core:
 
 ```sh
-./target/release/cartridge --core <libretro core> --rom <game>
+./target/release/romp --core <libretro core> --rom <game>
 ```
 
 Add `--jit` for cores that use a dynamic recompiler. Cores are available from the [libretro buildbot](https://buildbot.libretro.com/nightly/).
@@ -49,4 +51,4 @@ Gamepads are picked up automatically: the first one joins the keyboard as player
 | F11 | Full screen |
 | Esc | Game menu |
 
-Your games, saves and library cache are stored in `~/Library/Application Support/Cartridge` on macOS and `~/.local/share/Cartridge` on Linux.
+Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS and `~/.local/share/Romp` on Linux. An existing Cartridge folder from before the rename is moved there on first start.

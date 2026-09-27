@@ -798,80 +798,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cartridge-app"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "cartridge-proto",
- "clap",
- "dirs",
- "gilrs",
- "httpdate",
- "image",
- "keyring",
- "libc",
- "md-5",
- "open",
- "qrcode",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha1",
- "sha2 0.10.9",
- "slint",
- "slint-build",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "tracing",
- "tracing-subscriber",
- "url",
- "wiremock",
- "zip",
-]
-
-[[package]]
-name = "cartridge-libretro"
-version = "0.1.0"
-dependencies = [
- "cc",
- "libloading",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "cartridge-proto"
-version = "0.1.0"
-dependencies = [
- "libc",
- "postcard",
- "serde",
-]
-
-[[package]]
-name = "cartridge-runner"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cartridge-libretro",
- "cartridge-proto",
- "clap",
- "cubeb",
- "landlock",
- "libc",
- "parking_lot",
- "ringbuf",
- "sevenz-rust",
- "tempfile",
- "tracing",
- "tracing-subscriber",
- "zip",
-]
-
-[[package]]
 name = "cbc"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5000,6 +4926,80 @@ dependencies = [
  "crossbeam-utils",
  "portable-atomic",
  "portable-atomic-util",
+]
+
+[[package]]
+name = "romp-app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "clap",
+ "dirs",
+ "gilrs",
+ "httpdate",
+ "image",
+ "keyring",
+ "libc",
+ "md-5",
+ "open",
+ "qrcode",
+ "reqwest",
+ "romp-proto",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.10.9",
+ "slint",
+ "slint-build",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "wiremock",
+ "zip",
+]
+
+[[package]]
+name = "romp-libretro"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "libloading",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "romp-proto"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "postcard",
+ "serde",
+]
+
+[[package]]
+name = "romp-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "cubeb",
+ "landlock",
+ "libc",
+ "parking_lot",
+ "ringbuf",
+ "romp-libretro",
+ "romp-proto",
+ "sevenz-rust",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+ "zip",
 ]
 
 [[package]]

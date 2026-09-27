@@ -1,0 +1,31 @@
+[package]
+name = "romp-runner"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "romp-runner"
+path = "src/main.rs"
+
+[dependencies]
+romp-libretro = { workspace = true }
+romp-proto = { workspace = true }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+cubeb = "0.34"
+libc = "0.2"
+parking_lot = "0.12"
+ringbuf = "0.5"
+sevenz-rust = "0.6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
