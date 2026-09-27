@@ -1,11 +1,11 @@
-use super::{with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY};
+use super::{with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::input::{A, B, DOWN, L, LEFT, R, RIGHT, START, UP, X};
 use crate::mapping::{stick_to_dpad, BUTTONS};
 use crate::navigation::{move_in_grid, Dir};
+use slint::ComponentHandle;
 use slint::{Model, Timer, TimerMode};
 use std::time::{Duration, Instant};
 
-const SCREEN_SETTINGS: i32 = 4;
 const SETTINGS_SECTIONS: i32 = 4;
 const DPAD: u16 = 1 << UP | 1 << DOWN | 1 << LEFT | 1 << RIGHT;
 
@@ -61,6 +61,19 @@ impl Controller {
         };
         if ui.get_pad_hints() != hints {
             ui.set_pad_hints(hints.into());
+        }
+    }
+
+    pub(super) fn mouse_back(&self, window: slint::winit_030::winit::window::WindowId) {
+        let Some(ui) = self.ui() else { return };
+        if crate::mouse::window_id(ui.window()) != Some(window)
+            || ui.get_dialog_open()
+            || ui.get_remap_open()
+        {
+            return;
+        }
+        if matches!(ui.get_screen(), SCREEN_GAME | SCREEN_SETTINGS) {
+            self.back_to_library();
         }
     }
 

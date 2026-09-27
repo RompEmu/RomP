@@ -341,6 +341,12 @@ impl Controller {
         ui.set_has_game_cover(true);
     }
 
+    pub(super) fn leave_game_page(&self) {
+        if self.ui().is_some_and(|ui| ui.get_screen() == SCREEN_GAME) {
+            self.back_to_library();
+        }
+    }
+
     pub(super) fn back_to_library(&self) {
         self.clear_conflict();
         self.close_settings();

@@ -2,7 +2,7 @@ import { Theme } from "theme.slint";
 import { FocusRing, KeyActivator } from "focus.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
-export struct SidebarEntry { header: bool, key: string, name: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
+export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
 export struct Membership { key: string, name: string, member: bool }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
@@ -172,8 +172,24 @@ component Pairing inherits Rectangle {
 }
 
 
+component Avatar inherits Rectangle {
+    in property <string> initial;
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
+    background: Theme.surface-muted;
+    Text {
+        text: root.initial;
+        color: Theme.accent-text;
+        font-size: Theme.font-body;
+        font-weight: 700;
+    }
+}
+
 component SidebarItem inherits Rectangle {
     in property <string> label;
+    in property <string> initial;
+    in property <bool> compact;
     in property <int> count;
     in property <bool> selected;
     in property <image> icon;
@@ -192,7 +208,18 @@ component SidebarItem inherits Rectangle {
     touch := TouchArea { clicked => { root.clicked(); } }
     keys := KeyActivator { activate => { root.clicked(); } }
     if keys.has-focus: FocusRing { border-radius: root.border-radius; }
-    HorizontalLayout {
+    if root.compact: Rectangle {
+        if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; }
+        if !root.has-icon && root.glyph != "": Text { text: root.glyph; color: Theme.favorite; font-size: Theme.font-body; }
+        if !root.has-icon && root.glyph == "": Text {
+            text: root.initial;
+            font-size: Theme.font-body;
+            font-weight: 700;
+            color: root.selected ? Theme.text-strong : Theme.text-secondary;
+        }
+    }
+    if root.compact: Tooltip { text: @markdown("\{root.label}"); }
+    if !root.compact: HorizontalLayout {
         padding-left: 12px;
         padding-right: 8px;
         spacing: 10px;
@@ -354,7 +381,9 @@ component Library inherits Rectangle {
     in property <image> app-icon;
     in property <bool> has-app-icon;
     callback open-about();
+    in property <bool> game-open;
     public function focus-search() { search-field.focus(); }
+    in property <bool> compact;
     in property <string> user-initial;
     in property <[SidebarEntry]> sidebar;
     in property <string> selected-key;
@@ -394,7 +423,8 @@ component Library inherits Rectangle {
 
     HorizontalLayout {
         Rectangle {
-            width: 248px;
+            width: root.compact ? 64px : 248px;
+            animate width { duration: 150ms; easing: ease-out; }
             background: Theme.sidebar;
             Rectangle {
                 x: parent.width - 1px;
@@ -404,15 +434,20 @@ component Library inherits Rectangle {
             VerticalLayout {
                 padding-top: 16px;
                 padding-bottom: 12px;
-                padding-left: 12px;
-                padding-right: 12px;
+                padding-left: root.compact ? 8px : 12px;
+                padding-right: root.compact ? 8px : 12px;
                 spacing: 6px;
                 HorizontalLayout {
-                    padding-left: 4px;
+                    padding-left: root.compact ? 0 : 4px;
                     padding-bottom: 10px;
                     spacing: 10px;
-                    AppTile { icon: root.app-icon; has-icon: root.has-app-icon; }
-                    VerticalLayout {
+                    alignment: root.compact ? center : stretch;
+                    AppTile {
+                        icon: root.app-icon;
+                        has-icon: root.has-app-icon;
+                        if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? "Offline" : root.server-label}"); }
+                    }
+                    if !root.compact: VerticalLayout {
                         alignment: center;
                         spacing: 2px;
                         Text { text: Brand.name; font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
@@ -440,8 +475,15 @@ component Library inherits Rectangle {
 
                     vertical-stretch: 1;
                     for e in root.sidebar: HorizontalLayout {
-                        padding-right: 14px;
-                        if e.header: SectionHeader {
+                        padding-right: root.compact ? 0 : 14px;
+                        if e.header && root.compact: VerticalLayout {
+                            height: 17px;
+                            alignment: center;
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            Rectangle { height: 1px; background: Theme.divider; }
+                        }
+                        if e.header && !root.compact: SectionHeader {
                             label: e.name;
                             expanded: e.expanded;
                             can-add: e.can-add;
@@ -456,6 +498,8 @@ component Library inherits Rectangle {
                             }
                             SidebarItem {
                                 width: parent.width;
+                                compact: root.compact;
+                                initial: e.initial;
                                 label: e.name;
                                 count: e.count;
                                 icon: e.icon;
@@ -466,6 +510,8 @@ component Library inherits Rectangle {
                             }
                         }
                         if !e.header && !e.editable: SidebarItem {
+                            compact: root.compact;
+                            initial: e.initial;
                             label: e.name;
                             count: e.count;
                             icon: e.icon;
@@ -480,22 +526,30 @@ component Library inherits Rectangle {
                     height: 1px;
                     background: Theme.divider;
                 }
-                HorizontalLayout {
+                if root.compact: VerticalLayout {
+                    padding-top: 6px;
+                    spacing: 4px;
+                    HorizontalLayout {
+                        alignment: center;
+                        Avatar {
+                            initial: root.user-initial;
+                            Tooltip { text: @markdown("\{root.user-label != "" ? root.user-label : "Signed in"}"); }
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        IconButton { icon: @image-url("icons/info.svg"); tooltip: "About"; clicked => { root.open-about(); } }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        IconButton { icon: @image-url("icons/settings.svg"); tooltip: "Settings"; clicked => { root.open-settings(); } }
+                    }
+                }
+                if !root.compact: HorizontalLayout {
                     padding-top: 6px;
                     padding-left: 4px;
                     spacing: 10px;
-                    Rectangle {
-                        width: 30px;
-                        height: 30px;
-                        border-radius: 15px;
-                        background: Theme.surface-muted;
-                        Text {
-                            text: root.user-initial;
-                            color: Theme.accent-text;
-                            font-size: Theme.font-body;
-                            font-weight: 700;
-                        }
-                    }
+                    Avatar { initial: root.user-initial; }
                     VerticalLayout {
                         alignment: center;
                         horizontal-stretch: 1;
@@ -513,90 +567,97 @@ component Library inherits Rectangle {
 
             }
         }
-        VerticalLayout {
-            padding-top: 18px;
-            padding-left: 20px;
-            padding-right: 16px;
-            padding-bottom: 8px;
-            spacing: 12px;
-            HorizontalLayout {
-                vertical-stretch: 0;
-                spacing: 12px;
+        Rectangle {
+            horizontal-stretch: 1;
+            Rectangle {
+                visible: !root.game-open;
                 VerticalLayout {
-                    horizontal-stretch: 1;
-                    alignment: center;
-                    spacing: 2px;
-                    Text { text: root.heading; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; overflow: elide; }
-                    Text {
-                        text: root.sync-status != "" ? root.heading-detail + "  ·  " + root.sync-status : root.heading-detail;
-                        font-size: Theme.font-small;
-                        color: Theme.text-muted;
-                        overflow: elide;
+                    padding-top: 18px;
+                    padding-left: 20px;
+                    padding-right: 16px;
+                    padding-bottom: 8px;
+                    spacing: 12px;
+                    HorizontalLayout {
+                        vertical-stretch: 0;
+                        spacing: 12px;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+                            Text { text: root.heading; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; overflow: elide; }
+                            Text {
+                                text: root.sync-status != "" ? root.heading-detail + "  ·  " + root.sync-status : root.heading-detail;
+                                font-size: Theme.font-small;
+                                color: Theme.text-muted;
+                                overflow: elide;
+                            }
+                        }
+                        if root.needs-pairing: VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                height: 30px;
+                                width: pair-text.preferred-width + 24px;
+                                border-radius: 15px;
+                                background: pair-touch.has-hover ? Theme.accent-soft-strong : Theme.accent-soft;
+                                pair-text := Text { text: root.pair-prompt; font-size: Theme.font-small; font-weight: 600; color: Theme.accent-text; }
+                                accessible-role: button;
+                                accessible-label: root.pair-prompt;
+                                accessible-action-default => { root.pair-again(); }
+                                pair-touch := TouchArea { clicked => { root.pair-again(); } }
+                                pair-keys := KeyActivator { activate => { root.pair-again(); } }
+                                if pair-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            search-field := LineEdit {
+                                width: 240px;
+                                placeholder-text: "Search games";
+                                text <=> root.search;
+                                edited(text) => { root.search-edited(text); }
+                            }
+                        }
+                        Switch {
+                            text: "Downloaded";
+                            checked <=> root.downloaded-only;
+                            enabled: !root.offline;
+                            toggled => { root.downloaded-only-toggled(self.checked); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
+                            if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); tooltip: "Refresh library"; clicked => { root.refresh(); } }
+                        }
                     }
-                }
-                if root.needs-pairing: VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        height: 30px;
-                        width: pair-text.preferred-width + 24px;
-                        border-radius: 15px;
-                        background: pair-touch.has-hover ? Theme.accent-soft-strong : Theme.accent-soft;
-                        pair-text := Text { text: root.pair-prompt; font-size: Theme.font-small; font-weight: 600; color: Theme.accent-text; }
-                        accessible-role: button;
-                        accessible-label: root.pair-prompt;
-                        accessible-action-default => { root.pair-again(); }
-                        pair-touch := TouchArea { clicked => { root.pair-again(); } }
-                        pair-keys := KeyActivator { activate => { root.pair-again(); } }
-                        if pair-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    search-field := LineEdit {
-                        width: 240px;
-                        placeholder-text: "Search games";
-                        text <=> root.search;
-                        edited(text) => { root.search-edited(text); }
-                    }
-                }
-                Switch {
-                    text: "Downloaded";
-                    checked <=> root.downloaded-only;
-                    enabled: !root.offline;
-                    toggled => { root.downloaded-only-toggled(self.checked); }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
-                    if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); tooltip: "Refresh library"; clicked => { root.refresh(); } }
-                }
-            }
-            grid := Rectangle {
-                vertical-stretch: 1;
-                property <int> columns: max(1, floor((self.width - 24px) / 188px));
-                changed columns => { root.columns-changed(self.columns); }
-                init => { root.columns-changed(self.columns); }
-                if root.rows.length == 0: Text {
-                    text: root.syncing ? "Loading your library…" : "No games found.";
-                    color: Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-                games := ListView {
-                    for row[i] in root.rows: HorizontalLayout {
-                        property <int> index: i;
-                        padding: 8px;
-                        spacing: 16px;
-                        alignment: start;
-                        init => { root.row-shown(i); }
-                        changed index => { root.row-shown(self.index); }
-                        for game in row.cards: Card {
-                            game: game;
-                            clicked => { root.open-game(game.id); }
+                    grid := Rectangle {
+                        vertical-stretch: 1;
+                        property <int> columns: max(1, floor((self.width - 24px) / 188px));
+                        changed columns => { root.columns-changed(self.columns); }
+                        init => { root.columns-changed(self.columns); }
+                        if root.rows.length == 0: Text {
+                            text: root.syncing ? "Loading your library…" : "No games found.";
+                            color: Theme.text-muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        games := ListView {
+                            for row[i] in root.rows: HorizontalLayout {
+                                property <int> index: i;
+                                padding: 8px;
+                                spacing: 16px;
+                                alignment: start;
+                                init => { root.row-shown(i); }
+                                changed index => { root.row-shown(self.index); }
+                                for game in row.cards: Card {
+                                    game: game;
+                                    clicked => { root.open-game(game.id); }
+                                }
+                            }
                         }
                     }
                 }
             }
+            @children
         }
     }
 }
@@ -608,7 +669,8 @@ component SectionTitle inherits Text {
     color: Theme.text;
 }
 
-component GamePage inherits Rectangle {
+component GamePage inherits FocusScope {
+    in property <string> back-label;
     in property <string> title;
     in property <string> category;
     in property <string> subtitle;
@@ -643,27 +705,94 @@ component GamePage inherits Rectangle {
     callback new-collection();
 
     property <int> viewing: -1;
+    property <bool> banner-from-shot: root.shots.length > 0 && root.shots[0].loaded;
+    property <bool> has-banner: root.banner-from-shot || root.has-cover;
     changed title => { self.viewing = -1; page.content-y = 0; }
+    init => { self.focus(); }
+    key-pressed(event) => {
+        if event.text == Key.Escape {
+            if root.viewing >= 0 {
+                root.viewing = -1;
+            } else {
+                root.back();
+            }
+            return accept;
+        }
+        if root.viewing >= 0 && event.text == Key.LeftArrow && root.viewing > 0 {
+            root.viewing -= 1;
+            return accept;
+        }
+        if root.viewing >= 0 && event.text == Key.RightArrow && root.viewing < root.shots.length - 1 {
+            root.viewing += 1;
+            return accept;
+        }
+        return reject;
+    }
 
     VerticalLayout {
         HorizontalLayout {
             vertical-stretch: 0;
-            padding-left: 24px;
-            padding-right: 24px;
-            padding-top: 16px;
-            padding-bottom: 8px;
-            alignment: start;
-            Button { text: "← Library"; clicked => { root.back(); } }
+            padding-left: 16px;
+            padding-right: 20px;
+            padding-top: 14px;
+            padding-bottom: 10px;
+            spacing: 4px;
+            IconButton { icon: @image-url("icons/back.svg"); tooltip: "Back"; clicked => { root.back(); } }
+            Rectangle {
+                width: crumb-text.preferred-width + 16px;
+                height: 32px;
+                border-radius: 6px;
+                background: crumb-touch.has-hover ? Theme.hover : transparent;
+                accessible-role: button;
+                accessible-label: root.back-label;
+                accessible-action-default => { root.back(); }
+                crumb-text := Text {
+                    text: root.back-label;
+                    font-size: Theme.font-body;
+                    color: crumb-touch.has-hover ? Theme.text-strong : Theme.text-secondary;
+                }
+                crumb-touch := TouchArea { mouse-cursor: pointer; clicked => { root.back(); } }
+                crumb-keys := KeyActivator { activate => { root.back(); } }
+                if crumb-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
+            }
+            Text { text: "›"; font-size: Theme.font-subtitle; color: Theme.text-subtle; vertical-alignment: center; }
+            Text {
+                text: root.title;
+                font-size: Theme.font-body;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                min-width: 40px;
+            }
         }
         page := ScrollView {
             vertical-stretch: 1;
             content-width: self.visible-width;
             content-height: body.preferred-height;
+            if root.has-banner: Rectangle {
+                x: 0;
+                y: 0;
+                width: page.visible-width;
+                height: 280px;
+                clip: true;
+                Image {
+                    width: parent.width;
+                    height: parent.height;
+                    source: root.banner-from-shot ? root.shots[0].image : root.cover;
+                    image-fit: ImageFit.cover;
+                    opacity: root.banner-from-shot ? 0.55 : 0.3;
+                }
+                Rectangle {
+                    background: @linear-gradient(180deg, Theme.background.with-alpha(0.2) 0%, Theme.background 100%);
+                }
+            }
             body := VerticalLayout {
                 width: page.visible-width;
                 padding-left: 24px;
                 padding-right: 24px;
-                padding-top: 8px;
+                padding-top: root.has-banner ? 120px : 8px;
                 padding-bottom: 32px;
                 spacing: 32px;
                 HorizontalLayout {
@@ -1344,6 +1473,9 @@ export component AppWindow inherits Window {
     min-height: 480px;
 
     in property <int> screen;
+    property <bool> narrow;
+    changed width => { self.narrow = self.width < 1000px; }
+    init => { self.narrow = self.width < 1000px; }
 
     in-out property <string> server-url;
     in property <string> connect-error;
@@ -1523,7 +1655,9 @@ export component AppWindow inherits Window {
         retry => { root.retry-pairing(); }
     }
     library := Library {
-        visible: root.screen == 2;
+        visible: root.screen == 2 || root.screen == 3;
+        compact: root.narrow;
+        game-open: root.screen == 3;
         user-label: root.user-label;
         sidebar: root.sidebar;
         selected-key: root.selected-key;
@@ -1556,6 +1690,41 @@ export component AppWindow inherits Window {
         app-icon: root.app-icon;
         has-app-icon: root.has-app-icon;
         open-about => { root.about-open = true; }
+        if root.screen == 3: GamePage {
+            back-label: root.heading;
+            title: root.game-title;
+            category: root.game-category;
+            subtitle: root.game-subtitle;
+            summary: root.game-summary;
+            facts: root.game-facts;
+            shots: root.game-shots;
+            similar: root.game-similar;
+            open-game(id) => { root.open-game(id); }
+            cover: root.game-cover;
+            has-cover: root.has-game-cover;
+            downloaded: root.game-downloaded;
+            busy: root.game-busy;
+            playable: root.game-playable;
+            can-download: root.game-can-download;
+            progress: root.game-progress;
+            status: root.game-status;
+            back => { root.back-to-library(); }
+            download => { root.download-game(); }
+            cancel => { root.cancel-download(); }
+            play => { root.play-game(); }
+            delete => { root.delete-game(); }
+            conflict: root.save-conflict;
+            conflict-text: root.conflict-text;
+            keep-local => { root.keep-local-save(); }
+            keep-server => { root.keep-server-save(); }
+            show-collections: root.show-collections;
+            can-edit-collections: root.can-edit-collections;
+            favorite: root.game-favorite;
+            memberships: root.game-memberships;
+            toggle-favorite => { root.toggle-favorite(); }
+            toggle-membership(key, on) => { root.toggle-membership(key, on); }
+            new-collection => { root.new-collection-with-game(); }
+        }
     }
     if root.screen == 4: SettingsPage {
         section <=> root.settings-section;
@@ -1593,40 +1762,6 @@ export component AppWindow inherits Window {
         clear-images => { root.clear-images(); }
         show-folder => { root.show-folder(); }
         section-changed(i) => { root.settings-section-changed(i); }
-    }
-    if root.screen == 3: GamePage {
-        title: root.game-title;
-        category: root.game-category;
-        subtitle: root.game-subtitle;
-        summary: root.game-summary;
-        facts: root.game-facts;
-        shots: root.game-shots;
-        similar: root.game-similar;
-        open-game(id) => { root.open-game(id); }
-        cover: root.game-cover;
-        has-cover: root.has-game-cover;
-        downloaded: root.game-downloaded;
-        busy: root.game-busy;
-        playable: root.game-playable;
-        can-download: root.game-can-download;
-        progress: root.game-progress;
-        status: root.game-status;
-        back => { root.back-to-library(); }
-        download => { root.download-game(); }
-        cancel => { root.cancel-download(); }
-        play => { root.play-game(); }
-        delete => { root.delete-game(); }
-        conflict: root.save-conflict;
-        conflict-text: root.conflict-text;
-        keep-local => { root.keep-local-save(); }
-        keep-server => { root.keep-server-save(); }
-        show-collections: root.show-collections;
-        can-edit-collections: root.can-edit-collections;
-        favorite: root.game-favorite;
-        memberships: root.game-memberships;
-        toggle-favorite => { root.toggle-favorite(); }
-        toggle-membership(key, on) => { root.toggle-membership(key, on); }
-        new-collection => { root.new-collection-with-game(); }
     }
     if root.pad-hints != "" && !root.dialog-open: Rectangle {
         x: parent.width - self.width - 16px;

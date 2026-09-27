@@ -20,11 +20,19 @@ pub(super) enum DialogAction {
     Delete(String),
 }
 
+fn initial_of(name: &str) -> String {
+    name.chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_default()
+}
+
 fn item(key: &str, name: &str, count: i64, glyph: &str) -> SidebarEntry {
     SidebarEntry {
         header: false,
         key: key.into(),
         name: name.into(),
+        initial: initial_of(name).into(),
         count: count as i32,
         icon: Image::default(),
         has_icon: false,
@@ -545,6 +553,15 @@ mod tests {
         assert_eq!(games_label(0), "No games");
         assert_eq!(games_label(1), "1 game");
         assert_eq!(games_label(1234), "1,234 games");
+    }
+
+    #[test]
+    fn compact_sidebar_shows_the_first_letter_of_a_name() {
+        assert_eq!(initial_of("Super Nintendo"), "S");
+        assert_eq!(initial_of("  émulateurs"), "É");
+        assert_eq!(initial_of("3DO"), "3");
+        assert_eq!(initial_of("\"Couch\" co-op"), "C");
+        assert_eq!(initial_of(""), "");
     }
 
     #[test]

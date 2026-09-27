@@ -36,6 +36,7 @@ const SCREEN_CONNECT: i32 = 0;
 const SCREEN_PAIRING: i32 = 1;
 const SCREEN_LIBRARY: i32 = 2;
 const SCREEN_GAME: i32 = 3;
+const SCREEN_SETTINGS: i32 = 4;
 
 struct Shared {
     rt: Runtime,
@@ -228,7 +229,12 @@ impl Controller {
         ui.on_remap_reset(|| with_controller(|c| c.remap_reset()));
         ui.on_remap_close(|| with_controller(|c| c.remap_close()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));
-        ui.on_select(|key| with_controller(|c| c.select(key.to_string())));
+        ui.on_select(|key| {
+            with_controller(|c| {
+                c.select(key.to_string());
+                c.leave_game_page();
+            })
+        });
         ui.on_toggle_section(|key| with_controller(|c| c.toggle_section(key.to_string())));
         ui.on_new_collection(|| with_controller(|c| c.new_collection(None)));
         ui.on_rename_collection(|key| with_controller(|c| c.rename_collection(key.to_string())));
@@ -248,6 +254,7 @@ impl Controller {
         ui.on_refresh(|| with_controller(|c| c.sync()));
         ui.on_open_game(|id| with_controller(|c| c.open_game(id as i64)));
         ui.on_back_to_library(|| with_controller(|c| c.back_to_library()));
+        crate::mouse::on_back_button(|id| with_controller(|c| c.mouse_back(id)));
         ui.on_download_game(|| with_controller(|c| c.download_game()));
         ui.on_cancel_download(|| with_controller(|c| c.cancel_download()));
         ui.on_play_game(|| with_controller(|c| c.play_game()));

@@ -1,6 +1,8 @@
-use slint::winit_030::winit::event::{DeviceEvent, DeviceId};
+use slint::winit_030::winit::event::{
+    DeviceEvent, DeviceId, ElementState, MouseButton, WindowEvent,
+};
 use slint::winit_030::winit::event_loop::ActiveEventLoop;
-use slint::winit_030::winit::window::CursorGrabMode;
+use slint::winit_030::winit::window::{CursorGrabMode, Window, WindowId};
 use slint::winit_030::{CustomApplicationHandler, EventResult, WinitWindowAccessor};
 use std::cell::{Cell, RefCell};
 
@@ -27,9 +29,12 @@ impl Motion {
     }
 }
 
+type BackHandler = Box<dyn Fn(WindowId)>;
+
 thread_local! {
     static MOTION: RefCell<Motion> = RefCell::default();
     static CAPTURED: Cell<bool> = const { Cell::new(false) };
+    static ON_BACK: RefCell<Option<BackHandler>> = RefCell::new(None);
 }
 
 pub struct RawMouse;
@@ -48,6 +53,37 @@ impl CustomApplicationHandler for RawMouse {
         }
         EventResult::Propagate
     }
+
+    fn window_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        _winit_window: Option<&Window>,
+        _slint_window: Option<&slint::Window>,
+        event: &WindowEvent,
+    ) -> EventResult {
+        if let WindowEvent::MouseInput {
+            state: ElementState::Pressed,
+            button: MouseButton::Back,
+            ..
+        } = event
+        {
+            ON_BACK.with_borrow(|f| {
+                if let Some(f) = f {
+                    f(window_id)
+                }
+            });
+        }
+        EventResult::Propagate
+    }
+}
+
+pub fn on_back_button(f: impl Fn(WindowId) + 'static) {
+    ON_BACK.set(Some(Box::new(f)));
+}
+
+pub fn window_id(window: &slint::Window) -> Option<WindowId> {
+    window.with_winit_window(|w| w.id())
 }
 
 pub fn take_motion() -> (i16, i16) {
