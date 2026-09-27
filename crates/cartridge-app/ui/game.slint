@@ -14,6 +14,9 @@ component MenuButton inherits Rectangle {
         ? (touch.pressed ? Theme.accent-pressed : touch.has-hover ? Theme.accent-hover : Theme.accent)
         : (touch.pressed ? Theme.surface-raised : touch.has-hover ? Theme.surface-selected : Theme.surface-muted);
     animate background { duration: 100ms; }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
     Text {
         text: root.text;
         color: Theme.text-strong;

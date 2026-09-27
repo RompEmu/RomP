@@ -1,0 +1,19 @@
+import { Theme } from "theme.slint";
+
+export component KeyActivator inherits FocusScope {
+    callback activate();
+    x: 0;
+    width: 0;
+    key-pressed(event) => {
+        if event.text == Key.Space || event.text == Key.Return {
+            root.activate();
+            return accept;
+        }
+        return reject;
+    }
+}
+
+export component FocusRing inherits Rectangle {
+    border-width: 2px;
+    border-color: Theme.accent;
+}

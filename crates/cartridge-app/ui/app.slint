@@ -1,4 +1,5 @@
 import { Theme } from "theme.slint";
+import { FocusRing, KeyActivator } from "focus.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
@@ -49,7 +50,13 @@ component IconButton inherits Rectangle {
         height: 18px;
         colorize: root.enabled ? (touch.has-hover ? Theme.text-strong : Theme.text-secondary) : Theme.text-subtle;
     }
+    accessible-role: button;
+    accessible-label: root.tooltip;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.clicked(); }
     touch := TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
+    keys := KeyActivator { enabled: root.enabled; activate => { root.clicked(); } }
+    if keys.has-focus: FocusRing { border-radius: root.border-radius; }
     if root.tooltip != "": Tooltip { text: @markdown("\{root.tooltip}"); }
 }
 
@@ -176,7 +183,15 @@ component SidebarItem inherits Rectangle {
     height: 34px;
     border-radius: 8px;
     background: root.selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+    accessible-role: list-item;
+    accessible-label: root.label;
+    accessible-description: root.count >= 0 ? root.count + " games" : "";
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => { root.clicked(); }
     touch := TouchArea { clicked => { root.clicked(); } }
+    keys := KeyActivator { activate => { root.clicked(); } }
+    if keys.has-focus: FocusRing { border-radius: root.border-radius; }
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 8px;
@@ -209,7 +224,15 @@ component SectionHeader inherits Rectangle {
     callback toggled();
     callback add();
     height: 32px;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-expandable: true;
+    accessible-expanded: root.expanded;
+    accessible-action-default => { root.toggled(); }
+    accessible-action-expand => { root.toggled(); }
     touch := TouchArea { clicked => { root.toggled(); } }
+    keys := KeyActivator { activate => { root.toggled(); } }
+    if keys.has-focus: FocusRing { border-radius: 6px; }
     HorizontalLayout {
         padding-left: 10px;
         padding-right: 6px;
@@ -239,7 +262,12 @@ component SectionHeader inherits Rectangle {
             border-radius: 4px;
             background: add-touch.has-hover ? Theme.surface-muted : transparent;
             Text { text: "+"; font-size: Theme.font-subtitle; color: Theme.text-secondary; }
+            accessible-role: button;
+            accessible-label: "New collection";
+            accessible-action-default => { root.add(); }
             add-touch := TouchArea { clicked => { root.add(); } }
+            add-keys := KeyActivator { activate => { root.add(); } }
+            if add-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
             Tooltip { text: @markdown("New collection"); }
         }
     }
@@ -250,7 +278,12 @@ component Card inherits Rectangle {
     callback clicked();
     width: 172px;
     height: 290px;
+    accessible-role: button;
+    accessible-label: root.game.title;
+    accessible-description: root.game.platform + (root.game.downloaded ? ", downloaded" : "") + (root.game.favorite ? ", favorite" : "");
+    accessible-action-default => { root.clicked(); }
     touch := TouchArea { clicked => { root.clicked(); } }
+    keys := KeyActivator { activate => { root.clicked(); } }
     VerticalLayout {
         alignment: start;
         spacing: 6px;
@@ -293,7 +326,7 @@ component Card inherits Rectangle {
                 Text { text: "✓"; color: Theme.text-strong; font-weight: 700; }
             }
             if touch.has-hover: Rectangle { background: Theme.hover; }
-            if root.game.focused: Rectangle {
+            if root.game.focused || keys.has-focus: Rectangle {
                 border-radius: 8px;
                 border-width: 3px;
                 border-color: Theme.accent;
@@ -508,7 +541,12 @@ component Library inherits Rectangle {
                         border-radius: 15px;
                         background: pair-touch.has-hover ? Theme.accent-soft-strong : Theme.accent-soft;
                         pair-text := Text { text: root.pair-prompt; font-size: Theme.font-small; font-weight: 600; color: Theme.accent-text; }
+                        accessible-role: button;
+                        accessible-label: root.pair-prompt;
+                        accessible-action-default => { root.pair-again(); }
                         pair-touch := TouchArea { clicked => { root.pair-again(); } }
+                        pair-keys := KeyActivator { activate => { root.pair-again(); } }
+                        if pair-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
                     }
                 }
                 VerticalLayout {
@@ -781,8 +819,13 @@ component GamePage inherits Rectangle {
                                 clip: true;
                                 background: Theme.surface-muted;
                                 if shot.loaded: Image { source: shot.image; width: parent.width; height: parent.height; image-fit: ImageFit.cover; }
+                                accessible-role: button;
+                                accessible-label: "Screenshot " + (i + 1);
+                                accessible-action-default => { root.viewing = i; }
                                 shot-touch := TouchArea { clicked => { root.viewing = i; } }
+                                shot-keys := KeyActivator { activate => { root.viewing = i; } }
                                 if shot-touch.has-hover: Rectangle { background: Theme.hover; }
+                                if shot-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
                             }
                         }
                     }
@@ -847,7 +890,14 @@ component NavItem inherits Rectangle {
     height: 34px;
     border-radius: 6px;
     background: root.selected ? Theme.surface-selected : touch.has-hover ? Theme.surface-muted : transparent;
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => { root.clicked(); }
     touch := TouchArea { clicked => { root.clicked(); } }
+    keys := KeyActivator { activate => { root.clicked(); } }
+    if keys.has-focus: FocusRing { border-radius: root.border-radius; }
     HorizontalLayout {
         padding-left: 12px;
         Text { text: root.label; vertical-alignment: center; font-weight: root.selected ? 600 : 400; }
