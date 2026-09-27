@@ -32,6 +32,7 @@ use tokio::task::AbortHandle;
 
 const PARALLEL_DOWNLOADS: usize = 6;
 const OFFLINE_RETRY: Duration = Duration::from_secs(60);
+const RESTORE_SCROLL_FOR: Duration = Duration::from_secs(3);
 
 const SCREEN_CONNECT: i32 = 0;
 const SCREEN_PAIRING: i32 = 1;
@@ -118,6 +119,7 @@ struct Controller {
     nav_repeat: RefCell<crate::navigation::Repeater>,
     nav_timer: RefCell<Option<Timer>>,
     restore_view: RefCell<Option<LastView>>,
+    pending_top: Cell<Option<(i64, Instant)>>,
 }
 
 thread_local! {
@@ -199,6 +201,7 @@ pub fn run() -> anyhow::Result<()> {
         nav_repeat: RefCell::default(),
         nav_timer: RefCell::new(None),
         restore_view: RefCell::new(last_view),
+        pending_top: Cell::new(None),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -464,6 +467,11 @@ impl Controller {
         }
         self.reload_sidebar();
         self.reload_games();
+        if let Some(top) = restore.as_ref().and_then(|v| v.top_game) {
+            self.pending_top
+                .set(Some((top, Instant::now() + RESTORE_SCROLL_FOR)));
+            self.scroll_to_game(top);
+        }
         if let Some(id) = restore.and_then(|v| v.game) {
             self.open_game(id);
         }
@@ -499,6 +507,7 @@ impl Controller {
                 game: (ui.get_screen() == SCREEN_GAME)
                     .then(|| self.current_game_id())
                     .flatten(),
+                top_game: self.top_visible_game(),
             };
             store.set(VIEW_KEY, &view.to_json());
         }
@@ -619,9 +628,37 @@ impl Controller {
 
     fn set_columns(&self, columns: i32) {
         let columns = columns.max(1) as usize;
-        if self.library.borrow().columns != columns {
-            self.library.borrow_mut().columns = columns;
-            self.rebuild_rows();
+        if self.library.borrow().columns == columns {
+            return;
+        }
+        let pending = self
+            .pending_top
+            .get()
+            .filter(|(_, until)| Instant::now() < *until)
+            .map(|(id, _)| id);
+        let anchor = pending.or_else(|| self.top_visible_game());
+        self.library.borrow_mut().columns = columns;
+        self.rebuild_rows();
+        if let Some(id) = anchor {
+            self.scroll_to_game(id);
+        }
+    }
+
+    fn top_visible_game(&self) -> Option<i64> {
+        let ui = self.ui()?;
+        let lib = self.library.borrow();
+        let row = crate::grid::row_at(&lib.shelves, -ui.get_grid_scroll())?;
+        lib.games.get(row * lib.columns.max(1)).map(|g| g.id)
+    }
+
+    fn scroll_to_game(&self, id: i64) {
+        let Some(ui) = self.ui() else { return };
+        let lib = self.library.borrow();
+        let Some(index) = lib.games.iter().position(|g| g.id == id) else {
+            return;
+        };
+        if let Some((top, _)) = crate::grid::row_span(&lib.shelves, index / lib.columns.max(1)) {
+            ui.set_grid_scroll(-top);
         }
     }
 
@@ -658,6 +695,11 @@ impl Controller {
         self.library.borrow_mut().games = games;
         self.rebuild_rows();
         self.update_heading();
+        if let Some((id, until)) = self.pending_top.get() {
+            if Instant::now() < until {
+                self.scroll_to_game(id);
+            }
+        }
     }
 
     fn rebuild_rows(&self) {

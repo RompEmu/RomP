@@ -58,6 +58,8 @@ impl Placement {
 pub struct LastView {
     pub selected: String,
     pub game: Option<i64>,
+    #[serde(default)]
+    pub top_game: Option<i64>,
 }
 
 impl LastView {
@@ -146,8 +148,11 @@ mod tests {
         let view = LastView {
             selected: "p:3".into(),
             game: Some(42),
+            top_game: Some(7),
         };
         assert_eq!(LastView::from_json(Some(&view.to_json())), Some(view));
+        let older = LastView::from_json(Some(r#"{"selected":"all","game":null}"#)).unwrap();
+        assert_eq!(older.top_game, None);
         assert_eq!(LastView::from_json(Some("{")), None);
     }
 }

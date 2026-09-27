@@ -417,6 +417,7 @@ component Library inherits Rectangle {
     in property <bool> offline;
     callback downloaded-only-toggled(bool);
     in property <int> focus-row: -1;
+    in-out property <length> scroll-y <=> games.content-y;
     in property <length> focus-top;
     in property <length> focus-bottom;
     background: Theme.background;
@@ -1640,6 +1641,7 @@ export component AppWindow inherits Window {
     callback toggle-membership(string, bool);
     callback new-collection-with-game();
     in property <int> grid-focus-row: -1;
+    in-out property <length> grid-scroll <=> library.scroll-y;
     in property <float> grid-focus-top;
     in property <float> grid-focus-bottom;
     in property <string> pad-hints;

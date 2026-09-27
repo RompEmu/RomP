@@ -22,6 +22,17 @@ pub fn row_span(shelves: &[f32], row: usize) -> Option<(f32, f32)> {
     Some((top, top + height))
 }
 
+pub fn row_at(shelves: &[f32], offset: f32) -> Option<usize> {
+    let mut bottom = 0.0;
+    for (row, shelf) in shelves.iter().enumerate() {
+        bottom += shelf + ROW_CHROME;
+        if offset < bottom {
+            return Some(row);
+        }
+    }
+    shelves.len().checked_sub(1)
+}
+
 pub struct CoverSlots {
     capacity: usize,
     order: VecDeque<i64>,
@@ -100,6 +111,18 @@ impl RecentRows {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_the_row_at_the_top_of_the_view() {
+        let shelves = [230.0, 172.0, 125.0];
+        assert_eq!(row_at(&shelves, 0.0), Some(0));
+        assert_eq!(row_at(&shelves, 305.0), Some(0));
+        assert_eq!(row_at(&shelves, 306.0), Some(1));
+        assert_eq!(row_at(&shelves, 600.0), Some(2));
+        assert_eq!(row_at(&shelves, 5000.0), Some(2));
+        assert_eq!(row_at(&shelves, -20.0), Some(0));
+        assert_eq!(row_at(&[], 0.0), None);
+    }
 
     #[test]
     fn rows_stack_by_their_own_heights() {
