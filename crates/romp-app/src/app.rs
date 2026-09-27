@@ -233,6 +233,7 @@ pub fn run() -> anyhow::Result<()> {
     let weak = ui.as_weak();
     slint::Timer::single_shot(Duration::ZERO, move || {
         let Some(ui) = weak.upgrade() else { return };
+        crate::dock::set_icon();
         match ui.show() {
             Ok(()) => crate::scale::track(&ui),
             Err(e) => {

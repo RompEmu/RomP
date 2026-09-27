@@ -1562,6 +1562,7 @@ component AboutDialog inherits Rectangle {
 
 export component AppWindow inherits Window {
     title: Brand.name;
+    icon: @image-url("icons/app-icon.png");
     background: Theme.background;
     preferred-width: 1100px;
     preferred-height: 760px;
@@ -1594,8 +1595,8 @@ export component AppWindow inherits Window {
     in property <string> server-label;
     in property <string> heading: @tr("All games");
     in property <string> heading-detail;
-    in property <image> app-icon;
-    in property <bool> has-app-icon;
+    in property <image> app-icon: @image-url("icons/app-icon.png");
+    in property <bool> has-app-icon: true;
     in property <string> app-version;
     in-out property <bool> about-open;
     callback open-url(string);

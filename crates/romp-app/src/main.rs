@@ -5,6 +5,7 @@ mod cores;
 mod covers;
 mod credentials;
 mod details;
+mod dock;
 mod download;
 mod fetch;
 mod gamepads;
