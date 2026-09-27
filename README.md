@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="crates/romp-app/assets/icon.png" alt="Romp" width="160">
+</p>
+
 # Romp
 
 Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
