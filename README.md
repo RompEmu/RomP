@@ -15,6 +15,14 @@ Play retro games from your [RomM](https://romm.app) library, with each game runn
 
 Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS and Linux. Nightly builds aren't notarized: on macOS, right-click Romp and choose Open the first time.
 
+<p align="center">
+  <img src="docs/screenshots/library.png" alt="The Romp library, showing Amiga games" width="820">
+</p>
+
+| Game page | Playing | Nintendo DS |
+|---|---|---|
+| <img src="docs/screenshots/game-page.png" alt="A game's page with its details and cover"> | <img src="docs/screenshots/gameplay.png" alt="A game running in its own window"> | <img src="docs/screenshots/nintendo-ds.png" alt="A Nintendo DS game with its two screens in separate windows"> |
+
 ## Running
 
 Requires [rustup](https://rustup.rs) and CMake.
