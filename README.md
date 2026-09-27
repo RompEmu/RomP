@@ -4,6 +4,13 @@
 
 # Romp
 
+<p>
+  <a href="https://github.com/RompEmu/RompEmu/releases/tag/nightly"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/nightly.yml/badge.svg?branch=main" alt="Nightly build"></a>
+  <a href="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI"></a>
+  <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-blue" alt="Platforms: macOS and Linux">
+  <a href="https://romm.app"><img src="https://img.shields.io/badge/RomM-5.0%2B-6f42c1" alt="Needs RomM 5.0 or newer"></a>
+</p>
+
 Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
 
 Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS and Linux. Nightly builds aren't notarized: on macOS, right-click Romp and choose Open the first time.
