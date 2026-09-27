@@ -155,23 +155,30 @@ const MENU_CONTROLLERS: i32 = 8;
 const MENU_PORTS_START: i32 = 9;
 const VOLUME_STEP: i32 = 10;
 
+const MENU_ROWS: [[i32; 3]; 2] = [
+    [MENU_RESUME, MENU_PAUSE, MENU_RESTART],
+    [MENU_SLOT, MENU_SAVE, MENU_LOAD],
+];
+
 fn menu_move(focus: i32, button: u32, items: i32) -> Option<i32> {
     let directional = matches!(button, input::UP | input::DOWN | input::LEFT | input::RIGHT);
     if focus < 0 {
         return directional.then_some(MENU_RESUME);
     }
-    match button {
-        input::UP => Some(match focus {
-            MENU_LOAD => MENU_SLOT,
-            MENU_VOLUME => MENU_SAVE,
-            f => (f - 1).max(0),
-        }),
-        input::DOWN => Some(match focus {
-            MENU_SAVE | MENU_LOAD => MENU_VOLUME,
-            f => (f + 1).min(items - 1),
-        }),
-        input::LEFT if focus == MENU_LOAD => Some(MENU_SAVE),
-        input::RIGHT if focus == MENU_SAVE => Some(MENU_LOAD),
+    let cell = MENU_ROWS
+        .iter()
+        .enumerate()
+        .find_map(|(r, row)| row.iter().position(|&i| i == focus).map(|c| (r, c)));
+    match (button, cell) {
+        (input::LEFT, Some((r, c))) => Some(MENU_ROWS[r][c.saturating_sub(1)]),
+        (input::RIGHT, Some((r, c))) => Some(MENU_ROWS[r][(c + 1).min(2)]),
+        (input::UP, Some((0, _))) => Some(focus),
+        (input::UP, Some((r, c))) => Some(MENU_ROWS[r - 1][c]),
+        (input::DOWN, Some((0, c))) => Some(MENU_ROWS[1][c]),
+        (input::DOWN, Some(_)) => Some(MENU_VOLUME),
+        (input::UP, None) if focus == MENU_VOLUME => Some(MENU_SLOT),
+        (input::UP, None) => Some((focus - 1).max(0)),
+        (input::DOWN, None) => Some((focus + 1).min(items - 1)),
         _ => None,
     }
 }
@@ -464,8 +471,6 @@ impl Game {
             input::LEFT | input::RIGHT => {
                 if let Some(port) = self.port_row(focus) {
                     self.cycle_port(port, step);
-                } else if focus == MENU_SLOT {
-                    self.step_slot(step);
                 } else if focus == MENU_VOLUME {
                     self.step_volume(step);
                 }
@@ -1034,21 +1039,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn menu_focus_moves_through_rows_and_across_save_and_load() {
+    fn menu_focus_moves_across_the_two_button_rows_and_down_the_list() {
         let items = MENU_PORTS_START + 1;
         assert_eq!(menu_move(-1, input::DOWN, items), Some(MENU_RESUME));
         assert_eq!(
-            menu_move(MENU_PAUSE, input::DOWN, items),
+            menu_move(MENU_RESUME, input::RIGHT, items),
+            Some(MENU_PAUSE)
+        );
+        assert_eq!(
+            menu_move(MENU_PAUSE, input::RIGHT, items),
             Some(MENU_RESTART)
         );
-        assert_eq!(menu_move(MENU_RESTART, input::DOWN, items), Some(MENU_SLOT));
-        assert_eq!(menu_move(MENU_SLOT, input::DOWN, items), Some(MENU_SAVE));
-        assert_eq!(menu_move(MENU_SAVE, input::DOWN, items), Some(MENU_VOLUME));
-        assert_eq!(menu_move(MENU_LOAD, input::DOWN, items), Some(MENU_VOLUME));
-        assert_eq!(menu_move(MENU_VOLUME, input::UP, items), Some(MENU_SAVE));
-        assert_eq!(menu_move(MENU_LOAD, input::UP, items), Some(MENU_SLOT));
+        assert_eq!(
+            menu_move(MENU_RESTART, input::RIGHT, items),
+            Some(MENU_RESTART)
+        );
+        assert_eq!(
+            menu_move(MENU_RESTART, input::LEFT, items),
+            Some(MENU_PAUSE)
+        );
+        assert_eq!(
+            menu_move(MENU_RESUME, input::LEFT, items),
+            Some(MENU_RESUME)
+        );
+        assert_eq!(menu_move(MENU_RESUME, input::DOWN, items), Some(MENU_SLOT));
+        assert_eq!(menu_move(MENU_RESTART, input::DOWN, items), Some(MENU_LOAD));
+        assert_eq!(menu_move(MENU_SLOT, input::RIGHT, items), Some(MENU_SAVE));
         assert_eq!(menu_move(MENU_SAVE, input::RIGHT, items), Some(MENU_LOAD));
-        assert_eq!(menu_move(MENU_LOAD, input::LEFT, items), Some(MENU_SAVE));
+        assert_eq!(menu_move(MENU_SAVE, input::LEFT, items), Some(MENU_SLOT));
+        assert_eq!(menu_move(MENU_SAVE, input::UP, items), Some(MENU_PAUSE));
+        assert_eq!(menu_move(MENU_LOAD, input::DOWN, items), Some(MENU_VOLUME));
+        assert_eq!(menu_move(MENU_VOLUME, input::UP, items), Some(MENU_SLOT));
         assert_eq!(menu_move(MENU_RESUME, input::UP, items), Some(MENU_RESUME));
         assert_eq!(menu_move(items - 1, input::DOWN, items), Some(items - 1));
         assert_eq!(menu_move(MENU_VOLUME, input::LEFT, items), None);

@@ -119,6 +119,94 @@ component Stepper inherits Rectangle {
     }
 }
 
+component ChipButton inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <string> shortcut;
+    in property <bool> focused;
+    callback clicked();
+    height: 34px;
+    min-width: chip.preferred-width;
+    border-radius: Theme.radius;
+    background: touch.pressed ? Theme.pressed : root.focused ? Theme.accent-soft : touch.has-hover ? Theme.surface-selected : Theme.surface-muted;
+    border-width: root.focused ? 1px : 0px;
+    border-color: Theme.accent;
+    animate background { duration: 100ms; }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    touch := TouchArea { clicked => { root.clicked(); } }
+    chip := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
+        alignment: center;
+        Image {
+            source: root.icon;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - self.height) / 2;
+            colorize: root.focused || touch.has-hover ? Theme.text-strong : Theme.text-secondary;
+        }
+        Text {
+            text: root.text;
+            vertical-alignment: center;
+            font-size: Theme.font-body;
+            font-weight: 500;
+            color: Theme.text-strong;
+        }
+        if root.shortcut != "": VerticalLayout {
+            alignment: center;
+            KeyCap { text: root.shortcut; }
+        }
+    }
+}
+
+component SlotChip inherits Rectangle {
+    in property <int> slot;
+    in property <bool> focused;
+    callback step(int);
+    height: 34px;
+    width: slot-row.preferred-width;
+    border-radius: Theme.radius;
+    background: root.focused ? Theme.accent-soft : Theme.surface-muted;
+    border-width: root.focused ? 1px : 0px;
+    border-color: Theme.accent;
+    accessible-role: spinbox;
+    accessible-label: @tr("Save slot");
+    accessible-value: root.slot;
+    accessible-action-increment => { root.step(1); }
+    accessible-action-decrement => { root.step(-1); }
+    slot-row := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 2px;
+        spacing: 0px;
+        Text {
+            text: @tr("Slot");
+            vertical-alignment: center;
+            font-size: Theme.font-body;
+            color: Theme.text-secondary;
+        }
+        VerticalLayout {
+            alignment: center;
+            StepButton { text: "‹"; clicked => { root.step(-1); } }
+        }
+        Text {
+            text: root.slot;
+            min-width: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            font-size: Theme.font-body-large;
+            font-weight: 700;
+            color: Theme.text-strong;
+        }
+        VerticalLayout {
+            alignment: center;
+            StepButton { text: "›"; clicked => { root.step(1); } }
+        }
+    }
+}
+
 component MenuDivider inherits Rectangle {
     height: 7px;
     Rectangle { height: 1px; background: Theme.divider; }
@@ -194,71 +282,75 @@ component GameMenu inherits Rectangle {
                     vertical-alignment: center;
                 }
             }
-            Rectangle {
-                height: 36px;
-                border-radius: Theme.radius;
-                background: resume-touch.pressed ? Theme.accent-pressed : resume-touch.has-hover ? Theme.accent-hover : Theme.accent;
-                border-width: root.focused-item == 0 ? 2px : 0px;
-                border-color: Theme.accent-text;
-                accessible-role: button;
-                accessible-label: @tr("Resume");
-                accessible-action-default => { root.resume(); }
-                resume-touch := TouchArea { clicked => { root.resume(); } }
-                HorizontalLayout {
-                    padding-left: 12px;
-                    padding-right: 10px;
-                    spacing: 12px;
-                    Image {
-                        source: @image-url("icons/play.svg");
-                        width: 18px;
-                        height: 18px;
-                        y: (parent.height - self.height) / 2;
-                        colorize: Theme.accent-foreground;
-                    }
-                    Text {
-                        text: @tr("Resume");
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                        font-size: Theme.font-body-large;
-                        font-weight: 700;
-                        color: Theme.accent-foreground;
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        KeyCap { text: root.menu-key; on-accent: true; }
+            HorizontalLayout {
+                spacing: 6px;
+                Rectangle {
+                    height: 34px;
+                    horizontal-stretch: 1;
+                    border-radius: Theme.radius;
+                    background: resume-touch.pressed ? Theme.accent-pressed : resume-touch.has-hover ? Theme.accent-hover : Theme.accent;
+                    border-width: root.focused-item == 0 ? 2px : 0px;
+                    border-color: Theme.accent-text;
+                    accessible-role: button;
+                    accessible-label: @tr("Resume");
+                    accessible-action-default => { root.resume(); }
+                    resume-touch := TouchArea { clicked => { root.resume(); } }
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 10px;
+                        spacing: 12px;
+                        Image {
+                            source: @image-url("icons/play.svg");
+                            width: 18px;
+                            height: 18px;
+                            y: (parent.height - self.height) / 2;
+                            colorize: Theme.accent-foreground;
+                        }
+                        Text {
+                            text: @tr("Resume");
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            font-size: Theme.font-body-large;
+                            font-weight: 700;
+                            color: Theme.accent-foreground;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            KeyCap { text: root.menu-key; on-accent: true; }
+                        }
                     }
                 }
-            }
-            MenuRow {
-                text: root.paused ? @tr("Play") : @tr("Pause");
-                icon: root.paused ? @image-url("icons/play.svg") : @image-url("icons/pause.svg");
-                shortcut: root.keyboard ? "P" : "";
-                focused: root.focused-item == 1;
-                clicked => { root.toggle-pause(); }
-            }
-            MenuRow {
-                text: @tr("Restart");
-                icon: @image-url("icons/refresh.svg");
-                focused: root.focused-item == 2;
-                clicked => { root.restart(); }
-            }
-            MenuDivider { }
-            Stepper {
-                label: @tr("Save slot");
-                value: root.slot;
-                focused: root.focused-item == 3;
-                step(d) => { root.step-slot(d); }
+                ChipButton {
+                    text: root.paused ? @tr("Play") : @tr("Pause");
+                    icon: root.paused ? @image-url("icons/play.svg") : @image-url("icons/pause.svg");
+                    focused: root.focused-item == 1;
+                    clicked => { root.toggle-pause(); }
+                }
+                ChipButton {
+                    text: @tr("Restart");
+                    icon: @image-url("icons/refresh.svg");
+                    focused: root.focused-item == 2;
+                    clicked => { root.restart(); }
+                }
             }
             HorizontalLayout {
-                spacing: 4px;
-                MenuRow {
+                padding-top: 4px;
+                spacing: 6px;
+                SlotChip {
+                    slot: root.slot;
+                    focused: root.focused-item == 3;
+                    step(d) => { root.step-slot(d); }
+                }
+                ChipButton {
+                    horizontal-stretch: 1;
                     text: @tr("Save");
                     icon: @image-url("icons/save.svg");
                     shortcut: root.keyboard ? "F5" : "";
                     focused: root.focused-item == 4;
                     clicked => { root.save-state(); }
                 }
-                MenuRow {
+                ChipButton {
+                    horizontal-stretch: 1;
                     text: @tr("Load");
                     icon: @image-url("icons/load.svg");
                     shortcut: root.keyboard ? "F7" : "";
