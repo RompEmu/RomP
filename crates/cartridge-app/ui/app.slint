@@ -36,6 +36,7 @@ component AppTile inherits Rectangle {
 
 component IconButton inherits Rectangle {
     in property <image> icon;
+    in property <string> tooltip;
     in property <bool> enabled: true;
     callback clicked();
     width: 32px;
@@ -49,6 +50,7 @@ component IconButton inherits Rectangle {
         colorize: root.enabled ? (touch.has-hover ? Theme.text-strong : Theme.text-secondary) : Theme.text-subtle;
     }
     touch := TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
+    if root.tooltip != "": Tooltip { text: @markdown("\{root.tooltip}"); }
 }
 
 component CountPill inherits Rectangle {
@@ -238,6 +240,7 @@ component SectionHeader inherits Rectangle {
             background: add-touch.has-hover ? Theme.surface-muted : transparent;
             Text { text: "+"; font-size: Theme.font-subtitle; color: Theme.text-secondary; }
             add-touch := TouchArea { clicked => { root.add(); } }
+            Tooltip { text: @markdown("New collection"); }
         }
     }
 }
@@ -470,8 +473,8 @@ component Library inherits Rectangle {
                             overflow: elide;
                         }
                     }
-                    IconButton { icon: @image-url("icons/info.svg"); clicked => { root.open-about(); } }
-                    IconButton { icon: @image-url("icons/settings.svg"); clicked => { root.open-settings(); } }
+                    IconButton { icon: @image-url("icons/info.svg"); tooltip: "About"; clicked => { root.open-about(); } }
+                    IconButton { icon: @image-url("icons/settings.svg"); tooltip: "Settings"; clicked => { root.open-settings(); } }
                 }
 
             }
@@ -510,36 +513,11 @@ component Library inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
-                    Rectangle {
+                    LineEdit {
                         width: 240px;
-                        height: 32px;
-                        border-radius: 8px;
-                        background: Theme.surface;
-                        border-width: 1px;
-                        border-color: search-input.has-focus ? Theme.accent : Theme.border;
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            padding-right: 10px;
-                            spacing: 8px;
-                            Image { source: @image-url("icons/search.svg"); width: 15px; colorize: Theme.text-muted; }
-                            search-input := TextInput {
-                                text <=> root.search;
-                                font-size: Theme.font-body;
-                                color: Theme.text;
-                                vertical-alignment: center;
-                                single-line: true;
-                                edited => { root.search-edited(self.text); }
-                                if self.text == "": Text {
-                                    x: 0;
-                                    width: parent.width;
-                                    height: parent.height;
-                                    text: "Search games";
-                                    color: Theme.text-subtle;
-                                    font-size: Theme.font-body;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
+                        placeholder-text: "Search games";
+                        text <=> root.search;
+                        edited(text) => { root.search-edited(text); }
                     }
                 }
                 Switch {
@@ -551,7 +529,7 @@ component Library inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
-                    if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); clicked => { root.refresh(); } }
+                    if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); tooltip: "Refresh library"; clicked => { root.refresh(); } }
                 }
             }
             grid := Rectangle {
