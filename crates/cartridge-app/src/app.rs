@@ -288,6 +288,7 @@ impl Controller {
         ui.on_open_game(|id| with_controller(|c| c.open_game(id as i64)));
         ui.on_back_to_library(|| with_controller(|c| c.back_to_library()));
         crate::mouse::on_back_button(|id| with_controller(|c| c.mouse_back(id)));
+        crate::mouse::on_exit(|| with_controller(|c| c.save_session()));
         ui.on_download_game(|| with_controller(|c| c.download_game()));
         ui.on_cancel_download(|| with_controller(|c| c.cancel_download()));
         ui.on_play_game(|| with_controller(|c| c.play_game()));

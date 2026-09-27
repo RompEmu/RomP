@@ -30,11 +30,13 @@ impl Motion {
 }
 
 type BackHandler = Box<dyn Fn(WindowId)>;
+type ExitHandler = Box<dyn Fn()>;
 
 thread_local! {
     static MOTION: RefCell<Motion> = RefCell::default();
     static CAPTURED: Cell<bool> = const { Cell::new(false) };
     static ON_BACK: RefCell<Option<BackHandler>> = RefCell::new(None);
+    static ON_EXIT: RefCell<Option<ExitHandler>> = RefCell::new(None);
 }
 
 pub struct RawMouse;
@@ -51,6 +53,15 @@ impl CustomApplicationHandler for RawMouse {
                 MOTION.with_borrow_mut(|m| m.add(delta.0, delta.1));
             }
         }
+        EventResult::Propagate
+    }
+
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) -> EventResult {
+        ON_EXIT.with_borrow(|f| {
+            if let Some(f) = f {
+                f()
+            }
+        });
         EventResult::Propagate
     }
 
@@ -81,6 +92,10 @@ impl CustomApplicationHandler for RawMouse {
         }
         EventResult::Propagate
     }
+}
+
+pub fn on_exit(f: impl Fn() + 'static) {
+    ON_EXIT.set(Some(Box::new(f)));
 }
 
 pub fn on_back_button(f: impl Fn(WindowId) + 'static) {
