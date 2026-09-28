@@ -13,7 +13,7 @@
 
 <p align="center">Play retro games from your <a href="https://romm.app">RomM</a> library, with each game running in its own sandboxed process.</p>
 
-Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS, Windows and Linux. Nightly builds aren't signed: the first time, on macOS right-click Romp and choose Open, and on Windows choose More info, then Run anyway.
+Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS, Windows and Linux. The macOS download of each release is signed and notarized by Apple. Nightly macOS builds aren't: the first time, right-click Romp and choose Open. Windows builds aren't signed yet: the first time, choose More info, then Run anyway.
 
 <p align="center">
   <img src="docs/screenshots/library.png" alt="The Romp library, showing Amiga games" width="820">
