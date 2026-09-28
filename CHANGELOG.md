@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
 ### Added
 
 - Linux releases include an AppImage alongside the tarball.
@@ -15,6 +17,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - Esc closes the About and remap windows. While a key is being remapped, Esc cancels just that key.
 
 ## [0.3.0] - 2026-09-28
+
+Tagged but not published as a download. Its changes ship in 0.4.0.
 
 ### Added
 
@@ -54,7 +58,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/RompEmu/RompEmu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/RompEmu/RompEmu/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/RompEmu/RompEmu/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/RompEmu/RompEmu/releases/tag/v0.1.0
