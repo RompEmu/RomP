@@ -23,6 +23,64 @@ Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest
 |---|---|---|
 | <img src="docs/screenshots/game-page.png" alt="A game's page with its details and cover"> | <img src="docs/screenshots/gameplay.png" alt="A game running in its own window"> | <img src="docs/screenshots/nintendo-ds.png" alt="A Nintendo DS game with its two screens in separate windows"> |
 
+## Features
+
+- **Your RomM library:** platforms, favorites, collections and recently played, with search, sorting and box art shaped like each console's.
+- **One click to play:** Romp installs the right emulator and BIOS files. Downloaded games play offline.
+- **Saves that follow you:** in-game saves and save states sync with RomM before and after you play. If both sides changed, you choose which to keep.
+- **Sandboxed emulators:** emulators are native code downloaded from the internet, and games are files from anywhere. Each game runs in its own locked-down process that can only write to that game's saves and its own temporary files, so a buggy or malicious emulator or ROM can't touch your other files or take Romp down with it. xemu runs outside the sandbox.
+- **Many systems:** from the Atari 2600 to the PS2 and original Xbox, plus arcade and home computers. See [supported systems](#supported-systems).
+- **Controllers and multiplayer:** gamepads join as the next player, any key or button can be remapped, and the whole app works with a controller.
+- **Light guns, mice and keyboards:** for the systems that use them.
+- **In-game menu:** pause, restart, save slots, volume and full screen, from the Guide button or Esc.
+- **Two-screen Nintendo DS:** a window per screen, with the mouse as the touch pen.
+- **Picks up where you left off:** the last console, game and scroll position, and the size and position of every window.
+- **Interface sizes:** 1x, 1.5x or 2x.
+
+## Supported systems
+
+Romp downloads the emulator for each system the first time you play one of its games.
+
+| System | Emulator |
+|---|---|
+| Arcade, including Neo Geo and CPS 1–3 | FinalBurn Neo |
+| Atari 2600 | Stella |
+| Atari Jaguar | Virtual Jaguar |
+| Atari Lynx | Beetle Lynx |
+| Bandai WonderSwan and WonderSwan Color | Beetle WonderSwan |
+| ColecoVision | Gearcoleco |
+| Commodore 64 | VICE x64sc |
+| Commodore Amiga | PUAE |
+| DOS | DOSBox Pure |
+| Intellivision | FreeIntv |
+| Magnavox Odyssey 2 | O2EM |
+| MSX, MSX2 and MSX2+ | blueMSX |
+| NEC PC Engine / TurboGrafx-16 | Beetle PCE Fast |
+| NEC PC Engine CD / TurboGrafx-CD | Beetle PCE |
+| NEC SuperGrafx | Beetle SuperGrafx |
+| Nintendo Entertainment System, Famicom and Famicom Disk System | Nestopia UE |
+| Super Nintendo and Super Famicom | Snes9x |
+| Nintendo 64 | Mupen64Plus-Next |
+| Game Boy, Game Boy Color and Game Boy Advance | mGBA |
+| Nintendo DS | DeSmuME |
+| Nintendo GameCube and Wii | Dolphin |
+| Nintendo Virtual Boy | Beetle VB |
+| Philips CD-i | SAME CDi |
+| 3DO | Opera |
+| Sega Master System, Genesis / Mega Drive, Game Gear, Sega CD and SG-1000 | Genesis Plus GX |
+| Sega 32X | PicoDrive |
+| Sega Saturn | Beetle Saturn |
+| Sega Dreamcast | Flycast |
+| SNK Neo Geo Pocket and Pocket Color | Beetle NeoPop |
+| Sony PlayStation | Beetle PSX HW |
+| Sony PlayStation 2 | PCSX2 on Windows and Linux, Play! on macOS |
+| Sony PSP | PPSSPP |
+| Vectrex | Vecx |
+| Microsoft Xbox | xemu |
+| ZX Spectrum | Fuse |
+
+All emulators except xemu are [libretro](https://www.libretro.com) cores. Some systems need BIOS files, which Romp takes from your RomM server's firmware.
+
 ## Running
 
 Requires [rustup](https://rustup.rs) and CMake.
