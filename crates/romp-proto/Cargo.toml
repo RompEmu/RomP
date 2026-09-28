@@ -6,6 +6,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-libc = "0.2"
 postcard = { version = "1", features = ["use-std"] }
 serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+uds_windows = "1"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Memory"] }

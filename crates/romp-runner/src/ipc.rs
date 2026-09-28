@@ -1,8 +1,8 @@
 use crate::input::InputState;
 use parking_lot::Mutex;
 use romp_proto::msg::{AppMsg, RunnerMsg};
+use romp_proto::socket::UnixStream;
 use romp_proto::wire;
-use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 

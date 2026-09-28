@@ -20,6 +20,10 @@ fn asset_suffix() -> Option<&'static str> {
         Some("-x86_64.AppImage")
     } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
         Some("-aarch64.AppImage")
+    } else if cfg!(all(windows, target_arch = "x86_64")) {
+        Some("-windows-x86_64.zip")
+    } else if cfg!(all(windows, target_arch = "aarch64")) {
+        Some("-windows-arm64.zip")
     } else {
         None
     }
@@ -352,6 +356,8 @@ struct Manifest {
 fn exe_in(dir: &Path, asset: &str) -> PathBuf {
     if cfg!(target_os = "macos") {
         dir.join("xemu.app/Contents/MacOS/xemu")
+    } else if cfg!(windows) {
+        dir.join("xemu.exe")
     } else {
         dir.join(asset)
     }
@@ -470,7 +476,7 @@ impl Xemu {
 fn unpack(bytes: &[u8], dir: &Path, name: &str) -> Result<(), String> {
     let _ = std::fs::remove_dir_all(dir);
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    if name.ends_with(".zip") {
+    if name.ends_with(".zip") && cfg!(target_os = "macos") {
         let zip = dir.join(name);
         std::fs::write(&zip, bytes).map_err(|e| e.to_string())?;
         let status = std::process::Command::new("/usr/bin/ditto")
@@ -483,12 +489,19 @@ fn unpack(bytes: &[u8], dir: &Path, name: &str) -> Result<(), String> {
         if !status.success() {
             return Err("Could not unpack xemu".into());
         }
+    } else if name.ends_with(".zip") {
+        zip::ZipArchive::new(std::io::Cursor::new(bytes))
+            .and_then(|mut archive| archive.extract(dir))
+            .map_err(|_| "Could not unpack xemu".to_string())?;
     } else {
-        use std::os::unix::fs::PermissionsExt;
         let exe = dir.join(name);
         std::fs::write(&exe, bytes).map_err(|e| e.to_string())?;
-        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
+                .map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -596,6 +609,8 @@ mod tests {
             assert_eq!(picked, Some("xemu-0.8.136-macos-universal.zip"));
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             assert_eq!(picked, Some("xemu-0.8.136-x86_64.AppImage"));
+        } else if cfg!(all(windows, target_arch = "x86_64")) {
+            assert_eq!(picked, Some("xemu-0.8.136-windows-x86_64.zip"));
         }
         assert!(release_asset(&[asset("LICENSE.txt")]).is_none());
     }

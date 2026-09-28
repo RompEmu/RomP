@@ -1,35 +1,41 @@
 use crate::store::Store;
-use std::io::Read;
 
 pub fn device_id(store: &Store) -> String {
     if let Some(id) = store.get("device_id") {
         return id;
     }
     let mut bytes = [0u8; 16];
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut bytes))
-        .expect("read /dev/urandom");
+    getrandom::fill(&mut bytes).expect("system random numbers");
     let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
     store.set("device_id", &id);
     id
 }
 
 pub fn device_name() -> String {
-    let mut buf = [0u8; 256];
-    let host = if unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) } == 0 {
-        let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-        String::from_utf8_lossy(&buf[..end])
-            .trim_end_matches(".local")
-            .to_string()
-    } else {
-        String::new()
-    };
+    let host = host_name();
     let host = if host.is_empty() {
         "this computer".to_string()
     } else {
         host
     };
     format!("Romp on {host}")
+}
+
+#[cfg(unix)]
+fn host_name() -> String {
+    let mut buf = [0u8; 256];
+    if unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) } != 0 {
+        return String::new();
+    }
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end])
+        .trim_end_matches(".local")
+        .to_string()
+}
+
+#[cfg(windows)]
+fn host_name() -> String {
+    std::env::var("COMPUTERNAME").unwrap_or_default()
 }
 
 #[cfg(test)]

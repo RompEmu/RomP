@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use romp_proto::frame::FrameReader;
 use romp_proto::msg::{AppMsg, RunnerMsg};
+use romp_proto::socket::{UnixListener, UnixStream};
 use romp_proto::wire;
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -92,11 +92,17 @@ impl Session {
         let socket = std::env::temp_dir().join(format!("romp-{id}.sock"));
         let listener = UnixListener::bind(&socket).context("bind runner socket")?;
         listener.set_nonblocking(true)?;
-        let spawned = Command::new(&cfg.runner)
+        let mut command = Command::new(&cfg.runner);
+        command
             .args(runner_args(cfg, &socket, &frames_name))
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn();
+            .stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+        }
+        let spawned = command.spawn();
         let mut child = match spawned {
             Ok(c) => c,
             Err(e) => {
@@ -246,7 +252,6 @@ fn accept(listener: &UnixListener, child: &mut Child) -> Result<UnixStream> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::PermissionsExt;
 
     fn config(runner: PathBuf) -> SessionConfig {
         SessionConfig {
@@ -322,8 +327,10 @@ mod tests {
         assert_eq!(volume(&cfg), Some("40".into()));
     }
 
+    #[cfg(unix)]
     #[test]
     fn start_reports_runner_stderr_when_runner_exits_early() {
+        use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("fake-runner");
         std::fs::write(&script, "#!/bin/sh\necho 'core exploded' >&2\nexit 3\n").unwrap();
@@ -335,8 +342,10 @@ mod tests {
         assert!(text.contains("core exploded"), "{text}");
     }
 
+    #[cfg(unix)]
     #[test]
     fn log_survives_non_utf8_stderr_lines() {
+        use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("fake-runner");
         std::fs::write(

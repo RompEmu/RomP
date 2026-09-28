@@ -609,6 +609,132 @@ mod platform_impl {
     }
 }
 
+#[cfg(windows)]
+mod platform_impl {
+    use std::ffi::{c_void, CString};
+    use windows_sys::Win32::Foundation::{HMODULE, HWND};
+    use windows_sys::Win32::Graphics::Gdi::{GetDC, ReleaseDC, HDC};
+    use windows_sys::Win32::Graphics::OpenGL::{
+        wglCreateContext, wglDeleteContext, wglGetProcAddress, wglMakeCurrent, ChoosePixelFormat,
+        SetPixelFormat, HGLRC, PFD_DOUBLEBUFFER, PFD_DRAW_TO_WINDOW, PFD_MAIN_PLANE,
+        PFD_SUPPORT_OPENGL, PFD_TYPE_RGBA, PIXELFORMATDESCRIPTOR,
+    };
+    use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DestroyWindow};
+
+    pub struct Platform {
+        window: HWND,
+        dc: HDC,
+        ctx: HGLRC,
+        gl_lib: HMODULE,
+    }
+
+    // SAFETY: all GL/WGL calls happen on the thread that installed the context.
+    unsafe impl Send for Platform {}
+
+    impl Platform {
+        pub fn create() -> anyhow::Result<Self> {
+            let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+            let window = unsafe {
+                CreateWindowExW(
+                    0,
+                    class.as_ptr(),
+                    std::ptr::null(),
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                )
+            };
+            if window.is_null() {
+                anyhow::bail!(
+                    "CreateWindowExW failed: {}",
+                    std::io::Error::last_os_error()
+                );
+            }
+            let dc = unsafe { GetDC(window) };
+            let mut platform = Self {
+                window,
+                dc,
+                ctx: std::ptr::null_mut(),
+                gl_lib: std::ptr::null_mut(),
+            };
+            let pfd = PIXELFORMATDESCRIPTOR {
+                nSize: std::mem::size_of::<PIXELFORMATDESCRIPTOR>() as u16,
+                nVersion: 1,
+                dwFlags: PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+                iPixelType: PFD_TYPE_RGBA,
+                cColorBits: 32,
+                cAlphaBits: 8,
+                cDepthBits: 24,
+                cStencilBits: 8,
+                iLayerType: PFD_MAIN_PLANE as u8,
+                // SAFETY: PIXELFORMATDESCRIPTOR is plain data; zero is valid for the remaining fields.
+                ..unsafe { std::mem::zeroed() }
+            };
+            let format = unsafe { ChoosePixelFormat(dc, &pfd) };
+            if format == 0 || unsafe { SetPixelFormat(dc, format, &pfd) } == 0 {
+                anyhow::bail!(
+                    "no OpenGL pixel format: {}",
+                    std::io::Error::last_os_error()
+                );
+            }
+            platform.ctx = unsafe { wglCreateContext(dc) };
+            if platform.ctx.is_null() {
+                anyhow::bail!(
+                    "wglCreateContext failed: {}",
+                    std::io::Error::last_os_error()
+                );
+            }
+            if unsafe { wglMakeCurrent(dc, platform.ctx) } == 0 {
+                anyhow::bail!("wglMakeCurrent failed: {}", std::io::Error::last_os_error());
+            }
+            platform.gl_lib = unsafe { LoadLibraryA(c"opengl32.dll".as_ptr().cast()) };
+            if platform.gl_lib.is_null() {
+                anyhow::bail!("could not load opengl32.dll");
+            }
+            Ok(platform)
+        }
+
+        pub fn make_current(&self) {
+            unsafe { wglMakeCurrent(self.dc, self.ctx) };
+        }
+
+        pub fn get_proc_address(&self, name: &str) -> *const c_void {
+            let Ok(c_name) = CString::new(name) else {
+                return std::ptr::null();
+            };
+            // wglGetProcAddress only knows extension and post-1.1 functions, and may return small sentinels.
+            let proc = unsafe { wglGetProcAddress(c_name.as_ptr().cast()) }
+                .map(|f| f as usize)
+                .filter(|&addr| !matches!(addr as isize, -1..=3));
+            match proc {
+                Some(addr) => addr as *const c_void,
+                None => unsafe { GetProcAddress(self.gl_lib, c_name.as_ptr().cast()) }
+                    .map_or(std::ptr::null(), |f| f as *const c_void),
+            }
+        }
+    }
+
+    impl Drop for Platform {
+        fn drop(&mut self) {
+            unsafe {
+                if !self.ctx.is_null() {
+                    wglMakeCurrent(std::ptr::null_mut(), std::ptr::null_mut());
+                    wglDeleteContext(self.ctx);
+                }
+                ReleaseDC(self.window, self.dc);
+                DestroyWindow(self.window);
+            }
+        }
+    }
+}
+
 use platform_impl::Platform;
 
 pub const FBO_WIDTH: u32 = 1920;

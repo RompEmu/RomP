@@ -588,16 +588,41 @@ pub fn remove_stale_scratch(tmp: &Path) {
         let Some(pid) = name
             .to_str()
             .and_then(|n| n.strip_prefix("romp-rom-"))
-            .and_then(|p| p.parse::<libc::pid_t>().ok())
+            .and_then(|p| p.parse::<u32>().ok())
         else {
             continue;
         };
-        let dead = unsafe { libc::kill(pid, 0) } != 0
-            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
-        if dead {
+        if !is_running(pid) {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }
+}
+
+#[cfg(unix)]
+fn is_running(pid: u32) -> bool {
+    let Ok(pid) = libc::pid_t::try_from(pid) else {
+        return false;
+    };
+    let alive = unsafe { libc::kill(pid, 0) } == 0;
+    alive || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+}
+
+#[cfg(windows)]
+fn is_running(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, GetLastError, ERROR_INVALID_PARAMETER, STILL_ACTIVE,
+    };
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if process.is_null() {
+        return unsafe { GetLastError() } != ERROR_INVALID_PARAMETER;
+    }
+    let mut code = 0;
+    let queried = unsafe { GetExitCodeProcess(process, &mut code) } != 0;
+    unsafe { CloseHandle(process) };
+    !queried || code == STILL_ACTIVE as u32
 }
 
 #[cfg(test)]

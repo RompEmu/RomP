@@ -39,6 +39,12 @@ pub fn apply(params: &SandboxParams<'_>) -> anyhow::Result<()> {
     crate::sandbox_linux::apply(params)
 }
 
+#[cfg(windows)]
+pub fn apply(_params: &SandboxParams<'_>) -> anyhow::Result<()> {
+    tracing::warn!("the runner is not sandboxed on Windows");
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 fn build_profile(p: &SandboxParams<'_>) -> String {
     let socket = sbpl_string(p.socket_path);

@@ -13,15 +13,25 @@ ICONSET := $(DIST)/Romp.iconset
 MACOS_ZIP := $(DIST)/Romp-$(RELEASE)-macos-$(ARCH).zip
 LINUX_NAME := Romp-$(RELEASE)-linux-$(ARCH)
 LINUX_TAR := $(DIST)/$(LINUX_NAME).tar.gz
+WINDOWS_NAME := Romp-$(RELEASE)-windows-$(ARCH)
+WINDOWS_ZIP := $(DIST)/$(WINDOWS_NAME).zip
 
-ifeq ($(shell uname -s),Darwin)
+ifeq ($(OS),Windows_NT)
+PLATFORM := windows
+else ifeq ($(shell uname -s),Darwin)
 PLATFORM := macos
 else
 PLATFORM := linux
 endif
 
+ifeq ($(PLATFORM),macos)
+SHA512 := shasum -a 512
+else
+SHA512 := sha512sum
+endif
+
 define checksum
-cd $(DIST) && shasum -a 512 $(notdir $(1)) > $(notdir $(1)).sha512
+cd $(DIST) && $(SHA512) $(notdir $(1)) > $(notdir $(1)).sha512
 endef
 
 define zip_app
@@ -30,7 +40,7 @@ ditto -c -k --keepParent $(APP) $(MACOS_ZIP)
 $(call checksum,$(MACOS_ZIP))
 endef
 
-.PHONY: build app dist dist-macos dist-linux clean
+.PHONY: build app dist dist-macos dist-linux dist-windows clean
 
 build:
 	cargo build --release --locked
@@ -63,6 +73,14 @@ dist-linux: build
 	tar -czf $(LINUX_TAR) -C $(DIST) $(LINUX_NAME)
 	rm -rf $(DIST)/$(LINUX_NAME)
 	$(call checksum,$(LINUX_TAR))
+
+dist-windows: build
+	rm -rf $(DIST)/$(WINDOWS_NAME) $(WINDOWS_ZIP)
+	mkdir -p $(DIST)/$(WINDOWS_NAME)
+	cp $(BIN)/romp.exe $(BIN)/romp-runner.exe README.md LICENSE $(DIST)/$(WINDOWS_NAME)/
+	cd $(DIST) && 7z a -bso0 $(WINDOWS_NAME).zip $(WINDOWS_NAME)
+	rm -rf $(DIST)/$(WINDOWS_NAME)
+	$(call checksum,$(WINDOWS_ZIP))
 
 clean:
 	rm -rf $(DIST)

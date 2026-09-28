@@ -25,6 +25,11 @@ jobs:
             os: macos-latest
           - name: Linux
             os: ubuntu-latest
+          - name: Windows
+            os: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -35,6 +40,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libasound2-dev libegl-dev libfontconfig1-dev libpulse-dev libudev-dev libwayland-dev libxkbcommon-dev
+      - name: Install Make
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
       - run: make dist VERSION=${{ inputs.version }}
       - uses: actions/upload-artifact@v7
         with:

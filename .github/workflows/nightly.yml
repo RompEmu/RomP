@@ -35,4 +35,4 @@ jobs:
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Nightly" \
-            --notes "Latest build of main, from ${GITHUB_SHA::7}. Not signed or notarized: on macOS, right-click Romp and choose Open the first time."
+            --notes "Latest build of main, from ${GITHUB_SHA::7}. Not signed or notarized: the first time, on macOS right-click Romp and choose Open, and on Windows choose More info, then Run anyway."

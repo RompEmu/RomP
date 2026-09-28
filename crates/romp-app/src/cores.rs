@@ -224,6 +224,8 @@ pub fn is_nintendo(platform_slug: &str) -> bool {
 pub fn lib_file(core: &CoreInfo) -> String {
     let ext = if cfg!(target_os = "macos") {
         "dylib"
+    } else if cfg!(windows) {
+        "dll"
     } else {
         "so"
     };
@@ -233,6 +235,8 @@ pub fn lib_file(core: &CoreInfo) -> String {
 pub fn buildbot_url(base: &str, core: &CoreInfo) -> String {
     let target = if cfg!(target_os = "macos") {
         "apple/osx/arm64"
+    } else if cfg!(windows) {
+        "windows/x86_64"
     } else {
         "linux/x86_64"
     };
@@ -503,6 +507,11 @@ mod tests {
         let url = buildbot_url(BUILDBOT, core_for_platform("snes").unwrap());
         if cfg!(target_os = "macos") {
             assert_eq!(url, "https://buildbot.libretro.com/nightly/apple/osx/arm64/latest/snes9x_libretro.dylib.zip");
+        } else if cfg!(windows) {
+            assert_eq!(
+                url,
+                "https://buildbot.libretro.com/nightly/windows/x86_64/latest/snes9x_libretro.dll.zip"
+            );
         } else {
             assert_eq!(
                 url,

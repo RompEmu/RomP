@@ -26,8 +26,16 @@ jobs:
       - run: cargo fmt --all --check
 
   check:
-    name: Clippy and tests
-    runs-on: macos-latest
+    name: Clippy and tests (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable

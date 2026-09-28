@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::ffi::CString;
 use std::io;
 use std::sync::atomic::{fence, AtomicU64, Ordering};
@@ -70,13 +71,17 @@ fn expand5(v: u16) -> u8 {
 
 struct Shm {
     ptr: *mut u8,
+    #[cfg(windows)]
+    handle: windows_sys::Win32::Foundation::HANDLE,
 }
 
 // SAFETY: the mapping is shared memory; concurrent access is coordinated through the atomics.
 unsafe impl Send for Shm {}
 
+#[cfg(unix)]
 impl Shm {
-    fn open(name: &CString, create: bool) -> io::Result<Self> {
+    fn open(name: &str, create: bool) -> io::Result<Self> {
+        let name = CString::new(name)?;
         let flags = if create {
             libc::O_CREAT | libc::O_EXCL | libc::O_RDWR
         } else {
@@ -124,7 +129,77 @@ impl Shm {
         }
         Ok(Self { ptr: ptr.cast() })
     }
+}
 
+#[cfg(unix)]
+impl Drop for Shm {
+    fn drop(&mut self) {
+        unsafe { libc::munmap(self.ptr.cast(), SIZE) };
+    }
+}
+
+#[cfg(windows)]
+impl Shm {
+    fn open(name: &str, create: bool) -> io::Result<Self> {
+        use windows_sys::Win32::Foundation::{
+            CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, INVALID_HANDLE_VALUE,
+        };
+        use windows_sys::Win32::System::Memory::{
+            CreateFileMappingW, MapViewOfFile, OpenFileMappingW, FILE_MAP_ALL_ACCESS,
+            PAGE_READWRITE,
+        };
+        let name: Vec<u16> = format!("Local\\{}", name.trim_start_matches('/'))
+            .encode_utf16()
+            .chain([0])
+            .collect();
+        let handle = unsafe {
+            if create {
+                CreateFileMappingW(
+                    INVALID_HANDLE_VALUE,
+                    std::ptr::null(),
+                    PAGE_READWRITE,
+                    (SIZE as u64 >> 32) as u32,
+                    SIZE as u32,
+                    name.as_ptr(),
+                )
+            } else {
+                OpenFileMappingW(FILE_MAP_ALL_ACCESS, 0, name.as_ptr())
+            }
+        };
+        if handle.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        if create && unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            unsafe { CloseHandle(handle) };
+            return Err(io::ErrorKind::AlreadyExists.into());
+        }
+        let view = unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, SIZE) };
+        if view.Value.is_null() {
+            let err = io::Error::last_os_error();
+            unsafe { CloseHandle(handle) };
+            return Err(err);
+        }
+        Ok(Self {
+            ptr: view.Value.cast(),
+            handle,
+        })
+    }
+}
+
+#[cfg(windows)]
+impl Drop for Shm {
+    fn drop(&mut self) {
+        use windows_sys::Win32::System::Memory::{UnmapViewOfFile, MEMORY_MAPPED_VIEW_ADDRESS};
+        unsafe {
+            UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS {
+                Value: self.ptr.cast(),
+            });
+            windows_sys::Win32::Foundation::CloseHandle(self.handle);
+        }
+    }
+}
+
+impl Shm {
     fn atomic(&self, offset: usize) -> &AtomicU64 {
         // SAFETY: offsets are 8-aligned within the mapping, which lives as long as self.
         unsafe { &*(self.ptr.add(offset) as *const AtomicU64) }
@@ -148,23 +223,19 @@ impl Shm {
     }
 }
 
-impl Drop for Shm {
-    fn drop(&mut self) {
-        unsafe { libc::munmap(self.ptr.cast(), SIZE) };
-    }
-}
-
 pub struct FrameReader {
     shm: Shm,
-    name: CString,
+    name: String,
 }
 
 impl FrameReader {
     pub fn create(name: &str) -> io::Result<Self> {
-        let name = CString::new(name)?;
-        let shm = Shm::open(&name, true)?;
+        let shm = Shm::open(name, true)?;
         shm.atomic(0).store(MAGIC, Ordering::Release);
-        Ok(Self { shm, name })
+        Ok(Self {
+            shm,
+            name: name.to_string(),
+        })
     }
 
     pub fn read_into(&self, last_seq: u64, out: &mut Vec<u8>) -> Option<FrameInfo> {
@@ -206,7 +277,7 @@ impl FrameReader {
 
 impl Drop for FrameReader {
     fn drop(&mut self) {
-        unsafe { libc::shm_unlink(self.name.as_ptr()) };
+        let _ = unlink(&self.name);
     }
 }
 
@@ -216,7 +287,7 @@ pub struct FrameWriter {
 
 impl FrameWriter {
     pub fn open(name: &str) -> io::Result<Self> {
-        let shm = Shm::open(&CString::new(name)?, false)?;
+        let shm = Shm::open(name, false)?;
         if shm.atomic(0).load(Ordering::Acquire) != MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -262,11 +333,17 @@ impl FrameWriter {
     }
 }
 
+#[cfg(unix)]
 pub fn unlink(name: &str) -> io::Result<()> {
     let name = CString::new(name)?;
     if unsafe { libc::shm_unlink(name.as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn unlink(_name: &str) -> io::Result<()> {
     Ok(())
 }
 
@@ -373,6 +450,7 @@ mod tests {
         FrameReader::create(&name).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn unlinked_buffer_keeps_working_for_both_sides() {
         let name = unique_name();

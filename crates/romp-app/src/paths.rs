@@ -56,7 +56,8 @@ pub fn db_path() -> PathBuf {
 }
 
 pub fn runner_exe() -> std::io::Result<PathBuf> {
-    Ok(std::env::current_exe()?.with_file_name("romp-runner"))
+    Ok(std::env::current_exe()?
+        .with_file_name(format!("romp-runner{}", std::env::consts::EXE_SUFFIX)))
 }
 
 pub fn local_save_dir_name(rom: &std::path::Path) -> String {
