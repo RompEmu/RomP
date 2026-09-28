@@ -40,9 +40,8 @@ pub fn apply(params: &SandboxParams<'_>) -> anyhow::Result<()> {
 }
 
 #[cfg(windows)]
-pub fn apply(_params: &SandboxParams<'_>) -> anyhow::Result<()> {
-    tracing::warn!("the runner is not sandboxed on Windows");
-    Ok(())
+pub fn apply(params: &SandboxParams<'_>) -> anyhow::Result<()> {
+    crate::sandbox_windows::apply(params)
 }
 
 #[cfg(target_os = "macos")]
