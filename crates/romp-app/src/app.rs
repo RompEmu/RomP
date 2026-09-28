@@ -265,6 +265,9 @@ impl Controller {
         ui.on_sign_out(|| with_controller(|c| c.sign_out()));
         ui.on_open_settings(|| with_controller(|c| c.open_settings()));
         ui.on_settings_section_changed(|i| with_controller(|c| c.settings_section_changed(i)));
+        ui.on_console_option_changed(|key, index| {
+            with_controller(|c| c.console_option_changed(key.to_string(), index))
+        });
         ui.on_assign_player(|key, player| {
             with_controller(|c| c.assign_player(key.to_string(), player))
         });

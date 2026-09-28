@@ -4,6 +4,7 @@ mod app;
 mod avatar;
 mod bios;
 mod collections;
+mod console_settings;
 mod cores;
 mod covers;
 mod credentials;

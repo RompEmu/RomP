@@ -6,6 +6,8 @@ export struct SidebarEntry { header: bool, key: string, name: string, initial: s
 export struct Membership { key: string, name: string, member: bool }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
+export struct ConsoleOption { key: string, label: string, detail: string, choices: [string], current: int }
+export struct ConsoleGroup { name: string, options: [ConsoleOption] }
 export struct KeyHint { keys: string, action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool, aspect: float }
@@ -1284,6 +1286,8 @@ component SettingsPage inherits FocusScope {
     in property <[DeviceRow]> devices;
     in property <[KeyHint]> keys;
     in property <[StorageRow]> storage;
+    in property <[ConsoleGroup]> consoles;
+    callback console-option-changed(string, int);
     in property <string> storage-total;
     in property <bool> storage-busy;
     in-out property <bool> pause-unfocused;
@@ -1328,7 +1332,7 @@ component SettingsPage inherits FocusScope {
             Text { text: @tr("Settings"); font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; }
             HorizontalLayout {
                 alignment: start;
-                for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage")]: SettingsTab {
+                for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage"), @tr("Consoles")]: SettingsTab {
                     label: label;
                     selected: root.section == i;
                     clicked => { root.section = i; root.section-changed(i); }
@@ -1493,6 +1497,31 @@ component SettingsPage inherits FocusScope {
                             spacing: 10px;
                             Button { text: @tr("Clear image cache"); clicked => { root.clear-images(); } }
                             Button { text: @tr("Show folder"); clicked => { root.show-folder(); } }
+                        }
+                    }
+                    if root.section == 4: VerticalLayout {
+                        spacing: 16px;
+                        SectionHeading { subtitle: @tr("Settings for each console's emulator. Changes apply the next time you start a game."); }
+                        for group in root.consoles: VerticalLayout {
+                            spacing: 8px;
+                            Text { text: group.name; font-size: Theme.font-body-large; font-weight: 700; }
+                            Panel {
+                                for option[i] in group.options: SettingRow {
+                                    divider: i > 0;
+                                    label: option.label;
+                                    detail: option.detail;
+                                    ComboBox {
+                                        width: 150px;
+                                        model: option.choices;
+                                        current-index: option.current;
+                                        selected => { root.console-option-changed(option.key, self.current-index); }
+                                    }
+                                }
+                            }
+                        }
+                        if root.consoles.length == 0: Text {
+                            text: @tr("None of the emulators on this computer has settings yet.");
+                            color: Theme.text-muted;
                         }
                     }
                 }
@@ -1769,6 +1798,8 @@ export component AppWindow inherits Window {
     in property <[DeviceRow]> settings-devices;
     in property <[KeyHint]> settings-keys;
     in property <[StorageRow]> settings-storage;
+    in property <[ConsoleGroup]> settings-consoles;
+    callback console-option-changed(string, int);
     in property <string> settings-storage-total;
     in property <bool> settings-storage-busy;
     callback assign-player(string, int);
@@ -2028,6 +2059,8 @@ export component AppWindow inherits Window {
             storage: root.settings-storage;
             storage-total: root.settings-storage-total;
             storage-busy: root.settings-storage-busy;
+            consoles: root.settings-consoles;
+            console-option-changed(key, index) => { root.console-option-changed(key, index); }
             pause-unfocused <=> root.pref-pause-unfocused;
             resume <=> root.pref-resume;
             fullscreen <=> root.pref-fullscreen;

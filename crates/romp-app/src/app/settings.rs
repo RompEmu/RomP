@@ -1,15 +1,17 @@
 use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY, SCREEN_SETTINGS};
+use crate::console_settings::{self, Chosen};
 use crate::details::human_size;
 use crate::mapping::{self, BUTTONS};
 use crate::players::KEYBOARD;
 use crate::prefs::{Preferences, UI_SCALES};
 use crate::RemapRow;
-use crate::{paths, storage, DeviceRow, KeyHint, StorageRow};
+use crate::{paths, storage, ConsoleGroup, ConsoleOption, DeviceRow, KeyHint, StorageRow};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::Duration;
 
 const SECTION_PLAYERS: i32 = 2;
 const SECTION_STORAGE: i32 = 3;
+const SECTION_CONSOLES: i32 = 4;
 
 const KEY_HINTS: [(&str, &str); 6] = [
     ("Esc", "Game menu"),
@@ -128,6 +130,9 @@ impl Controller {
         }
         if section == SECTION_STORAGE {
             self.measure_storage();
+        }
+        if section == SECTION_CONSOLES {
+            self.show_consoles();
         }
     }
 
@@ -355,6 +360,62 @@ impl Controller {
                 .collect();
             on_ui(move |c| c.show_storage(sizes));
         });
+    }
+
+    pub(super) fn console_choices(&self) -> Chosen {
+        console_settings::chosen_from_json(
+            self.shared
+                .store
+                .lock()
+                .unwrap()
+                .get(console_settings::STORE_KEY)
+                .as_deref(),
+        )
+    }
+
+    fn show_consoles(&self) {
+        let Some(ui) = self.ui() else { return };
+        let chosen = self.console_choices();
+        let groups: Vec<ConsoleGroup> = console_settings::consoles()
+            .map(|console| ConsoleGroup {
+                name: console.name.into(),
+                options: ModelRc::new(VecModel::from(
+                    console
+                        .settings
+                        .iter()
+                        .map(|setting| ConsoleOption {
+                            key: setting.key.into(),
+                            label: setting.label.into(),
+                            detail: setting.detail.into(),
+                            choices: ModelRc::new(VecModel::from(
+                                setting
+                                    .choices
+                                    .iter()
+                                    .map(|c| c.label.into())
+                                    .collect::<Vec<slint::SharedString>>(),
+                            )),
+                            current: console_settings::selected(setting, &chosen) as i32,
+                        })
+                        .collect::<Vec<_>>(),
+                )),
+            })
+            .collect();
+        ui.set_settings_consoles(ModelRc::new(VecModel::from(groups)));
+    }
+
+    pub(super) fn console_option_changed(&self, key: String, index: i32) {
+        let mut chosen = self.console_choices();
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if console_settings::choose(&mut chosen, &key, index) {
+            let json = serde_json::to_string(&chosen).expect("console settings serialize");
+            self.shared
+                .store
+                .lock()
+                .unwrap()
+                .set(console_settings::STORE_KEY, &json);
+        }
     }
 
     fn show_storage(&self, sizes: Vec<(&'static str, u64)>) {
