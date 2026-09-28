@@ -2,9 +2,8 @@
   <img src="docs/banner.png" alt="Romp" width="600">
 </p>
 
-# Romp
-
-<p>
+<p align="center">
+  <a href="https://github.com/RompEmu/RompEmu/releases/latest"><img src="https://img.shields.io/github/v/release/RompEmu/RompEmu" alt="Latest release"></a>
   <a href="https://github.com/RompEmu/RompEmu/releases/tag/nightly"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/nightly.yml/badge.svg?branch=main" alt="Nightly build"></a>
   <a href="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms: macOS, Windows and Linux">
@@ -12,7 +11,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-green" alt="License: GPL-3.0-or-later"></a>
 </p>
 
-Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
+<p align="center">Play retro games from your <a href="https://romm.app">RomM</a> library, with each game running in its own sandboxed process.</p>
 
 Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS, Windows and Linux. Nightly builds aren't signed: the first time, on macOS right-click Romp and choose Open, and on Windows choose More info, then Run anyway. Windows support is new and games aren't sandboxed there yet.
 
