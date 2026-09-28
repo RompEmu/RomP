@@ -79,7 +79,7 @@ Romp downloads the emulator for each system the first time you play one of its g
 | Microsoft Xbox | xemu |
 | ZX Spectrum | Fuse |
 
-All emulators except xemu are [libretro](https://www.libretro.com) cores. On macOS, ARMSX2 draws through Vulkan with the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which Romp takes from your RomM server's firmware.
+All emulators except xemu are [libretro](https://www.libretro.com) cores. On macOS, ARMSX2, Dolphin, PPSSPP, Flycast, Beetle PSX HW and Mupen64Plus-Next draw through Vulkan with the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which Romp takes from your RomM server's firmware.
 
 ## Running
 

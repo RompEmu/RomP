@@ -224,8 +224,36 @@ pub fn is_computer(core_id: &str) -> bool {
     matches!(core_id, "puae" | "dosbox_pure" | "vice_x64sc" | "fuse")
 }
 
+// OpenGL on macOS is old and deprecated, so these draw through Vulkan (MoltenVK) there.
+const VULKAN_ON_MACOS: [(&str, &[(&str, &str)]); 5] = [
+    ("dolphin", &[]),
+    ("flycast", &[]),
+    (
+        "mednafen_psx_hw",
+        &[("beetle_psx_hw_renderer", "hardware_vk")],
+    ),
+    (
+        "mupen64plus_next",
+        &[("mupen64plus-rdp-plugin", "parallel")],
+    ),
+    ("ppsspp", &[("ppsspp_backend", "vulkan")]),
+];
+
+fn vulkan_options(core_id: &str) -> Option<&'static [(&'static str, &'static str)]> {
+    if core_id == ARMSX2.id {
+        return Some(&[("armsx2_renderer", "Vulkan")]);
+    }
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    VULKAN_ON_MACOS
+        .iter()
+        .find(|(id, _)| *id == core_id)
+        .map(|(_, options)| *options)
+}
+
 pub fn uses_vulkan(core_id: &str) -> bool {
-    core_id == ARMSX2.id
+    vulkan_options(core_id).is_some()
 }
 
 pub fn download_base(core: &CoreInfo) -> &'static str {
@@ -287,20 +315,16 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
         "vice_x64sc" => &[("vice_drive_true_emulation", "disabled")],
         "nestopia" => &[("nestopia_zapper_device", "lightgun")],
-        "armsx2" => &[("armsx2_renderer", "Vulkan")],
         "pcsx2" => &[("pcsx2_renderer", "OpenGL")],
         "desmume" => &[
             ("desmume_pointer_type", "touch"),
             ("desmume_screens_layout", "top/bottom"),
         ],
-        // GLideN64 renders black with the macOS OpenGL driver.
-        "mupen64plus_next" if cfg!(target_os = "macos") => {
-            &[("mupen64plus-rdp-plugin", "angrylion")]
-        }
         _ => &[],
     };
     options
         .iter()
+        .chain(vulkan_options(core_id).unwrap_or_default())
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect()
 }
@@ -581,9 +605,27 @@ mod tests {
     }
 
     #[test]
-    fn only_armsx2_draws_with_vulkan() {
+    fn cores_draw_with_vulkan_where_opengl_falls_short() {
         assert!(uses_vulkan("armsx2"));
         assert!(!uses_vulkan("pcsx2"));
+        assert!(!uses_vulkan("snes9x"));
+        for core in [
+            "dolphin",
+            "flycast",
+            "mednafen_psx_hw",
+            "mupen64plus_next",
+            "ppsspp",
+        ] {
+            assert_eq!(uses_vulkan(core), cfg!(target_os = "macos"), "{core}");
+        }
+        let n64 = default_options("mupen64plus_next");
+        let rdp = n64.iter().find(|(k, _)| k == "mupen64plus-rdp-plugin");
+        assert_eq!(
+            rdp.map(|(_, v)| v.as_str()),
+            cfg!(target_os = "macos").then_some("parallel")
+        );
+        assert!(default_options("mednafen_psx_hw")
+            .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
         assert_eq!(download_base(&ARMSX2), ARMSX2_RELEASE);
         assert_eq!(download_base(core_for_platform("snes").unwrap()), BUILDBOT);
         if cfg!(target_os = "macos") {

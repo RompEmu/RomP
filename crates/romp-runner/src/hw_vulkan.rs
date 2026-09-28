@@ -451,7 +451,10 @@ impl HwVulkanContext {
         let mut pixels = unsafe { std::slice::from_raw_parts(mapped, size as usize) }.to_vec();
         if matches!(
             image.format,
-            vk::Format::R8G8B8A8_UNORM | vk::Format::R8G8B8A8_SRGB
+            vk::Format::R8G8B8A8_UNORM
+                | vk::Format::R8G8B8A8_SRGB
+                | vk::Format::A8B8G8R8_UNORM_PACK32
+                | vk::Format::A8B8G8R8_SRGB_PACK32
         ) {
             for px in pixels.as_chunks_mut::<4>().0 {
                 px.swap(0, 2);
