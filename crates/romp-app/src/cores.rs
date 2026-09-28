@@ -287,7 +287,12 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
         "vice_x64sc" => &[("vice_drive_true_emulation", "disabled")],
         "nestopia" => &[("nestopia_zapper_device", "lightgun")],
-        "armsx2" => &[("armsx2_renderer", "Vulkan")],
+        // 3x is the largest internal resolution whose frames fit the shared frame buffer.
+        "armsx2" => &[
+            ("armsx2_renderer", "Vulkan"),
+            ("armsx2_upscale", "3x"),
+            ("armsx2_anisotropic_filtering", "16"),
+        ],
         "pcsx2" => &[("pcsx2_renderer", "OpenGL")],
         "desmume" => &[
             ("desmume_pointer_type", "touch"),
@@ -622,6 +627,18 @@ mod tests {
             .unwrap();
         assert_eq!(std::fs::read(&installed).unwrap(), b"ps2");
         assert!(installed.ends_with(format!("armsx2/{}", lib_file(&ARMSX2))));
+    }
+
+    #[test]
+    fn ps2_frames_upscaled_by_armsx2_fit_the_frame_buffer() {
+        let options = default_options("armsx2");
+        let upscale = options
+            .iter()
+            .find(|(k, _)| k == "armsx2_upscale")
+            .and_then(|(_, v)| v.trim_end_matches('x').parse::<u32>().ok())
+            .unwrap();
+        assert!(640 * upscale <= romp_proto::frame::MAX_W);
+        assert!(512 * upscale <= romp_proto::frame::MAX_H);
     }
 
     #[tokio::test]
