@@ -1,7 +1,7 @@
 use super::save_sync::PendingLaunch;
 use super::{on_ui, with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::bios;
-use crate::cores::{core_for_platform, BUILDBOT};
+use crate::cores::core_for_platform;
 use crate::details;
 use crate::download::DownloadError;
 use crate::fetch::download_game;
@@ -515,7 +515,9 @@ impl Controller {
                 None => {
                     let name = core.name;
                     on_ui(move |c| c.game_status(id, format!("Installing {name}…")));
-                    cores.install(&http, BUILDBOT, core).await
+                    cores
+                        .install(&http, crate::cores::download_base(core), core)
+                        .await
                 }
             };
             let system = paths::system_dir();
@@ -745,6 +747,8 @@ impl Controller {
             save_dir,
             title: detail.title.clone(),
             jit,
+            vulkan: core_for_platform(&detail.platform_slug)
+                .is_some_and(|core| crate::cores::uses_vulkan(core.id)),
             options: core_for_platform(&detail.platform_slug)
                 .map(|core| crate::cores::default_options(core.id))
                 .unwrap_or_default(),

@@ -7,6 +7,9 @@ DIST := dist
 BIN := target/release
 BUNDLE_ID := io.github.rompemu.romp
 ICON := crates/romp-app/assets/icon-macos.png
+MOLTENVK := 1.4.1
+MOLTENVK_SHA256 := 5ea0c259df7ded9a275444820f09cced54d6e5a7c7a31d262de62a5cdb7e15cf
+MOLTENVK_TAR := target/MoltenVK-$(MOLTENVK)-macos.tar
 
 APP := $(DIST)/Romp.app
 ICONSET := $(DIST)/Romp.iconset
@@ -49,11 +52,20 @@ endef
 build:
 	cargo build --release --locked
 
-app: build
+$(MOLTENVK_TAR):
+	mkdir -p $(dir $@)
+	curl -fsSL -o $@.tmp https://github.com/KhronosGroup/MoltenVK/releases/download/v$(MOLTENVK)/MoltenVK-macos.tar
+	echo "$(MOLTENVK_SHA256)  $@.tmp" | shasum -a 256 -c -
+	mv $@.tmp $@
+
+app: build $(MOLTENVK_TAR)
 	rm -rf $(APP) $(ICONSET)
-	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources $(ICONSET)
+	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Frameworks $(APP)/Contents/Resources $(ICONSET)
 	cp $(BIN)/romp $(BIN)/romp-runner $(APP)/Contents/MacOS/
+	tar -xOf $(MOLTENVK_TAR) MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib > $(APP)/Contents/Frameworks/libMoltenVK.dylib
+	lipo -thin arm64 -output $(APP)/Contents/Frameworks/libMoltenVK.dylib $(APP)/Contents/Frameworks/libMoltenVK.dylib
 	cp LICENSE $(APP)/Contents/Resources/
+	tar -xOf $(MOLTENVK_TAR) MoltenVK/LICENSE > $(APP)/Contents/Resources/MoltenVK-LICENSE
 	sed -e 's/@VERSION@/$(CARGO_VERSION)/g' -e 's/@BUNDLE_ID@/$(BUNDLE_ID)/g' \
 		packaging/macos/Info.plist > $(APP)/Contents/Info.plist
 	for size in 16 32 128 256 512; do \
@@ -62,6 +74,7 @@ app: build
 	done
 	iconutil --convert icns --output $(APP)/Contents/Resources/Romp.icns $(ICONSET)
 	rm -rf $(ICONSET)
+	codesign --force --sign - $(APP)/Contents/Frameworks/libMoltenVK.dylib
 	codesign --force --sign - $(APP)/Contents/MacOS/romp-runner
 	codesign --force --sign - $(APP)
 

@@ -3,6 +3,8 @@ use std::io::Read;
 use std::path::PathBuf;
 
 pub const BUILDBOT: &str = "https://buildbot.libretro.com/nightly";
+pub const ARMSX2_RELEASE: &str = "https://github.com/RompEmu/ARMSX2/releases/latest/download";
+const ARMSX2_ASSET: &str = "armsx2_libretro-macos-arm64.zip";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CoreInfo {
@@ -16,9 +18,13 @@ const fn core(id: &'static str, name: &'static str, lib: &'static str, jit: bool
     CoreInfo { id, name, lib, jit }
 }
 
+const ARMSX2: CoreInfo = core("armsx2", "ARMSX2", "armsx2_libretro", true);
+
+#[cfg(target_os = "macos")]
+const PS2: CoreInfo = ARMSX2;
 #[cfg(all(target_arch = "x86_64", not(target_os = "macos")))]
 const PS2: CoreInfo = core("pcsx2", "PCSX2", "pcsx2_libretro", true);
-#[cfg(not(all(target_arch = "x86_64", not(target_os = "macos"))))]
+#[cfg(not(any(target_os = "macos", target_arch = "x86_64")))]
 const PS2: CoreInfo = core("play", "Play!", "play_libretro", true);
 
 static CORES: &[(&[&str], CoreInfo)] = &[
@@ -218,6 +224,26 @@ pub fn is_computer(core_id: &str) -> bool {
     matches!(core_id, "puae" | "dosbox_pure" | "vice_x64sc" | "fuse")
 }
 
+pub fn uses_vulkan(core_id: &str) -> bool {
+    core_id == ARMSX2.id
+}
+
+pub fn download_base(core: &CoreInfo) -> &'static str {
+    if core.id == ARMSX2.id {
+        ARMSX2_RELEASE
+    } else {
+        BUILDBOT
+    }
+}
+
+fn core_url(base: &str, core: &CoreInfo) -> String {
+    if core.id == ARMSX2.id {
+        format!("{base}/{ARMSX2_ASSET}")
+    } else {
+        buildbot_url(base, core)
+    }
+}
+
 pub fn uses_mouse(core_id: &str) -> bool {
     matches!(core_id, "puae" | "dosbox_pure")
 }
@@ -261,6 +287,7 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
         "vice_x64sc" => &[("vice_drive_true_emulation", "disabled")],
         "nestopia" => &[("nestopia_zapper_device", "lightgun")],
+        "armsx2" => &[("armsx2_renderer", "Vulkan")],
         "pcsx2" => &[("pcsx2_renderer", "OpenGL")],
         "desmume" => &[
             ("desmume_pointer_type", "touch"),
@@ -376,6 +403,23 @@ fn extract_into(
     Ok(())
 }
 
+async fn verify_checksum(http: &reqwest::Client, url: &str, bytes: &[u8]) -> Result<(), String> {
+    let published = http
+        .get(format!("{url}.sha256"))
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|_| "Could not check the core download".to_string())?
+        .text()
+        .await
+        .map_err(|e| e.to_string())?;
+    let expected = published.split_whitespace().next().unwrap_or_default();
+    if !expected.eq_ignore_ascii_case(&sha256_hex(bytes)) {
+        return Err("The core download did not match its checksum".into());
+    }
+    Ok(())
+}
+
 pub struct Cores {
     dir: PathBuf,
 }
@@ -399,8 +443,9 @@ impl Cores {
         base: &str,
         core: &CoreInfo,
     ) -> Result<PathBuf, String> {
+        let url = core_url(base, core);
         let resp = http
-            .get(buildbot_url(base, core))
+            .get(&url)
             .send()
             .await
             .map_err(|_| "Could not reach the core download server".to_string())?;
@@ -418,15 +463,24 @@ impl Cores {
             .unwrap_or("nightly")
             .to_string();
         let zip_bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        if core.id == ARMSX2.id {
+            verify_checksum(http, &url, &zip_bytes).await?;
+        }
         let file = lib_file(core);
         let lib = tokio::task::spawn_blocking({
             let file = file.clone();
             move || -> Result<Vec<u8>, String> {
                 let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes))
                     .map_err(|e| e.to_string())?;
-                let mut entry = archive
-                    .by_name(&file)
-                    .map_err(|_| format!("{file} is missing from the download"))?;
+                let index = (0..archive.len())
+                    .find(|&i| {
+                        archive.name_for_index(i).is_some_and(|name| {
+                            std::path::Path::new(name).file_name()
+                                == Some(std::ffi::OsStr::new(&file))
+                        })
+                    })
+                    .ok_or_else(|| format!("{file} is missing from the download"))?;
+                let mut entry = archive.by_index(index).map_err(|e| e.to_string())?;
                 let mut out = Vec::new();
                 entry.read_to_end(&mut out).map_err(|e| e.to_string())?;
                 Ok(out)
@@ -500,6 +554,63 @@ mod tests {
         for slug in ["arcade", "neogeoaes", "cps2"] {
             assert_eq!(core_for_platform(slug).unwrap().id, "fbneo");
         }
+    }
+
+    #[test]
+    fn only_armsx2_draws_with_vulkan() {
+        assert!(uses_vulkan("armsx2"));
+        assert!(!uses_vulkan("pcsx2"));
+        assert_eq!(download_base(&ARMSX2), ARMSX2_RELEASE);
+        assert_eq!(download_base(core_for_platform("snes").unwrap()), BUILDBOT);
+        if cfg!(target_os = "macos") {
+            assert_eq!(core_for_platform("ps2").unwrap().id, "armsx2");
+        }
+    }
+
+    async fn armsx2_release(zip: Vec<u8>, checksum: String) -> MockServer {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/{ARMSX2_ASSET}")))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(zip))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/{ARMSX2_ASSET}.sha256")))
+            .respond_with(ResponseTemplate::new(200).set_body_string(checksum))
+            .mount(&server)
+            .await;
+        server
+    }
+
+    #[tokio::test]
+    async fn release_cores_are_checked_and_found_inside_folders() {
+        let zip = zip_with(
+            &format!("armsx2-macos-arm64-libretro/{}", lib_file(&ARMSX2)),
+            b"ps2",
+        );
+        let checksum = format!("{}  {ARMSX2_ASSET}\n", sha256_hex(&zip));
+        let server = armsx2_release(zip, checksum).await;
+        let dir = tempfile::tempdir().unwrap();
+        let cores = Cores::new(dir.path().to_path_buf());
+        let installed = cores
+            .install(&reqwest::Client::new(), &server.uri(), &ARMSX2)
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(&installed).unwrap(), b"ps2");
+        assert!(installed.ends_with(format!("armsx2/{}", lib_file(&ARMSX2))));
+    }
+
+    #[tokio::test]
+    async fn release_cores_that_do_not_match_their_checksum_are_refused() {
+        let zip = zip_with(&lib_file(&ARMSX2), b"ps2");
+        let server = armsx2_release(zip, format!("{}  x\n", "0".repeat(64))).await;
+        let dir = tempfile::tempdir().unwrap();
+        let cores = Cores::new(dir.path().to_path_buf());
+        let result = cores
+            .install(&reqwest::Client::new(), &server.uri(), &ARMSX2)
+            .await;
+        assert!(result.is_err());
+        assert!(cores.installed(&ARMSX2).is_none());
     }
 
     #[test]

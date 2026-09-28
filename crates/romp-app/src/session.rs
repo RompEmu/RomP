@@ -26,6 +26,7 @@ pub struct SessionConfig {
     pub system_dir: PathBuf,
     pub save_dir: PathBuf,
     pub jit: bool,
+    pub vulkan: bool,
     pub load_slot: Option<u8>,
     pub volume: u8,
     pub auto_state: bool,
@@ -69,6 +70,9 @@ pub fn runner_args(cfg: &SessionConfig, socket: &Path, frames: &str) -> Vec<OsSt
     }
     if cfg.jit {
         args.push("--jit".into());
+    }
+    if cfg.vulkan {
+        args.push("--vulkan".into());
     }
     if !cfg.auto_state {
         args.push("--no-auto-state".into());
@@ -261,6 +265,7 @@ mod tests {
             system_dir: "/data/system".into(),
             save_dir: "/data/saves/7".into(),
             jit: false,
+            vulkan: false,
             load_slot: None,
             volume: 100,
             auto_state: true,

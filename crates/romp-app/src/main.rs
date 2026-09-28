@@ -52,6 +52,8 @@ struct Args {
     rom: Option<PathBuf>,
     #[arg(long)]
     jit: bool,
+    #[arg(long)]
+    vulkan: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -68,7 +70,7 @@ fn main() -> anyhow::Result<()> {
         .with_winit_custom_application_handler(mouse::RawMouse)
         .select()?;
     match (args.core, args.rom) {
-        (Some(core), Some(rom)) => play::run(core, rom, args.jit),
+        (Some(core), Some(rom)) => play::run(core, rom, args.jit, args.vulkan),
         _ => app::run(),
     }
 }

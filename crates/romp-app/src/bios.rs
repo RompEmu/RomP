@@ -85,7 +85,8 @@ fn unmet(platform_slug: &str, system_dir: &Path) -> Vec<&'static [&'static str]>
 }
 
 fn uses_pcsx2(platform_slug: &str) -> bool {
-    crate::cores::core_for_platform(platform_slug).is_some_and(|c| c.id == "pcsx2")
+    crate::cores::core_for_platform(platform_slug)
+        .is_some_and(|c| matches!(c.id, "pcsx2" | "armsx2"))
 }
 
 fn has_ps2_bios(system_dir: &Path) -> bool {

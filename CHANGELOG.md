@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Changed
+
+- PS2 games play with ARMSX2 on Macs, in place of Play!. It needs a PS2 BIOS in the platform's firmware on your RomM server.
+
 ## [0.4.0] - 2026-09-28
 
 ### Added

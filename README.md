@@ -73,13 +73,13 @@ Romp downloads the emulator for each system the first time you play one of its g
 | Sega Dreamcast | Flycast |
 | SNK Neo Geo Pocket and Pocket Color | Beetle NeoPop |
 | Sony PlayStation | Beetle PSX HW |
-| Sony PlayStation 2 | PCSX2 on Windows and Linux, Play! on macOS |
+| Sony PlayStation 2 | PCSX2 on Windows and Linux, [ARMSX2](https://github.com/RompEmu/ARMSX2) on macOS |
 | Sony PSP | PPSSPP |
 | Vectrex | Vecx |
 | Microsoft Xbox | xemu |
 | ZX Spectrum | Fuse |
 
-All emulators except xemu are [libretro](https://www.libretro.com) cores. Some systems need BIOS files, which Romp takes from your RomM server's firmware.
+All emulators except xemu are [libretro](https://www.libretro.com) cores. On macOS, ARMSX2 draws through Vulkan with the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which Romp takes from your RomM server's firmware.
 
 ## Running
 

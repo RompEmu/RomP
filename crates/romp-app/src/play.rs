@@ -29,6 +29,7 @@ pub struct GameOptions {
     pub save_dir: PathBuf,
     pub title: String,
     pub jit: bool,
+    pub vulkan: bool,
     pub options: Vec<(String, String)>,
     pub split_screens: bool,
     pub gamepads: Rc<RefCell<Gamepads>>,
@@ -78,7 +79,7 @@ impl RunningGame {
     }
 }
 
-pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
+pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Result<()> {
     let rom = rom
         .canonicalize()
         .with_context(|| format!("ROM not found: {}", rom.display()))?;
@@ -96,6 +97,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             save_dir,
             title,
             jit,
+            vulkan,
             options: Vec::new(),
             split_screens: false,
             gamepads: Rc::new(RefCell::new(Gamepads::new())),
@@ -639,6 +641,7 @@ pub fn launch(
         system_dir: paths::system_dir(),
         save_dir: opts.save_dir.clone(),
         jit: opts.jit,
+        vulkan: opts.vulkan,
         load_slot: opts.load_slot,
         options: opts.options,
         volume: opts.prefs.volume,
