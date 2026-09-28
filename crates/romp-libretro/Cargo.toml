@@ -2,6 +2,8 @@
 name = "romp-libretro"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 libloading = "0.8"

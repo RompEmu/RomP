@@ -9,6 +9,7 @@
   <a href="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-blue" alt="Platforms: macOS and Linux">
   <a href="https://romm.app"><img src="https://img.shields.io/badge/RomM-5.0%2B-6f42c1" alt="Needs RomM 5.0 or newer"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-green" alt="License: GPL-3.0-or-later"></a>
 </p>
 
 Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
@@ -63,3 +64,7 @@ Default keyboard layout:
 | Esc | Game menu |
 
 Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS and `~/.local/share/Romp` on Linux.
+
+## License
+
+Romp is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version.

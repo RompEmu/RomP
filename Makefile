@@ -39,6 +39,7 @@ app: build
 	rm -rf $(APP) $(ICONSET)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources $(ICONSET)
 	cp $(BIN)/romp $(BIN)/romp-runner $(APP)/Contents/MacOS/
+	cp LICENSE $(APP)/Contents/Resources/
 	sed -e 's/@VERSION@/$(CARGO_VERSION)/g' -e 's/@BUNDLE_ID@/$(BUNDLE_ID)/g' \
 		packaging/macos/Info.plist > $(APP)/Contents/Info.plist
 	for size in 16 32 128 256 512; do \
@@ -58,7 +59,7 @@ dist-macos: app
 dist-linux: build
 	rm -rf $(DIST)/$(LINUX_NAME) $(LINUX_TAR)
 	mkdir -p $(DIST)/$(LINUX_NAME)
-	cp $(BIN)/romp $(BIN)/romp-runner README.md $(DIST)/$(LINUX_NAME)/
+	cp $(BIN)/romp $(BIN)/romp-runner README.md LICENSE $(DIST)/$(LINUX_NAME)/
 	tar -czf $(LINUX_TAR) -C $(DIST) $(LINUX_NAME)
 	rm -rf $(DIST)/$(LINUX_NAME)
 	$(call checksum,$(LINUX_TAR))
