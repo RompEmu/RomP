@@ -30,7 +30,11 @@ jobs:
           components: rustfmt
       - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
         with:
-          tool: cargo-deny,cargo-machete,typos,actionlint,zizmor
+          tool: cargo-deny,cargo-machete,typos,zizmor
+      - name: Install actionlint
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash \
+            | bash -s -- 1.7.12 "$CARGO_HOME/bin"
       - run: make fmt-check deny machete typos workflows
 
   check:
