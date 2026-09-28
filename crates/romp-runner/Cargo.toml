@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 
 [lib]
 path = "src/lib.rs"
@@ -20,7 +21,7 @@ clap = { version = "4", features = ["derive"] }
 cubeb = "0.34"
 parking_lot = "0.12"
 ringbuf = "0.5"
-sevenz-rust = "0.6"
+sevenz-rust2 = { version = "0.23", default-features = false, features = ["bzip2", "deflate", "ppmd"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
@@ -35,4 +36,5 @@ landlock = "0.4"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_OpenGL", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Com", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
+sevenz-rust2 = { version = "0.23", default-features = false, features = ["compress", "util"] }
 tempfile = "3"

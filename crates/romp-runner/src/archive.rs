@@ -162,8 +162,9 @@ fn open_7z(
     need_fullpath: bool,
     valid_extensions: &str,
 ) -> Result<LoadedRom> {
-    let mut reader = sevenz_rust::SevenZReader::open(archive_path, sevenz_rust::Password::empty())
-        .with_context(|| format!("read 7z {}", archive_path.display()))?;
+    let mut reader =
+        sevenz_rust2::ArchiveReader::open(archive_path, sevenz_rust2::Password::empty())
+            .with_context(|| format!("read 7z {}", archive_path.display()))?;
 
     let mut candidates: Vec<(String, u64)> = Vec::new();
     for entry in &reader.archive().files {
@@ -280,7 +281,7 @@ fn detect_disc_image_in_zip(archive_path: &Path) -> Result<Option<DiscImageKind>
 }
 
 fn detect_disc_image_in_7z(archive_path: &Path) -> Result<Option<DiscImageKind>> {
-    let reader = sevenz_rust::SevenZReader::open(archive_path, sevenz_rust::Password::empty())
+    let reader = sevenz_rust2::ArchiveReader::open(archive_path, sevenz_rust2::Password::empty())
         .with_context(|| format!("read 7z {}", archive_path.display()))?;
     let mut index_kind: Option<DiscImageKind> = None;
     let mut data_kind: Option<DiscImageKind> = None;
@@ -408,7 +409,7 @@ fn extract_disc_entries_single_pass(
         }
         "7z" => {
             let mut reader =
-                sevenz_rust::SevenZReader::open(archive_path, sevenz_rust::Password::empty())
+                sevenz_rust2::ArchiveReader::open(archive_path, sevenz_rust2::Password::empty())
                     .with_context(|| format!("read 7z {}", archive_path.display()))?;
             reader
                 .for_each_entries(|entry, r| {
@@ -628,6 +629,22 @@ fn is_running(pid: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_largest_rom_in_a_7z_is_loaded() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::write(src.join("readme.txt"), b"not a rom").unwrap();
+        std::fs::write(src.join("small.sfc"), b"small").unwrap();
+        std::fs::write(src.join("game.sfc"), b"the whole game").unwrap();
+        let archive = tmp.path().join("game.7z");
+        sevenz_rust2::compress_to_path(&src, &archive).unwrap();
+
+        let rom = open_rom(&archive, "test-7z", false, "sfc|smc").unwrap();
+        assert_eq!(rom.bytes.as_deref(), Some(&b"the whole game"[..]));
+        assert_eq!(rom.effective_path, tmp.path().join("game.sfc"));
+    }
 
     #[test]
     fn stale_scratch_dirs_of_dead_runners_are_removed() {
