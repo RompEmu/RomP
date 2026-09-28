@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="crates/romp-app/assets/icon.png" alt="Romp" width="160">
+  <img src="docs/banner.png" alt="Romp" width="600">
 </p>
 
 # Romp
