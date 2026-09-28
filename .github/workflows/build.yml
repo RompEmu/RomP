@@ -6,6 +6,12 @@ on:
       version:
         required: true
         type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+        type: string
+        default: nightly
 
 permissions:
   contents: read
