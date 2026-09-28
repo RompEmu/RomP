@@ -13,6 +13,9 @@ ICONSET := $(DIST)/Romp.iconset
 MACOS_ZIP := $(DIST)/Romp-$(RELEASE)-macos-$(ARCH).zip
 LINUX_NAME := Romp-$(RELEASE)-linux-$(ARCH)
 LINUX_TAR := $(DIST)/$(LINUX_NAME).tar.gz
+APPDIR := $(DIST)/Romp.AppDir
+APPIMAGE := $(DIST)/$(LINUX_NAME).AppImage
+APPIMAGETOOL ?= appimagetool
 WINDOWS_NAME := Romp-$(RELEASE)-windows-$(ARCH)
 WINDOWS_ZIP := $(DIST)/$(WINDOWS_NAME).zip
 
@@ -40,7 +43,7 @@ ditto -c -k --keepParent $(APP) $(MACOS_ZIP)
 $(call checksum,$(MACOS_ZIP))
 endef
 
-.PHONY: build app dist dist-macos dist-linux dist-windows clean
+.PHONY: build app appimage dist dist-macos dist-linux dist-windows clean
 
 build:
 	cargo build --release --locked
@@ -66,7 +69,20 @@ dist: dist-$(PLATFORM)
 dist-macos: app
 	$(zip_app)
 
-dist-linux: build
+appimage: build
+	rm -rf $(APPDIR) $(APPIMAGE)
+	mkdir -p $(APPDIR)/usr/bin $(APPDIR)/usr/share/applications $(APPDIR)/usr/share/icons/hicolor/256x256/apps
+	cp $(BIN)/romp $(BIN)/romp-runner $(APPDIR)/usr/bin/
+	cp packaging/linux/romp.desktop $(APPDIR)/
+	cp packaging/linux/romp.desktop $(APPDIR)/usr/share/applications/
+	cp packaging/linux/romp.png $(APPDIR)/
+	cp packaging/linux/romp.png $(APPDIR)/usr/share/icons/hicolor/256x256/apps/
+	ln -s usr/bin/romp $(APPDIR)/AppRun
+	ARCH=$(ARCH) $(APPIMAGETOOL) --no-appstream $(APPDIR) $(APPIMAGE)
+	rm -rf $(APPDIR)
+	$(call checksum,$(APPIMAGE))
+
+dist-linux: appimage
 	rm -rf $(DIST)/$(LINUX_NAME) $(LINUX_TAR)
 	mkdir -p $(DIST)/$(LINUX_NAME)
 	cp $(BIN)/romp $(BIN)/romp-runner README.md LICENSE $(DIST)/$(LINUX_NAME)/

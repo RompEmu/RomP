@@ -46,15 +46,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libasound2-dev libegl-dev libfontconfig1-dev libpulse-dev libudev-dev libwayland-dev libxkbcommon-dev
+      - name: Install appimagetool
+        if: runner.os == 'Linux'
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          sudo chmod +x /usr/local/bin/appimagetool
       - name: Install Make
         if: runner.os == 'Windows'
         run: choco install make --no-progress -y
       - run: make dist VERSION=${{ inputs.version }}
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
       - uses: actions/upload-artifact@v7
         with:
           name: romp-${{ runner.os }}
           path: |
             dist/*.zip
             dist/*.tar.gz
+            dist/*.AppImage
             dist/*.sha512
           if-no-files-found: error

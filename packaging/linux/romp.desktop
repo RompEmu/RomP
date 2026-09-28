@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Romp
+Comment=Play retro games from your RomM library
+Exec=romp
+Icon=romp
+Categories=Game;Emulator;
+Terminal=false

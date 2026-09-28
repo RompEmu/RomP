@@ -32,7 +32,7 @@ cargo build --release
 ./target/release/romp
 ```
 
-`make dist` packages the app into `dist/`: `Romp.app` and a zip on macOS, a zip on Windows, a tarball on Linux. On Windows, run it from Git Bash with Make and 7-Zip installed.
+`make dist` packages the app into `dist/`: `Romp.app` and a zip on macOS, a zip on Windows, an AppImage and a tarball on Linux (with [appimagetool](https://github.com/AppImage/appimagetool) installed). On Windows, run it from Git Bash with Make and 7-Zip installed.
 
 Enter your RomM server address (RomM 5.0 or newer). Approve Romp in RomM by scanning the code or opening the link.
 
