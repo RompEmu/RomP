@@ -55,6 +55,13 @@ fn main() -> anyhow::Result<()> {
         )
         .init();
     let args = Args::parse();
+    #[cfg(windows)]
+    unsafe {
+        windows_sys::Win32::System::Com::CoInitializeEx(
+            std::ptr::null(),
+            windows_sys::Win32::System::Com::COINIT_MULTITHREADED as u32,
+        );
+    }
     if cfg!(target_os = "macos") {
         // Cores that keep data under the user's Documents or Library write it into the game's save folder instead.
         let home = core_home(&args.save_dir);
