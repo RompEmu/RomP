@@ -36,12 +36,20 @@ jobs:
             os: macos-latest
           - name: Windows
             os: windows-latest
+          - name: Linux
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libegl-dev libfontconfig1-dev libpulse-dev libudev-dev libwayland-dev libxkbcommon-dev
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
