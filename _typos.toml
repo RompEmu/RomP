@@ -1,0 +1,7 @@
+[default.extend-words]
+sav = "sav"
+typ = "typ"
+UE = "UE"
+
+[files]
+extend-exclude = ["*.png", "*.ico", "LICENSE"]

@@ -34,6 +34,8 @@ cargo build --release
 
 `make dist` packages the app into `dist/`: `Romp.app` and a zip on macOS, a zip on Windows, an AppImage and a tarball on Linux (with [appimagetool](https://github.com/AppImage/appimagetool) installed). On Windows, run it from Git Bash with Make and 7-Zip installed.
 
+`make check` runs the same checks as CI: formatting, Clippy, tests, [cargo-deny](https://github.com/EmbarkStudios/cargo-deny), [cargo-machete](https://github.com/bnjbvr/cargo-machete), [typos](https://github.com/crate-ci/typos), [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://github.com/zizmorcore/zizmor).
+
 Enter your RomM server address (RomM 5.0 or newer). Approve Romp in RomM by scanning the code or opening the link.
 
 Open a game from your library to download and play it. Romp installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.

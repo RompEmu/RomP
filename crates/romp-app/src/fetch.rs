@@ -88,7 +88,7 @@ mod tests {
                 ]})))
             .mount(&server)
             .await;
-        for (id, body) in [("1", "one"), ("2", "twoo")] {
+        for (id, body) in [("1", "one"), ("2", "disc")] {
             Mock::given(method("GET"))
                 .and(query_param("file_ids", id))
                 .respond_with(ResponseTemplate::new(200).set_body_string(body))
@@ -115,7 +115,7 @@ mod tests {
         );
         assert_eq!(
             std::fs::read_to_string(game_dir.join("Arc (Disc 2).chd")).unwrap(),
-            "twoo"
+            "disc"
         );
         assert_eq!(*last.lock().unwrap(), (7, 7));
     }

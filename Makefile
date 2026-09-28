@@ -44,6 +44,7 @@ $(call checksum,$(MACOS_ZIP))
 endef
 
 .PHONY: build app appimage dist dist-macos dist-linux dist-windows clean
+.PHONY: check fmt-check clippy test deny machete typos workflows
 
 build:
 	cargo build --release --locked
@@ -100,5 +101,29 @@ dist-windows: build
 
 clean:
 	rm -rf $(DIST)
+
+check: fmt-check clippy test deny machete typos workflows
+
+fmt-check:
+	cargo fmt --all --check
+
+clippy:
+	cargo clippy --workspace --all-targets --locked -- -D warnings
+
+test:
+	cargo test --workspace --locked
+
+deny:
+	cargo deny check
+
+machete:
+	cargo machete
+
+typos:
+	typos
+
+workflows:
+	actionlint
+	zizmor .github/workflows
 
 -include signing/signing.mk

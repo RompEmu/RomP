@@ -37,9 +37,13 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install Linux libraries
         if: runner.os == 'Linux'
         run: |
@@ -55,10 +59,11 @@ jobs:
       - name: Install Make
         if: runner.os == 'Windows'
         run: choco install make --no-progress -y
-      - run: make dist VERSION=${{ inputs.version }}
+      - run: make dist VERSION="$VERSION"
         env:
+          VERSION: ${{ inputs.version }}
           APPIMAGE_EXTRACT_AND_RUN: 1
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: romp-${{ runner.os }}
           path: |

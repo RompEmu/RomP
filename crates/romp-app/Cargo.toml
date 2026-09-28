@@ -4,10 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 
 [[bin]]
 name = "romp"
 path = "src/main.rs"
+
+[package.metadata.cargo-machete]
+ignored = ["md-5"]
 
 [dependencies]
 romp-proto = { workspace = true }
@@ -17,10 +21,10 @@ arboard = "3"
 dirs = "6"
 gilrs = "0.11"
 httpdate = "1"
-md-5 = "0.10"
 image = { version = "0.25", default-features = false, features = ["ico", "jpeg", "png", "webp"] }
 getrandom = "0.3"
 keyring = "4"
+md-5 = "0.10"
 rusqlite = { version = "0.40", features = ["bundled"] }
 open = "5"
 qrcode = { version = "0.14", default-features = false }
