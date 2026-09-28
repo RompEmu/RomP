@@ -510,14 +510,19 @@ impl Controller {
             .zip(self.game_saves(&detail))
             .filter(|_| !offline);
         self.shared.rt.spawn(async move {
-            let core_path = match cores.installed(core) {
+            let base = crate::cores::download_base(core);
+            let current = match cores.installed(core) {
+                Some(path) if offline || !cores.update_available(&http, base, core).await => {
+                    Some(path)
+                }
+                _ => None,
+            };
+            let core_path = match current {
                 Some(path) => Ok(path),
                 None => {
                     let name = core.name;
                     on_ui(move |c| c.game_status(id, format!("Installing {name}…")));
-                    cores
-                        .install(&http, crate::cores::download_base(core), core)
-                        .await
+                    cores.install(&http, base, core).await
                 }
             };
             let system = paths::system_dir();

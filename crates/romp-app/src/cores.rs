@@ -403,7 +403,7 @@ fn extract_into(
     Ok(())
 }
 
-async fn verify_checksum(http: &reqwest::Client, url: &str, bytes: &[u8]) -> Result<(), String> {
+async fn published_checksum(http: &reqwest::Client, url: &str) -> Result<String, String> {
     let published = http
         .get(format!("{url}.sha256"))
         .send()
@@ -413,11 +413,11 @@ async fn verify_checksum(http: &reqwest::Client, url: &str, bytes: &[u8]) -> Res
         .text()
         .await
         .map_err(|e| e.to_string())?;
-    let expected = published.split_whitespace().next().unwrap_or_default();
-    if !expected.eq_ignore_ascii_case(&sha256_hex(bytes)) {
-        return Err("The core download did not match its checksum".into());
-    }
-    Ok(())
+    Ok(published
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase())
 }
 
 pub struct Cores {
@@ -427,6 +427,27 @@ pub struct Cores {
 impl Cores {
     pub fn new(dir: PathBuf) -> Self {
         Self { dir }
+    }
+
+    /// Whether a core published as a release has a newer build than the one installed.
+    pub async fn update_available(
+        &self,
+        http: &reqwest::Client,
+        base: &str,
+        core: &CoreInfo,
+    ) -> bool {
+        if core.id != ARMSX2.id {
+            return false;
+        }
+        let Some(manifest) = std::fs::read(self.dir.join(core.id).join("manifest.json"))
+            .ok()
+            .and_then(|m| serde_json::from_slice::<Manifest>(&m).ok())
+        else {
+            return false;
+        };
+        published_checksum(http, &core_url(base, core))
+            .await
+            .is_ok_and(|latest| latest != manifest.version)
     }
 
     pub fn installed(&self, core: &CoreInfo) -> Option<PathBuf> {
@@ -456,7 +477,7 @@ impl Cores {
                 resp.status()
             ));
         }
-        let version = resp
+        let mut version = resp
             .headers()
             .get(reqwest::header::LAST_MODIFIED)
             .and_then(|v| v.to_str().ok())
@@ -464,7 +485,10 @@ impl Cores {
             .to_string();
         let zip_bytes = resp.bytes().await.map_err(|e| e.to_string())?;
         if core.id == ARMSX2.id {
-            verify_checksum(http, &url, &zip_bytes).await?;
+            version = published_checksum(http, &url).await?;
+            if !version.eq_ignore_ascii_case(&sha256_hex(&zip_bytes)) {
+                return Err("The core download did not match its checksum".into());
+            }
         }
         let file = lib_file(core);
         let lib = tokio::task::spawn_blocking({
@@ -598,6 +622,24 @@ mod tests {
             .unwrap();
         assert_eq!(std::fs::read(&installed).unwrap(), b"ps2");
         assert!(installed.ends_with(format!("armsx2/{}", lib_file(&ARMSX2))));
+    }
+
+    #[tokio::test]
+    async fn a_newer_release_core_is_noticed() {
+        let zip = zip_with(&lib_file(&ARMSX2), b"ps2");
+        let checksum = sha256_hex(&zip);
+        let server = armsx2_release(zip, format!("{checksum}  {ARMSX2_ASSET}\n")).await;
+        let dir = tempfile::tempdir().unwrap();
+        let cores = Cores::new(dir.path().to_path_buf());
+        let http = reqwest::Client::new();
+        assert!(!cores.update_available(&http, &server.uri(), &ARMSX2).await);
+        cores.install(&http, &server.uri(), &ARMSX2).await.unwrap();
+        assert!(!cores.update_available(&http, &server.uri(), &ARMSX2).await);
+
+        let newer = armsx2_release(Vec::new(), format!("{}  x\n", "1".repeat(64))).await;
+        assert!(cores.update_available(&http, &newer.uri(), &ARMSX2).await);
+        let offline = "http://127.0.0.1:9";
+        assert!(!cores.update_available(&http, offline, &ARMSX2).await);
     }
 
     #[tokio::test]

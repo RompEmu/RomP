@@ -7,6 +7,12 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Changed
 
 - PS2 games play with ARMSX2 on Macs, in place of Play!. It needs a PS2 BIOS in the platform's firmware on your RomM server.
+- Romp updates ARMSX2 when a newer build is published.
+- Save states are stored at their real size. ARMSX2's shrink from 68 MB to a few MB.
+
+### Fixed
+
+- PS2 games on Macs can save to their memory card, and pick up where you left off.
 
 ## [0.4.0] - 2026-09-28
 
