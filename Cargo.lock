@@ -4930,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "romp-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -4969,7 +4969,7 @@ dependencies = [
 
 [[package]]
 name = "romp-libretro"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cc",
  "libloading",
@@ -4978,7 +4978,7 @@ dependencies = [
 
 [[package]]
 name = "romp-proto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libc",
  "postcard",
@@ -4987,7 +4987,7 @@ dependencies = [
 
 [[package]]
 name = "romp-runner"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
