@@ -16,6 +16,11 @@ const fn core(id: &'static str, name: &'static str, lib: &'static str, jit: bool
     CoreInfo { id, name, lib, jit }
 }
 
+#[cfg(all(target_arch = "x86_64", not(target_os = "macos")))]
+const PS2: CoreInfo = core("pcsx2", "PCSX2", "pcsx2_libretro", true);
+#[cfg(not(all(target_arch = "x86_64", not(target_os = "macos"))))]
+const PS2: CoreInfo = core("play", "Play!", "play_libretro", true);
+
 static CORES: &[(&[&str], CoreInfo)] = &[
     (
         &["snes", "sfam"],
@@ -161,7 +166,7 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         &["nds"],
         core("desmume", "DeSmuME", "desmume_libretro", true),
     ),
-    (&["ps2"], core("play", "Play!", "play_libretro", true)),
+    (&["ps2"], PS2),
     (
         &["ngc", "wii"],
         core("dolphin", "Dolphin", "dolphin_libretro", true),
@@ -256,6 +261,7 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
         "vice_x64sc" => &[("vice_drive_true_emulation", "disabled")],
         "nestopia" => &[("nestopia_zapper_device", "lightgun")],
+        "pcsx2" => &[("pcsx2_renderer", "OpenGL")],
         "desmume" => &[
             ("desmume_pointer_type", "touch"),
             ("desmume_screens_layout", "top/bottom"),
