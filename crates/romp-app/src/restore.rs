@@ -23,7 +23,36 @@ pub struct Observed {
     pub minimized: bool,
 }
 
+pub fn game_window_key(platform_slug: &str, index: usize) -> String {
+    match index {
+        0 => format!("window:game:{platform_slug}"),
+        i => format!("window:game:{platform_slug}:{}", i + 1),
+    }
+}
+
+impl Observed {
+    pub fn of(window: &slint::Window) -> Self {
+        let position = window.position();
+        let size = window.size();
+        Self {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+            maximized: window.is_maximized(),
+            fullscreen: window.is_fullscreen(),
+            minimized: window.is_minimized(),
+        }
+    }
+}
+
 impl Placement {
+    pub fn apply(self, window: &slint::Window) {
+        window.set_size(slint::PhysicalSize::new(self.width, self.height));
+        window.set_position(slint::PhysicalPosition::new(self.x, self.y));
+        window.set_maximized(self.maximized);
+    }
+
     pub fn from_json(text: Option<&str>) -> Option<Self> {
         let placement: Self = serde_json::from_str(text?).ok()?;
         (placement.width >= MIN_SIZE && placement.height >= MIN_SIZE).then_some(placement)
@@ -86,6 +115,12 @@ mod tests {
             fullscreen,
             minimized,
         }
+    }
+
+    #[test]
+    fn each_game_window_has_its_own_key() {
+        assert_eq!(game_window_key("snes", 0), "window:game:snes");
+        assert_eq!(game_window_key("nds", 1), "window:game:nds:2");
     }
 
     #[test]

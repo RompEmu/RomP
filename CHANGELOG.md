@@ -8,6 +8,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - Linux releases include an AppImage alongside the tarball.
 - Games are sandboxed on Windows: the emulator can't start other programs or use the clipboard, and can only write to the game's save folder.
+- Game windows open where you last left them, with their size, for each console. The Nintendo DS touch screen window is remembered separately.
 
 ### Changed
 

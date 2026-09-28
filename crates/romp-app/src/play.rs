@@ -5,6 +5,7 @@ use crate::paths;
 use crate::players::{Assignments, KEYBOARD};
 use crate::ports;
 use crate::prefs::Preferences;
+use crate::restore::{Observed, Placement};
 use crate::session::{Session, SessionConfig, SessionEvent};
 use crate::GameWindow;
 use crate::PortRow;
@@ -20,6 +21,7 @@ use std::time::Duration;
 
 pub type SavePorts = Box<dyn Fn(Vec<(u8, u32)>)>;
 pub type VolumeChanged = Box<dyn Fn(u8)>;
+pub type SavePlacement = Box<dyn Fn(usize, &Observed)>;
 
 pub struct GameOptions {
     pub core: PathBuf,
@@ -41,6 +43,8 @@ pub struct GameOptions {
     pub port_devices: Vec<(u8, u32)>,
     pub save_ports: SavePorts,
     pub volume_changed: VolumeChanged,
+    pub placements: Vec<Option<Placement>>,
+    pub save_placement: SavePlacement,
 }
 
 pub struct CoreGame {
@@ -64,6 +68,12 @@ impl RunningGame {
     pub fn apply_prefs(&self, prefs: &Preferences) {
         if let Self::Core(core) = self {
             core.game.apply_prefs(prefs);
+        }
+    }
+
+    pub fn save_placements(&self) {
+        if let Self::Core(core) = self {
+            core.game.save_placements();
         }
     }
 }
@@ -100,6 +110,8 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool) -> anyhow::Result<()> {
             port_devices: Vec::new(),
             save_ports: Box::new(|_| {}),
             volume_changed: Box::new(|_| {}),
+            placements: Vec::new(),
+            save_placement: Box::new(|_, _| {}),
         },
         |_| {},
         || {},
@@ -136,6 +148,7 @@ struct Game {
     save_ports: SavePorts,
     volume: Cell<u8>,
     volume_changed: VolumeChanged,
+    save_placement: SavePlacement,
     computer: bool,
     held_keys: RefCell<HashSet<u32>>,
     modifiers: Cell<u16>,
@@ -198,6 +211,14 @@ fn stepped_volume(volume: u8, delta: i32) -> u8 {
 impl Game {
     fn primary(&self) -> &GameWindow {
         &self.windows[0]
+    }
+
+    fn save_placements(&self) {
+        for (i, window) in self.windows.iter().enumerate() {
+            if window.window().is_visible() {
+                (self.save_placement)(i, &Observed::of(window.window()));
+            }
+        }
     }
 
     fn send(&self, msg: &AppMsg) {
@@ -654,6 +675,7 @@ pub fn launch(
                     return;
                 }
                 if let Some(game) = weak.upgrade() {
+                    game.save_placements();
                     game.capture_mouse(false);
                     game.session.borrow_mut().request_stop();
                     for window in &game.windows {
@@ -686,6 +708,7 @@ pub fn launch(
             save_ports: opts.save_ports,
             volume: Cell::new(opts.prefs.volume),
             volume_changed: opts.volume_changed,
+            save_placement: opts.save_placement,
             computer: opts.computer,
             held_keys: RefCell::default(),
             modifiers: Cell::new(0),
@@ -789,10 +812,12 @@ pub fn launch(
                 }
                 if let SessionEvent::Runner(RunnerMsg::Rotation(turns)) = event {
                     tracing::debug!(turns, "rotation");
-                    let was_tall = game.rotation.replace(turns) % 2 == 1;
+                    game.rotation.set(turns);
                     let tall = turns % 2 == 1;
                     let window = ui.window();
-                    if tall != was_tall && !window.is_fullscreen() {
+                    let size = window.size();
+                    let window_tall = size.height > size.width;
+                    if tall != window_tall && !window.is_fullscreen() {
                         let (w, h) = if tall { (600.0, 800.0) } else { (960.0, 720.0) };
                         window.set_size(slint::LogicalSize::new(w, h));
                     }
@@ -821,6 +846,13 @@ pub fn launch(
         }
     });
 
+    let placements = opts.placements;
+    let saved = |i: usize| placements.get(i).copied().flatten();
+    for (i, window) in game.windows.iter().enumerate() {
+        if let Some(placement) = saved(i) {
+            placement.apply(window.window());
+        }
+    }
     let ui = game.primary();
     ui.show()?;
     crate::scale::track(ui);
@@ -831,12 +863,14 @@ pub fn launch(
     if let Some(window) = game.windows.get(1) {
         window.show()?;
         crate::scale::track(window);
-        let position = ui.window().position();
-        let width = ui.window().size().width as i32;
-        window.window().set_position(slint::PhysicalPosition::new(
-            position.x + width + 16,
-            position.y,
-        ));
+        if saved(1).is_none() {
+            let position = ui.window().position();
+            let width = ui.window().size().width as i32;
+            window.window().set_position(slint::PhysicalPosition::new(
+                position.x + width + 16,
+                position.y,
+            ));
+        }
     }
     Ok(RunningGame::Core(CoreGame {
         game,

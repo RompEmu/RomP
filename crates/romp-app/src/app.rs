@@ -221,11 +221,7 @@ pub fn run() -> anyhow::Result<()> {
     controller.start();
     crate::scale::set_factor(prefs.scale_factor());
     if let Some(p) = placement {
-        ui.window()
-            .set_size(slint::PhysicalSize::new(p.width, p.height));
-        ui.window()
-            .set_position(slint::PhysicalPosition::new(p.x, p.y));
-        ui.window().set_maximized(p.maximized);
+        p.apply(ui.window());
     }
     ui.window().on_close_requested(|| {
         with_controller(|c| c.save_session());
@@ -518,18 +514,10 @@ impl Controller {
 
     fn save_session(&self) {
         let Some(ui) = self.ui() else { return };
-        let window = ui.window();
-        let position = window.position();
-        let size = window.size();
-        let observed = Observed {
-            x: position.x,
-            y: position.y,
-            width: size.width,
-            height: size.height,
-            maximized: window.is_maximized(),
-            fullscreen: window.is_fullscreen(),
-            minimized: window.is_minimized(),
-        };
+        if let Some(game) = self.running.borrow().as_ref() {
+            game.save_placements();
+        }
+        let observed = Observed::of(ui.window());
         let store = self.shared.store.lock().unwrap();
         let previous = Placement::from_json(store.get(WINDOW_KEY).as_deref());
         if let Some(placement) = Placement::update(previous, &observed) {

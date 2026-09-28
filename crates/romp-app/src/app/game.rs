@@ -7,6 +7,7 @@ use crate::download::DownloadError;
 use crate::fetch::download_game;
 use crate::paths;
 use crate::play::{self, CoreIdentity, GameOptions};
+use crate::restore::{game_window_key, Placement};
 use crate::romm::client::Error;
 use crate::saves::{self, SramOutcome};
 use crate::store::GameDetail;
@@ -772,6 +773,27 @@ impl Controller {
                 Box::new(move |ports| {
                     let json = serde_json::to_string(&ports).expect("ports serialize");
                     store.lock().unwrap().set(&format!("ports:{id}"), &json);
+                })
+            },
+            placements: {
+                let store = self.shared.store.lock().unwrap();
+                (0..2)
+                    .map(|i| {
+                        let key = game_window_key(&detail.platform_slug, i);
+                        Placement::from_json(store.get(&key).as_deref())
+                    })
+                    .collect()
+            },
+            save_placement: {
+                let store = self.shared.store.clone();
+                let slug = detail.platform_slug.clone();
+                Box::new(move |i, observed| {
+                    let key = game_window_key(&slug, i);
+                    let store = store.lock().unwrap();
+                    let previous = Placement::from_json(store.get(&key).as_deref());
+                    if let Some(placement) = Placement::update(previous, observed) {
+                        store.set(&key, &placement.to_json());
+                    }
                 })
             },
         };
