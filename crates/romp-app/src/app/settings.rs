@@ -279,6 +279,10 @@ impl Controller {
         else {
             return;
         };
+        if text == char::from(slint::platform::Key::Escape).to_string() {
+            self.remap_waiting.set(None);
+            return self.show_remap(None);
+        }
         if device != KEYBOARD {
             return;
         }

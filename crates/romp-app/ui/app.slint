@@ -1523,9 +1523,14 @@ component RemapDialog inherits Rectangle {
         border-color: Theme.surface-selected;
         clip: true;
         remap-keys := FocusScope {
+            init => { self.focus(); }
             key-pressed(event) => {
                 if root.waiting {
                     root.key(event.text);
+                    return accept;
+                }
+                if event.text == Key.Escape {
+                    root.close();
                     return accept;
                 }
                 return reject;
@@ -1632,6 +1637,16 @@ component AboutDialog inherits Rectangle {
     callback open-website();
     background: Theme.scrim;
     TouchArea { clicked => { root.close(); } }
+    FocusScope {
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.close();
+                return accept;
+            }
+            return reject;
+        }
+    }
     Rectangle {
         width: 340px;
         height: about-box.preferred-height;
