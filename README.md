@@ -7,14 +7,14 @@
 <p>
   <a href="https://github.com/RompEmu/RompEmu/releases/tag/nightly"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/nightly.yml/badge.svg?branch=main" alt="Nightly build"></a>
   <a href="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI"></a>
-  <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-blue" alt="Platforms: macOS and Linux">
+  <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms: macOS, Windows and Linux">
   <a href="https://romm.app"><img src="https://img.shields.io/badge/RomM-5.0%2B-6f42c1" alt="Needs RomM 5.0 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-green" alt="License: GPL-3.0-or-later"></a>
 </p>
 
 Play retro games from your [RomM](https://romm.app) library, with each game running in its own sandboxed process.
 
-Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS and Linux. Nightly builds aren't notarized: on macOS, right-click Romp and choose Open the first time.
+Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS, Windows and Linux. Nightly builds aren't signed: the first time, on macOS right-click Romp and choose Open, and on Windows choose More info, then Run anyway. Windows support is new and games aren't sandboxed there yet.
 
 <p align="center">
   <img src="docs/screenshots/library.png" alt="The Romp library, showing Amiga games" width="820">
@@ -33,7 +33,7 @@ cargo build --release
 ./target/release/romp
 ```
 
-`make dist` packages the app into `dist/`: `Romp.app` and a zip on macOS, a tarball on Linux.
+`make dist` packages the app into `dist/`: `Romp.app` and a zip on macOS, a zip on Windows, a tarball on Linux. On Windows, run it from Git Bash with Make and 7-Zip installed.
 
 Enter your RomM server address (RomM 5.0 or newer). Approve Romp in RomM by scanning the code or opening the link.
 
@@ -63,7 +63,7 @@ Default keyboard layout:
 | F11 | Full screen |
 | Esc | Game menu |
 
-Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS and `~/.local/share/Romp` on Linux.
+Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS, `%LOCALAPPDATA%\Romp` on Windows and `~/.local/share/Romp` on Linux.
 
 ## License
 
