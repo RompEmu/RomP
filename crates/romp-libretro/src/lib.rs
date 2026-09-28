@@ -46,6 +46,30 @@ pub trait HwContextProvider {
     fn supports_context_type(&self, ctx_type: u32) -> bool;
     fn make_current(&self);
     fn readback_bgra(&self, width: u32, height: u32) -> Vec<u8>;
+
+    fn preferred_context_type(&self) -> u32 {
+        RETRO_HW_CONTEXT_OPENGL_CORE
+    }
+
+    /// Returns the negotiation interface version supported for `interface_type`, if any.
+    fn negotiation_version(&self, _interface_type: u32) -> Option<u32> {
+        None
+    }
+
+    /// # Safety
+    /// `iface` points to a negotiation interface the core keeps alive until it unloads.
+    unsafe fn set_negotiation_interface(&self, _iface: *const c_void) -> bool {
+        false
+    }
+
+    /// Creates whatever the context needs from the core before `context_reset` runs.
+    fn prepare(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn render_interface(&self) -> *const c_void {
+        ptr::null()
+    }
 }
 
 #[derive(Error, Debug)]
@@ -1081,8 +1105,38 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             if data.is_null() {
                 return false;
             }
-            unsafe { *(data as *mut c_uint) = sys::RETRO_HW_CONTEXT_OPENGL_CORE };
+            let preferred = with_provider(|p| p.preferred_context_type())
+                .unwrap_or(sys::RETRO_HW_CONTEXT_OPENGL_CORE);
+            unsafe { *(data as *mut c_uint) = preferred };
             true
+        }
+        sys::RETRO_ENVIRONMENT_GET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_SUPPORT => {
+            if data.is_null() {
+                return false;
+            }
+            let query =
+                unsafe { &mut *(data as *mut sys::retro_hw_render_context_negotiation_interface) };
+            match with_provider(|p| p.negotiation_version(query.interface_type)).flatten() {
+                Some(version) => {
+                    query.interface_version = version;
+                    true
+                }
+                None => false,
+            }
+        }
+        sys::RETRO_ENVIRONMENT_SET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE => {
+            if data.is_null() {
+                return false;
+            }
+            with_provider(|p| unsafe { p.set_negotiation_interface(data) }).unwrap_or(false)
+        }
+        sys::RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE => {
+            if data.is_null() {
+                return false;
+            }
+            let iface = with_provider(|p| p.render_interface()).unwrap_or(ptr::null());
+            unsafe { *(data as *mut *const c_void) = iface };
+            !iface.is_null()
         }
         sys::RETRO_ENVIRONMENT_SET_HW_RENDER => {
             if data.is_null() {
@@ -1120,6 +1174,12 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
 
 extern "C" {
     fn romp_core_log(level: c_uint, fmt: *const c_char, ...);
+}
+
+fn with_provider<R>(f: impl FnOnce(&dyn HwContextProvider) -> R) -> Option<R> {
+    let raw = HW_PROVIDER.lock().unwrap().as_ref().map(|r| r.0);
+    // SAFETY: install_hw_provider's caller keeps the provider valid while it is installed.
+    raw.map(|p| f(unsafe { &*p }))
 }
 
 unsafe extern "C" fn hw_get_proc_address(sym: *const c_char) -> *const c_void {

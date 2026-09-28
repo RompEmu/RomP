@@ -7,6 +7,7 @@ pub struct SandboxParams<'a> {
     pub system_dir: &'a Path,
     pub save_dir: &'a Path,
     pub home_dir: &'a Path,
+    pub vulkan_library: Option<&'a Path>,
     pub needs_jit: bool,
     pub permissive_mach: bool,
     pub permissive_read: bool,
@@ -108,6 +109,7 @@ fn tightened_file_read(p: &SandboxParams<'_>) -> String {
   (literal {core})
   (subpath {core_dir})
   (subpath {system})
+  {vulkan}
   (subpath {save})
   (subpath "/System")
   (subpath "/usr/lib")
@@ -137,6 +139,10 @@ fn tightened_file_read(p: &SandboxParams<'_>) -> String {
         core = sbpl_string(p.core_path),
         core_dir = parent(p.core_path),
         system = sbpl_string(p.system_dir),
+        vulkan = p
+            .vulkan_library
+            .map(|l| format!("(literal {})", sbpl_string(l)))
+            .unwrap_or_default(),
         save = sbpl_string(p.save_dir),
         prefs = sbpl_string(&home.join("Library/Preferences")),
         caches = sbpl_string(&home.join("Library/Caches")),
@@ -221,6 +227,7 @@ mod tests {
             system_dir: system,
             save_dir: save,
             home_dir: Path::new("/Users/t"),
+            vulkan_library: None,
             needs_jit: jit,
             permissive_mach,
             permissive_read,

@@ -30,6 +30,9 @@ pub fn apply(params: &SandboxParams<'_>) -> anyhow::Result<()> {
     if let Some(p) = params.rom_path.parent() {
         ro.push(p.to_path_buf());
     }
+    if let Some(library) = params.vulkan_library {
+        ro.push(library.to_path_buf());
+    }
     if params.permissive_read {
         ro.push(PathBuf::from("/"));
     }

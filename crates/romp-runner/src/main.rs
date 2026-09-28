@@ -1,12 +1,12 @@
 use anyhow::Context;
 use clap::Parser;
-use romp_libretro::{self as lr, HwContextProvider as _};
+use romp_libretro as lr;
 use romp_proto::frame::{self, FrameWriter, SrcFormat};
 use romp_proto::msg::{AppMsg, RunnerMsg};
 use romp_runner::frontend::Frontend;
 use romp_runner::ipc::Link;
 use romp_runner::state::StateManager;
-use romp_runner::{archive, audio, hw_gl, perf, sandbox};
+use romp_runner::{archive, audio, hw_gl, hw_vulkan, perf, sandbox};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
@@ -33,6 +33,8 @@ struct Args {
     load_slot: Option<u8>,
     #[arg(long)]
     jit: bool,
+    #[arg(long)]
+    vulkan: bool,
     #[arg(long, default_value_t = 100)]
     volume: u8,
     #[arg(long)]
@@ -94,21 +96,29 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     std::fs::create_dir_all(&args.system_dir)?;
     lr::set_core_dirs(Some(&args.system_dir), Some(&args.save_dir));
 
-    let hw_ctx = hw_gl::HwGlContext::create(hw_gl::FBO_WIDTH, hw_gl::FBO_HEIGHT)
-        .map(Box::new)
-        .map_err(|e| warn!("HW GL context unavailable: {e}"))
-        .ok();
+    let vulkan_library = args.vulkan.then(hw_vulkan::library_path);
+    let hw_ctx: Option<Box<dyn lr::HwContextProvider>> = match &vulkan_library {
+        Some(library) => {
+            // Cores that load Vulkan themselves find the same library through this.
+            std::env::set_var("LIBVULKAN_PATH", library);
+            let ctx = hw_vulkan::HwVulkanContext::create(library)
+                .with_context(|| format!("Vulkan is unavailable ({})", library.display()))?;
+            Some(Box::new(ctx))
+        }
+        None => hw_gl::HwGlContext::create(hw_gl::FBO_WIDTH, hw_gl::FBO_HEIGHT)
+            .map(|ctx| Box::new(ctx) as Box<dyn lr::HwContextProvider>)
+            .map_err(|e| warn!("HW GL context unavailable: {e}"))
+            .ok(),
+    };
     if let Some(ctx) = &hw_ctx {
         // SAFETY: the boxed context outlives the core and is uninstalled before it drops.
         unsafe {
-            lr::install_hw_provider(ctx.as_ref() as *const hw_gl::HwGlContext
-                as *mut hw_gl::HwGlContext
-                as *mut dyn lr::HwContextProvider)
+            lr::install_hw_provider(ctx.as_ref() as *const dyn lr::HwContextProvider as *mut _)
         };
     }
 
     archive::remove_stale_scratch(&std::env::temp_dir());
-    apply_sandbox(args)?;
+    apply_sandbox(args, vulkan_library.as_deref())?;
 
     let mut core = unsafe { lr::Core::load(&args.core) }.context("load core")?;
     lr::set_core_option_values(&args.options);
@@ -134,6 +144,8 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     if let Some(reset) = lr::take_pending_hw_reset() {
         if let Some(ctx) = &hw_ctx {
             ctx.make_current();
+            lr::with_frontend_installed(frontend, || ctx.prepare())
+                .map_err(|e| anyhow::anyhow!("the game's graphics could not start: {e}"))?;
             lr::with_frontend_installed(frontend, || unsafe { reset() });
         }
     }
@@ -227,8 +239,14 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             if frontend.hw_frame_dirty {
                 frontend.hw_frame_dirty = false;
                 if let Some(ctx) = &hw_ctx {
-                    let (w, h) =
-                        hw_gl::hw_frame_size(frontend.hw_frame_width, frontend.hw_frame_height);
+                    let (w, h) = if args.vulkan {
+                        (
+                            frontend.hw_frame_width.min(frame::MAX_W),
+                            frontend.hw_frame_height.min(frame::MAX_H),
+                        )
+                    } else {
+                        hw_gl::hw_frame_size(frontend.hw_frame_width, frontend.hw_frame_height)
+                    };
                     let pixels = ctx.readback_bgra(w, h);
                     frames.write(
                         &pixels,
@@ -310,7 +328,7 @@ fn core_home(save_dir: &std::path::Path) -> PathBuf {
     save_dir.join("home")
 }
 
-fn apply_sandbox(args: &Args) -> anyhow::Result<()> {
+fn apply_sandbox(args: &Args, vulkan_library: Option<&std::path::Path>) -> anyhow::Result<()> {
     if std::env::var_os("ROMP_NO_SANDBOX").is_some() {
         warn!("sandbox disabled by ROMP_NO_SANDBOX");
         return Ok(());
@@ -326,6 +344,7 @@ fn apply_sandbox(args: &Args) -> anyhow::Result<()> {
         system_dir: &canon(&args.system_dir),
         save_dir: &canon(&args.save_dir),
         home_dir: &home,
+        vulkan_library,
         needs_jit: args.jit,
         permissive_mach: std::env::var_os("ROMP_SANDBOX_PERMISSIVE_MACH").is_some(),
         permissive_read: std::env::var_os("ROMP_SANDBOX_PERMISSIVE_READ").is_some(),

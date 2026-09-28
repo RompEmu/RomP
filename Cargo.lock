@@ -4944,6 +4944,7 @@ name = "romp-runner"
 version = "0.4.0"
 dependencies = [
  "anyhow",
+ "ash",
  "clap",
  "cubeb",
  "landlock",

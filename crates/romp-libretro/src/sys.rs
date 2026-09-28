@@ -84,6 +84,9 @@ pub const RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY: c_uint = 31;
 pub const RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO: c_uint = 32;
 pub const RETRO_ENVIRONMENT_SET_GEOMETRY: c_uint = 37;
 pub const RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER: c_uint = 56;
+pub const RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE: c_uint = 41 | 0x10000;
+pub const RETRO_ENVIRONMENT_SET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE: c_uint = 43 | 0x10000;
+pub const RETRO_ENVIRONMENT_GET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_SUPPORT: c_uint = 73;
 pub const RETRO_ENVIRONMENT_GET_FASTFORWARDING: c_uint = 49 | 0x10000;
 pub const RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION: c_uint = 52;
 pub const RETRO_ENVIRONMENT_SET_CORE_OPTIONS: c_uint = 53;
@@ -202,6 +205,12 @@ pub struct retro_hw_render_callback {
     pub cache_context: bool,
     pub context_destroy: retro_hw_context_reset_t,
     pub debug_context: bool,
+}
+
+#[repr(C)]
+pub struct retro_hw_render_context_negotiation_interface {
+    pub interface_type: c_uint,
+    pub interface_version: c_uint,
 }
 
 #[repr(C)]

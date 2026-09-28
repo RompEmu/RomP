@@ -3,6 +3,7 @@ pub mod audio;
 pub mod audio_pipe;
 pub mod frontend;
 pub mod hw_gl;
+pub mod hw_vulkan;
 pub mod input;
 pub mod ipc;
 pub mod perf;

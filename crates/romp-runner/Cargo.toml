@@ -17,6 +17,7 @@ path = "src/main.rs"
 romp-libretro = { workspace = true }
 romp-proto = { workspace = true }
 anyhow = "1"
+ash = "0.38"
 clap = { version = "4", features = ["derive"] }
 cubeb = "0.34"
 parking_lot = "0.12"
