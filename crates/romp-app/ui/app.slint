@@ -76,46 +76,175 @@ component CountPill inherits Rectangle {
     }
 }
 
-component Connect inherits Rectangle {
-    in-out property <string> server-url;
-    in property <string> error;
-    in property <bool> busy;
-    callback connect();
+component StepDots inherits HorizontalLayout {
+    in property <int> step;
+    in property <int> count: 3;
+    alignment: center;
+    spacing: 6px;
+    for i in root.count: Rectangle {
+        width: i == root.step ? 18px : 6px;
+        height: 6px;
+        border-radius: 3px;
+        background: i == root.step ? Theme.accent : Theme.surface-selected;
+        animate width, background { duration: 200ms; easing: ease-out; }
+    }
+}
 
+component SetupFrame inherits Rectangle {
+    in property <int> step;
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <length> content-width: 400px;
+    background: Theme.background;
     VerticalLayout {
         alignment: center;
+        padding: 24px;
         HorizontalLayout {
             alignment: center;
             VerticalLayout {
-                width: 420px;
-                spacing: 14px;
-                Text { text: @tr("Connect to RomM"); font-size: Theme.font-heading; font-weight: 700; }
-                Text { text: @tr("Enter the address of your RomM server."); color: Theme.text-muted; }
-                url := LineEdit {
-                    placeholder-text: "romm.example.com";
-                    text <=> root.server-url;
-                    enabled: !root.busy;
-                    accepted => { root.connect(); }
-                }
-                if root.error != "": Text { text: root.error; color: Theme.danger; wrap: word-wrap; }
+                width: min(root.content-width, root.width - 48px);
                 HorizontalLayout {
-                    alignment: end;
-                    spacing: 10px;
-                    if root.busy: Spinner { indeterminate: true; width: 24px; height: 24px; }
-                    Button {
-                        text: @tr("Continue");
-                        primary: true;
-                        enabled: !root.busy && root.server-url != "";
-                        clicked => { root.connect(); }
-                    }
+                    alignment: center;
+                    AppTile { size: 72px; icon: root.icon; has-icon: root.has-icon; }
                 }
+                Rectangle { height: 18px; }
+                StepDots { step: root.step; }
+                Rectangle { height: 22px; }
+                @children
             }
+        }
+    }
+}
+
+component SetupTitle inherits VerticalLayout {
+    in property <string> title;
+    in property <string> subtitle;
+    spacing: 6px;
+    padding-bottom: 18px;
+    Text {
+        text: root.title;
+        font-size: Theme.font-heading;
+        font-weight: 800;
+        color: Theme.text-strong;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    Text {
+        text: root.subtitle;
+        font-size: Theme.font-body-large;
+        color: Theme.text-secondary;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+        line-height-factor: 1.35;
+    }
+}
+
+component Feature inherits HorizontalLayout {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> text;
+    spacing: 14px;
+    VerticalLayout {
+        alignment: start;
+        Rectangle {
+            width: 36px;
+            height: 36px;
+            border-radius: Theme.radius;
+            background: Theme.accent-soft;
+            Image { source: root.icon; width: 18px; height: 18px; colorize: Theme.accent-text; }
+        }
+    }
+    VerticalLayout {
+        spacing: 2px;
+        horizontal-stretch: 1;
+        Text { text: root.title; font-size: Theme.font-body-large; font-weight: 600; color: Theme.text-strong; }
+        Text { text: root.text; font-size: Theme.font-body; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.3; }
+    }
+}
+
+component Welcome inherits SetupFrame {
+    callback start();
+    step: 0;
+    SetupTitle {
+        title: @tr("Welcome to {}", Brand.name);
+        subtitle: @tr("Play the games in your RomM library on this computer.");
+    }
+    VerticalLayout {
+        spacing: 16px;
+        padding-bottom: 28px;
+        Feature {
+            icon: @image-url("icons/gamepad.svg");
+            title: @tr("Your whole library");
+            text: @tr("Browse your RomM games, and download any to play, even offline.");
+        }
+        Feature {
+            icon: @image-url("icons/save.svg");
+            title: @tr("Saves that follow you");
+            text: @tr("Saves and save states sync with RomM before and after you play.");
+        }
+        Feature {
+            icon: @image-url("icons/play.svg");
+            title: @tr("Emulators taken care of");
+            text: @tr("Romp sets up the right emulator for each game and runs it in a sandbox.");
+        }
+    }
+    HorizontalLayout {
+        alignment: center;
+        Button {
+            text: @tr("Get started");
+            primary: true;
+            clicked => { root.start(); }
+        }
+    }
+}
+
+component Connect inherits SetupFrame {
+    in-out property <string> server-url;
+    in property <string> error;
+    in property <bool> busy;
+    in property <bool> can-go-back;
+    callback connect();
+    callback back();
+    step: 1;
+    SetupTitle {
+        title: @tr("Connect to RomM");
+        subtitle: @tr("Enter the address you open RomM at in your browser.");
+    }
+    VerticalLayout {
+        spacing: 8px;
+        padding-bottom: 24px;
+        url := LineEdit {
+            placeholder-text: "romm.example.com";
+            text <=> root.server-url;
+            enabled: !root.busy;
+            accepted => { root.connect(); }
+        }
+        if root.error == "": Text {
+            text: @tr("Romp works with RomM 5.0 or newer.");
+            font-size: Theme.font-small;
+            color: Theme.text-subtle;
+        }
+        if root.error != "": Text { text: root.error; font-size: Theme.font-small; color: Theme.danger; wrap: word-wrap; }
+    }
+    HorizontalLayout {
+        spacing: 10px;
+        if root.can-go-back: Button { text: @tr("Back"); enabled: !root.busy; clicked => { root.back(); } }
+        Rectangle { horizontal-stretch: 1; }
+        if root.busy: VerticalLayout {
+            alignment: center;
+            Spinner { indeterminate: true; width: 20px; height: 20px; }
+        }
+        Button {
+            text: @tr("Continue");
+            primary: true;
+            enabled: !root.busy && root.server-url != "";
+            clicked => { root.connect(); }
         }
     }
     init => { url.focus(); }
 }
 
-component Pairing inherits Rectangle {
+component Pairing inherits SetupFrame {
     in property <image> qr;
     in property <string> link;
     in property <string> user-code;
@@ -126,52 +255,49 @@ component Pairing inherits Rectangle {
     callback open-link();
     callback cancel();
     callback retry();
-
-    VerticalLayout {
+    step: 2;
+    content-width: 420px;
+    SetupTitle {
+        title: @tr("Approve {}", Brand.name);
+        subtitle: @tr("Scan the code, or open the link, on any device signed in to RomM. Then approve this computer.");
+    }
+    HorizontalLayout {
         alignment: center;
-        HorizontalLayout {
+        spacing: 22px;
+        padding-bottom: 20px;
+        Rectangle {
+            width: 172px;
+            height: 172px;
+            border-radius: Theme.radius-large;
+            background: white;
+            Image { source: root.qr; width: 156px; height: 156px; image-rendering: pixelated; }
+        }
+        VerticalLayout {
             alignment: center;
-            VerticalLayout {
-                width: 460px;
-                spacing: 14px;
-                Text { text: @tr("Approve this device"); font-size: Theme.font-heading; font-weight: 700; }
-                Text {
-                    text: @tr("Scan the code or open the link on a device signed in to RomM, then approve Romp.");
-                    color: Theme.text-muted;
-                    wrap: word-wrap;
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Image { source: root.qr; width: 220px; height: 220px; image-rendering: pixelated; }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text { text: root.user-code; font-size: Theme.font-display; font-weight: 700; letter-spacing: 4px; }
-                }
-                Text { text: root.link; horizontal-alignment: center; color: Theme.text-muted; wrap: word-wrap; }
-                HorizontalLayout {
-                    alignment: center;
-                    spacing: 10px;
-                    Button { text: @tr("Copy link"); clicked => { root.copy-link(); } }
-                    Button { text: @tr("Open in browser"); clicked => { root.open-link(); } }
-                }
-                Text {
-                    horizontal-alignment: center;
-                    color: root.failed ? Theme.danger : Theme.text-muted;
-                    text: root.status != "" ? root.status
-                        : @tr("Waiting for approval… ({}:{}{})", floor(root.seconds-left / 60), mod(root.seconds-left, 60) < 10 ? "0" : "", mod(root.seconds-left, 60));
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    spacing: 10px;
-                    Button { text: @tr("Back"); clicked => { root.cancel(); } }
-                    if root.failed: Button { text: @tr("Try again"); primary: true; clicked => { root.retry(); } }
-                }
-            }
+            spacing: 8px;
+            Text { text: @tr("Code"); font-size: Theme.font-small; color: Theme.text-muted; }
+            Text { text: root.user-code; font-size: Theme.font-display; font-weight: 800; letter-spacing: 3px; color: Theme.text-strong; }
+            Rectangle { height: 4px; }
+            Button { text: @tr("Open in browser"); clicked => { root.open-link(); } }
+            Button { text: @tr("Copy link"); clicked => { root.copy-link(); } }
         }
     }
+    Text {
+        horizontal-alignment: center;
+        font-size: Theme.font-small;
+        color: root.failed ? Theme.danger : Theme.text-muted;
+        wrap: word-wrap;
+        text: root.status != "" ? root.status
+            : @tr("Waiting for approval… ({}:{}{})", floor(root.seconds-left / 60), mod(root.seconds-left, 60) < 10 ? "0" : "", mod(root.seconds-left, 60));
+    }
+    Rectangle { height: 20px; }
+    HorizontalLayout {
+        spacing: 10px;
+        Button { text: @tr("Back"); clicked => { root.cancel(); } }
+        Rectangle { horizontal-stretch: 1; }
+        if root.failed: Button { text: @tr("Try again"); primary: true; clicked => { root.retry(); } }
+    }
 }
-
 
 component Avatar inherits Rectangle {
     in property <string> initial;
@@ -1586,7 +1712,9 @@ export component AppWindow inherits Window {
     min-width: 520px;
     min-height: 400px;
 
-    in property <int> screen;
+    in-out property <int> screen;
+    in property <bool> first-run;
+    property <bool> in-library: root.screen >= 2 && root.screen <= 4;
     property <bool> narrow;
     changed width => { self.narrow = self.width < 1000px; }
     init => { self.narrow = self.width < 1000px; }
@@ -1741,14 +1869,14 @@ export component AppWindow inherits Window {
             MenuItem {
                 title: @tr("Refresh");
                 shortcut: @keys(Control + R);
-                enabled: root.screen >= 2 && !root.syncing && !root.offline;
+                enabled: root.in-library && !root.syncing && !root.offline;
                 activated => { root.refresh(); }
             }
             MenuSeparator { }
             MenuItem {
                 title: @tr("Settings…");
                 shortcut: @keys(Control + Comma);
-                enabled: root.screen >= 2 && root.screen != 4;
+                enabled: root.in-library && root.screen != 4;
                 activated => { root.open-settings(); }
             }
         }
@@ -1765,13 +1893,24 @@ export component AppWindow inherits Window {
         }
     }
 
+    if root.screen == 5: Welcome {
+        icon: root.app-icon;
+        has-icon: root.has-app-icon;
+        start => { root.screen = 0; }
+    }
     if root.screen == 0: Connect {
+        icon: root.app-icon;
+        has-icon: root.has-app-icon;
         server-url <=> root.server-url;
         error: root.connect-error;
         busy: root.busy;
+        can-go-back: root.first-run;
         connect => { root.connect(); }
+        back => { root.screen = 5; }
     }
     if root.screen == 1: Pairing {
+        icon: root.app-icon;
+        has-icon: root.has-app-icon;
         qr: root.qr;
         link: root.pair-link;
         user-code: root.user-code;
@@ -1784,7 +1923,7 @@ export component AppWindow inherits Window {
         retry => { root.retry-pairing(); }
     }
     library := Library {
-        visible: root.screen >= 2 && root.screen <= 4;
+        visible: root.in-library;
         compact: root.narrow;
         page-open: root.screen == 3 || root.screen == 4;
         user-label: root.user-label;

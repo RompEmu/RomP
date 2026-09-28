@@ -40,6 +40,7 @@ const SCREEN_PAIRING: i32 = 1;
 const SCREEN_LIBRARY: i32 = 2;
 const SCREEN_GAME: i32 = 3;
 const SCREEN_SETTINGS: i32 = 4;
+const SCREEN_WELCOME: i32 = 5;
 
 struct Shared {
     rt: Runtime,
@@ -327,9 +328,14 @@ impl Controller {
             }
             _ => {
                 if let Some(ui) = self.ui() {
+                    ui.set_first_run(server.is_none());
+                    ui.set_screen(if server.is_none() {
+                        SCREEN_WELCOME
+                    } else {
+                        SCREEN_CONNECT
+                    });
                     let shown = server.unwrap_or_default();
                     ui.set_server_url(shown.trim_end_matches('/').into());
-                    ui.set_screen(SCREEN_CONNECT);
                 }
             }
         }
