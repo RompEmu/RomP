@@ -13,6 +13,7 @@ use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 const UNLOAD_GRACE: Duration = Duration::from_secs(2);
+const RESUME_WAIT: Duration = Duration::from_secs(10);
 
 #[derive(Parser)]
 #[command(name = "romp-runner")]
@@ -155,10 +156,16 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
 
     let mut saves = StateManager::new(&args.save_dir);
     saves.load_initial_sram(&mut core, frontend);
-    if let Some(slot) = args.load_slot {
-        // Some cores initialise lazily on the first run.
+    // Some cores initialise lazily on the first run, and some boot on a thread of their own
+    // and refuse a state until they have, so loading is retried for a while.
+    let mut resume = args
+        .load_slot
+        .map(|slot| (slot, Instant::now() + RESUME_WAIT));
+    if let Some((slot, _)) = resume {
         core.run(frontend);
-        saves.load_state(slot, &mut core, frontend);
+        if saves.try_load_state(slot, &mut core, frontend).is_ok() {
+            resume = None;
+        }
         frontend.video_dirty = false;
         frontend.hw_frame_dirty = false;
     }
@@ -235,6 +242,18 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             let run_started = Instant::now();
             core.run(frontend);
             let run_time = run_started.elapsed();
+            if let Some((slot, give_up)) = resume {
+                match saves.try_load_state(slot, &mut core, frontend) {
+                    Ok(()) => resume = None,
+                    Err(e) if Instant::now() > give_up => {
+                        warn!("{e}");
+                        resume = None;
+                    }
+                    Err(_) => {}
+                }
+                frontend.video_dirty = false;
+                frontend.hw_frame_dirty = false;
+            }
             let readback_started = Instant::now();
             if frontend.hw_frame_dirty {
                 frontend.hw_frame_dirty = false;

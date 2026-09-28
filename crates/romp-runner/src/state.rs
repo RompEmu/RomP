@@ -99,7 +99,7 @@ impl StateManager {
                 return false;
             }
         };
-        match write_atomic(&self.dir.join(slot_file_name(slot)), &data) {
+        match write_atomic(&self.dir.join(slot_file_name(slot)), trimmed(&data)) {
             Ok(()) => true,
             Err(e) => {
                 warn!("write state: {e}");
@@ -109,20 +109,26 @@ impl StateManager {
     }
 
     pub fn load_state(&self, slot: u8, core: &mut lr::Core, frontend: &mut Frontend) -> bool {
-        let data = match std::fs::read(self.dir.join(slot_file_name(slot))) {
-            Ok(d) => d,
-            Err(e) => {
-                warn!("read state: {e}");
-                return false;
-            }
-        };
-        match core.unserialize(&data, frontend) {
+        match self.try_load_state(slot, core, frontend) {
             Ok(()) => true,
             Err(e) => {
-                warn!("unserialize: {e}");
+                warn!("{e}");
                 false
             }
         }
+    }
+
+    pub fn try_load_state(
+        &self,
+        slot: u8,
+        core: &mut lr::Core,
+        frontend: &mut Frontend,
+    ) -> Result<(), String> {
+        let data = std::fs::read(self.dir.join(slot_file_name(slot)))
+            .map_err(|e| format!("read state: {e}"))?;
+        let data = padded(data, core.serialize_size(frontend));
+        core.unserialize(&data, frontend)
+            .map_err(|e| format!("unserialize: {e}"))
     }
 
     pub fn save_on_shutdown(
@@ -138,9 +144,33 @@ impl StateManager {
     }
 }
 
+// Some cores report a fixed maximum size and leave the rest zeroed; the zeros are
+// not stored, and come back as padding when the state is loaded.
+fn trimmed(data: &[u8]) -> &[u8] {
+    let end = data.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+    &data[..end.max(1).min(data.len())]
+}
+
+fn padded(mut data: Vec<u8>, size: usize) -> Vec<u8> {
+    if data.len() < size {
+        data.resize(size, 0);
+    }
+    data
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trailing_zeros_are_not_stored_and_come_back_on_load() {
+        let state = [7, 0, 3, 0, 0, 0, 0, 0];
+        let stored = trimmed(&state);
+        assert_eq!(stored, [7, 0, 3]);
+        assert_eq!(padded(stored.to_vec(), state.len()), state);
+        assert_eq!(padded(state.to_vec(), 4), state);
+        assert_eq!(trimmed(&[0, 0]), [0]);
+    }
 
     #[test]
     fn slot_names() {
