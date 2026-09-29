@@ -72,7 +72,8 @@ pub fn backup(dir: &Path, file: &str) -> io::Result<Option<PathBuf>> {
     if !source.exists() {
         return Ok(None);
     }
-    let target = new_backup_dir(dir)?.join(file);
+    let name = Path::new(file).file_name().unwrap_or(file.as_ref());
+    let target = new_backup_dir(dir)?.join(name);
     std::fs::copy(&source, &target)?;
     prune_backups(dir);
     Ok(Some(target))
@@ -133,6 +134,9 @@ pub fn state_remote_name(slot: &str, core_id: &str, core_version: &str) -> Strin
 
 pub const SRAM_FILE: &str = "game.srm";
 pub const SRAM_SLOT: &str = "autosave";
+const ARMSX2_CARD: &str = "pcsx2/memcards/Mcd001.ps2";
+// Both PS2 emulators write the same memory card format, so a card follows the game between them.
+const PS2_CARD_EMULATOR: &str = "pcsx2";
 
 #[derive(Debug, Clone)]
 pub struct GameSaves {
@@ -140,6 +144,46 @@ pub struct GameSaves {
     pub dir: PathBuf,
     pub title: String,
     pub emulator: String,
+    /// The in-game save, relative to `dir`: save RAM, or a PS2 memory card.
+    pub save_file: String,
+    pub save_emulator: String,
+}
+
+/// The file a core keeps its in-game saves in, relative to the game's save folder, and the
+/// emulator name it syncs under.
+pub fn in_game_save(core_id: &str, dir: &Path, rom: Option<&Path>) -> (String, String) {
+    match core_id {
+        "armsx2" => (ARMSX2_CARD.into(), PS2_CARD_EMULATOR.into()),
+        // PCSX2 names each game's card after the file it was started with.
+        "pcsx2" => {
+            let card = memory_cards(dir)
+                .into_iter()
+                .next()
+                .or_else(|| {
+                    rom?.file_stem()
+                        .map(|s| format!("{}.ps2", s.to_string_lossy()))
+                })
+                .unwrap_or_else(|| "game.ps2".into());
+            (card, PS2_CARD_EMULATOR.into())
+        }
+        _ => (SRAM_FILE.into(), core_id.into()),
+    }
+}
+
+/// PS2 memory cards at the top of a save folder, newest first.
+fn memory_cards(dir: &Path) -> Vec<String> {
+    let mut cards: Vec<(std::time::SystemTime, String)> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_str()?.to_string();
+            let modified = e.metadata().ok()?.modified().ok()?;
+            name.ends_with(".ps2").then_some((modified, name))
+        })
+        .collect();
+    cards.sort_by(|a, b| b.cmp(a));
+    cards.into_iter().map(|(_, name)| name).collect()
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -165,7 +209,7 @@ pub enum Keep {
 
 impl GameSaves {
     fn sram_path(&self) -> PathBuf {
-        self.dir.join(SRAM_FILE)
+        self.dir.join(&self.save_file)
     }
 
     fn remote_sram_name(&self) -> String {
@@ -180,7 +224,11 @@ impl GameSaves {
                 }
             })
             .collect();
-        format!("{}.srm", clean.trim())
+        let extension = Path::new(&self.save_file)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("srm");
+        format!("{}.{extension}", clean.trim())
     }
 }
 
@@ -197,7 +245,7 @@ async fn upload_sram(
         .upload_save(SaveUpload {
             rom_id: game.rom_id,
             slot: SRAM_SLOT,
-            emulator: &game.emulator,
+            emulator: &game.save_emulator,
             device_id,
             session_id,
             overwrite,
@@ -210,7 +258,7 @@ async fn upload_sram(
 
 fn install_download(game: &GameSaves, bytes: &[u8]) -> Result<SramOutcome, Error> {
     let io_err = |e: io::Error| Error::Decode(format!("could not write the save: {e}"));
-    let backup = backup(&game.dir, SRAM_FILE).map_err(io_err)?;
+    let backup = backup(&game.dir, &game.save_file).map_err(io_err)?;
     replace_file(&game.sram_path(), bytes).map_err(io_err)?;
     Ok(SramOutcome::Downloaded { backup })
 }
@@ -228,7 +276,7 @@ pub async fn sync_sram(
             rom_id: game.rom_id,
             file_name: game.remote_sram_name(),
             slot: Some(SRAM_SLOT.into()),
-            emulator: Some(game.emulator.clone()),
+            emulator: Some(game.save_emulator.clone()),
             content_hash: Some(md5_hex(bytes)),
             updated_at: local_updated_at.clone().unwrap_or_default(),
             file_size_bytes: bytes.len() as u64,
@@ -318,6 +366,8 @@ pub async fn resolve_sram(
 pub fn games_with_saves(server_saves: &Path) -> Vec<i64> {
     let has_save = |dir: &Path| {
         dir.join(SRAM_FILE).exists()
+            || dir.join(ARMSX2_CARD).exists()
+            || !memory_cards(dir).is_empty()
             || STATE_SLOTS
                 .iter()
                 .any(|slot| dir.join(format!("{slot}.state")).exists())
@@ -513,6 +563,43 @@ mod tests {
         );
     }
 
+    #[test]
+    fn each_emulator_syncs_its_own_in_game_save() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            in_game_save("snes9x", dir.path(), None),
+            (SRAM_FILE.into(), "snes9x".into())
+        );
+        assert_eq!(
+            in_game_save("armsx2", dir.path(), None),
+            (ARMSX2_CARD.into(), "pcsx2".into())
+        );
+        let rom = Path::new("/roms/ps2/Ico (USA).m3u");
+        assert_eq!(
+            in_game_save("pcsx2", dir.path(), Some(rom)),
+            ("Ico (USA).ps2".into(), "pcsx2".into())
+        );
+        std::fs::write(dir.path().join("Ico (USA) (Disc 1).ps2"), b"card").unwrap();
+        assert_eq!(
+            in_game_save("pcsx2", dir.path(), Some(rom)).0,
+            "Ico (USA) (Disc 1).ps2"
+        );
+    }
+
+    #[test]
+    fn games_with_only_a_memory_card_count_as_having_saves() {
+        let root = tempfile::tempdir().unwrap();
+        let armsx2 = root.path().join("7").join(ARMSX2_CARD);
+        std::fs::create_dir_all(armsx2.parent().unwrap()).unwrap();
+        std::fs::write(&armsx2, b"card").unwrap();
+        std::fs::create_dir_all(root.path().join("8")).unwrap();
+        std::fs::write(root.path().join("8/Ico.ps2"), b"card").unwrap();
+        std::fs::create_dir_all(root.path().join("9")).unwrap();
+        let mut ids = games_with_saves(root.path());
+        ids.sort();
+        assert_eq!(ids, [7, 8]);
+    }
+
     mod sram {
         use super::super::*;
         use crate::romm::client::tests::base_of;
@@ -526,6 +613,8 @@ mod tests {
                 dir: dir.to_path_buf(),
                 title: "Zelda: Link".into(),
                 emulator: "snes9x".into(),
+                save_file: SRAM_FILE.into(),
+                save_emulator: "snes9x".into(),
             }
         }
 
@@ -605,6 +694,69 @@ mod tests {
             std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
             let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
             assert_eq!(outcome.unwrap(), SramOutcome::Uploaded);
+        }
+
+        fn ps2_game(dir: &Path) -> GameSaves {
+            let (save_file, save_emulator) = in_game_save("armsx2", dir, None);
+            GameSaves {
+                emulator: "armsx2".into(),
+                save_file,
+                save_emulator,
+                ..game(dir)
+            }
+        }
+
+        #[tokio::test]
+        async fn a_ps2_memory_card_uploads_under_the_shared_ps2_name() {
+            let server = MockServer::start().await;
+            negotiation(&server, json!([{"action": "upload", "rom_id": 5, "slot": "autosave", "save_id": null, "file_name": "Zelda- Link.ps2"}])).await;
+            completion(&server, 1).await;
+            Mock::given(method("POST"))
+                .and(path("/api/saves"))
+                .and(query_param("emulator", "pcsx2"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(save_json(1, "t")))
+                .expect(1)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let card = dir.path().join(ARMSX2_CARD);
+            std::fs::create_dir_all(card.parent().unwrap()).unwrap();
+            std::fs::write(&card, b"card").unwrap();
+            let game = ps2_game(dir.path());
+            assert_eq!(game.remote_sram_name(), "Zelda- Link.ps2");
+            let outcome = sync_sram(&client(&server), "dev", &game).await;
+            assert_eq!(outcome.unwrap(), SramOutcome::Uploaded);
+        }
+
+        #[tokio::test]
+        async fn a_downloaded_memory_card_lands_where_the_emulator_reads_it() {
+            let server = MockServer::start().await;
+            negotiation(
+                &server,
+                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 4, "file_name": "Zelda.ps2"}]),
+            )
+            .await;
+            completion(&server, 1).await;
+            Mock::given(method("GET"))
+                .and(path("/api/saves/4/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"new card".to_vec()))
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let card = dir.path().join(ARMSX2_CARD);
+            std::fs::create_dir_all(card.parent().unwrap()).unwrap();
+            std::fs::write(&card, b"old card").unwrap();
+            let outcome = sync_sram(&client(&server), "dev", &ps2_game(dir.path()))
+                .await
+                .unwrap();
+            assert_eq!(std::fs::read(&card).unwrap(), b"new card");
+            let SramOutcome::Downloaded {
+                backup: Some(backup),
+            } = outcome
+            else {
+                panic!("expected a download with a backup, got {outcome:?}");
+            };
+            assert_eq!(std::fs::read(backup).unwrap(), b"old card");
         }
 
         #[tokio::test]
@@ -794,6 +946,8 @@ mod tests {
                 dir: dir.to_path_buf(),
                 title: "Zelda".into(),
                 emulator: "snes9x".into(),
+                save_file: SRAM_FILE.into(),
+                save_emulator: "snes9x".into(),
             }
         }
 

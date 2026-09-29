@@ -94,11 +94,16 @@ impl Controller {
 
     pub(super) fn game_saves(&self, detail: &GameDetail) -> Option<GameSaves> {
         let core = core_for_platform(&detail.platform_slug)?;
+        let dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
+        let rom = detail.local_path.as_deref().map(std::path::Path::new);
+        let (save_file, save_emulator) = crate::saves::in_game_save(core.id, &dir, rom);
         Some(GameSaves {
             rom_id: detail.id,
-            dir: paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
+            dir,
             title: detail.title.clone(),
             emulator: core.id.to_string(),
+            save_file,
+            save_emulator,
         })
     }
 

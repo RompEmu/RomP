@@ -8,6 +8,11 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - A Licenses tab in the About window, with the license of Romp and of every emulator it downloads.
 - Resolution settings on Macs for N64, GameCube and Wii, PlayStation, PSP and Dreamcast, and a 4x choice for PS2. They default to 2x, or 3x for PSP.
+- PS2 memory cards sync with RomM like other in-game saves, and follow a game between ARMSX2 on a Mac and PCSX2 on Windows or Linux.
+
+### Fixed
+
+- PS2 games on Windows and Linux can save to their memory card. Each game now gets its own card in its save folder.
 
 ### Changed
 
