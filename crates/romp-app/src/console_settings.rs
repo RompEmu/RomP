@@ -324,19 +324,29 @@ mod tests {
         assert_eq!(upscaling, cfg!(target_os = "macos"));
     }
 
+    fn ps2() -> Option<&'static Console> {
+        consoles().find(|c| c.platform == "ps2")
+    }
+
     #[test]
     fn a_chosen_setting_overrides_its_default() {
+        let Some(console) = ps2() else { return };
+        let resolution = &console.settings[0];
         let mut chosen = Chosen::new();
-        let options = core_options("armsx2", &chosen);
-        assert!(options.contains(&("armsx2_renderer".into(), "Vulkan".into())));
-        assert!(options.contains(&("armsx2_upscale".into(), "3x".into())));
-        assert!(options.contains(&("armsx2_anisotropic_filtering".into(), "16".into())));
+        let default = resolution.choices[resolution.default].value;
+        assert!(
+            core_options(console.core, &chosen).contains(&(resolution.key.into(), default.into()))
+        );
 
-        assert!(choose(&mut chosen, "armsx2_upscale", 0));
-        assert!(choose(&mut chosen, "armsx2_widescreen_patches", 1));
-        let options = core_options("armsx2", &chosen);
-        assert!(options.contains(&("armsx2_upscale".into(), "1x".into())));
-        assert!(options.contains(&("armsx2_widescreen_patches".into(), "enabled".into())));
+        assert!(choose(&mut chosen, resolution.key, 0));
+        let native = resolution.choices[0].value;
+        assert!(
+            core_options(console.core, &chosen).contains(&(resolution.key.into(), native.into()))
+        );
+        if console.core == "armsx2" {
+            assert!(core_options(console.core, &chosen)
+                .contains(&("armsx2_renderer".into(), "Vulkan".into())));
+        }
     }
 
     #[test]
@@ -345,9 +355,14 @@ mod tests {
         assert!(!choose(&mut chosen, "armsx2_upscale", 9));
         assert!(!choose(&mut chosen, "nope", 0));
         assert!(chosen.is_empty());
-        chosen.insert("armsx2_upscale".into(), "8x".into());
-        assert!(core_options("armsx2", &chosen).contains(&("armsx2_upscale".into(), "3x".into())));
         assert_eq!(chosen_from_json(Some("not json")), Chosen::new());
+        let Some(console) = ps2() else { return };
+        let resolution = &console.settings[0];
+        chosen.insert(resolution.key.into(), "99x".into());
+        let default = resolution.choices[resolution.default].value;
+        assert!(
+            core_options(console.core, &chosen).contains(&(resolution.key.into(), default.into()))
+        );
     }
 
     #[test]

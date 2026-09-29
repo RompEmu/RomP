@@ -70,7 +70,7 @@ pub fn apply(params: &SandboxParams<'_>) -> anyhow::Result<()> {
         RulesetStatus::FullyEnforced => info!("landlock sandbox enforced"),
         RulesetStatus::PartiallyEnforced => warn!("landlock sandbox only partially enforced"),
         RulesetStatus::NotEnforced => {
-            warn!("landlock unsupported by this kernel; runner is unsandboxed")
+            warn!("landlock unsupported by this kernel; runner is unsandboxed");
         }
     }
     Ok(())
