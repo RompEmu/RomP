@@ -66,6 +66,19 @@ const EXTRAS: [&str; 22] = [
 
 pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch> {
     let depth = |p: &PathBuf| p.components().count();
+    if rom.platform_slug == crate::rpcs3::PLATFORM {
+        let eboot = files
+            .iter()
+            .map(|(p, _)| p)
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.eq_ignore_ascii_case("EBOOT.BIN"))
+            })
+            .min_by_key(|p| depth(p));
+        if let Some(eboot) = eboot {
+            return Some(Launch::File(eboot.clone()));
+        }
+    }
     for wanted in DISC_ORDER {
         let matching: Vec<&PathBuf> = files
             .iter()
@@ -168,6 +181,30 @@ mod tests {
         assert!(plan(&rom(true, vec![file(1, "roms/psx/Arc III/../../..", "x")])).is_err());
         assert!(plan(&rom(false, vec![file(1, "roms/psx", "/etc/passwd")])).is_err());
         assert!(plan(&rom(false, vec![file(1, "roms/psx", "")])).is_err());
+    }
+
+    #[test]
+    fn ps3_game_folders_launch_their_eboot() {
+        let mut r = rom(true, vec![]);
+        r.platform_slug = "ps3".into();
+        let files = [
+            (PathBuf::from("PS3_DISC.SFB"), 1),
+            (PathBuf::from("PS3_GAME/USRDIR/data/level.iso"), 900),
+            (PathBuf::from("PS3_GAME/USRDIR/data/EBOOT.BIN"), 5),
+            (PathBuf::from("PS3_GAME/USRDIR/EBOOT.BIN"), 10),
+        ];
+        assert_eq!(
+            launch_target(&r, &files),
+            Some(Launch::File(PathBuf::from("PS3_GAME/USRDIR/EBOOT.BIN")))
+        );
+        let iso = [
+            (PathBuf::from("Game.iso"), 1),
+            (PathBuf::from("Game.dkey"), 1),
+        ];
+        assert_eq!(
+            launch_target(&r, &iso),
+            Some(Launch::File(PathBuf::from("Game.iso")))
+        );
     }
 
     #[test]

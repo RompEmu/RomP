@@ -28,8 +28,8 @@ Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest
 - **Your RomM library:** platforms, favorites, collections and recently played, with search, sorting and box art shaped like each console's.
 - **One click to play:** Romp installs the right emulator and BIOS files. Downloaded games play offline.
 - **Saves that follow you:** in-game saves and save states sync with RomM before and after you play. If both sides changed, you choose which to keep.
-- **Sandboxed emulators:** emulators are native code downloaded from the internet, and games are files from anywhere. Each game runs in its own locked-down process that can only write to that game's saves and its own temporary files, so a buggy or malicious emulator or ROM can't touch your other files or take Romp down with it. xemu runs outside the sandbox.
-- **Many systems:** from the Atari 2600 to the PS2 and original Xbox, plus arcade and home computers. See [supported systems](#supported-systems).
+- **Sandboxed emulators:** emulators are native code downloaded from the internet, and games are files from anywhere. Each game runs in its own locked-down process that can only write to that game's saves and its own temporary files, so a buggy or malicious emulator or ROM can't touch your other files or take Romp down with it. xemu and RPCS3 run outside the sandbox.
+- **Many systems:** from the Atari 2600 to the PS3 and original Xbox, plus arcade and home computers. See [supported systems](#supported-systems).
 - **Controllers and multiplayer:** gamepads join as the next player, any key or button can be remapped, and the whole app works with a controller.
 - **Light guns, mice and keyboards:** for the systems that use them.
 - **In-game menu:** pause, restart, save slots, volume and full screen, from the Guide button or Esc.
@@ -74,12 +74,13 @@ Romp downloads the emulator for each system the first time you play one of its g
 | SNK Neo Geo Pocket and Pocket Color | Beetle NeoPop |
 | Sony PlayStation | Beetle PSX HW |
 | Sony PlayStation 2 | PCSX2 on Windows and Linux, [ARMSX2](https://github.com/RompEmu/ARMSX2) on macOS |
+| Sony PlayStation 3 | RPCS3 |
 | Sony PSP | PPSSPP |
 | Vectrex | Vecx |
 | Microsoft Xbox | xemu |
 | ZX Spectrum | Fuse |
 
-All emulators except xemu are [libretro](https://www.libretro.com) cores. Dolphin, PPSSPP, Flycast, Beetle PSX HW, Mupen64Plus-Next and the PS2 emulators draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. On macOS, Vulkan comes from the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which Romp takes from your RomM server's firmware.
+All emulators except xemu and RPCS3 are [libretro](https://www.libretro.com) cores. Dolphin, PPSSPP, Flycast, Beetle PSX HW, Mupen64Plus-Next and the PS2 emulators draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. On macOS, Vulkan comes from the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which Romp takes from your RomM server's firmware. PS3 games need the PS3 system software (`PS3UPDAT.PUP`) in RomM's PS3 firmware, and play from a game folder or an ISO.
 
 ## Running
 

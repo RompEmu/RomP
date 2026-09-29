@@ -55,7 +55,7 @@ pub struct CoreGame {
 
 pub enum RunningGame {
     Core(CoreGame),
-    External(crate::xemu::Running),
+    External(crate::external::Running),
 }
 
 impl RunningGame {

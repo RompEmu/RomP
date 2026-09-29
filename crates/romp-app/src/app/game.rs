@@ -9,6 +9,7 @@ use crate::paths;
 use crate::play::{self, CoreIdentity, GameOptions};
 use crate::restore::{game_window_key, Placement};
 use crate::romm::client::Error;
+use crate::rpcs3;
 use crate::saves::{self, SramOutcome};
 use crate::store::GameDetail;
 use crate::xemu::{self, Xemu};
@@ -32,7 +33,9 @@ fn load_image(path: &Path) -> Option<Image> {
 }
 
 fn playable(platform_slug: &str) -> bool {
-    core_for_platform(platform_slug).is_some() || platform_slug == xemu::PLATFORM
+    core_for_platform(platform_slug).is_some()
+        || platform_slug == xemu::PLATFORM
+        || (platform_slug == rpcs3::PLATFORM && rpcs3::available())
 }
 
 fn downloaded_path(detail: &GameDetail) -> Option<PathBuf> {
@@ -495,6 +498,9 @@ impl Controller {
         if detail.platform_slug == xemu::PLATFORM {
             return self.play_with_xemu(detail, rom);
         }
+        if detail.platform_slug == rpcs3::PLATFORM {
+            return self.play_with_rpcs3(detail, rom);
+        }
         let Some(core) = core_for_platform(&detail.platform_slug) else {
             return;
         };
@@ -665,7 +671,7 @@ impl Controller {
         let id = detail.id;
         let on_exit = move |code: Option<i32>, log: Vec<String>| {
             let _ = slint::invoke_from_event_loop(move || {
-                with_controller(|c| c.xemu_closed(id, code, log));
+                with_controller(|c| c.external_closed(id, "xemu", code, log));
             });
         };
         match xemu::launch(&exe, &config_path, &rom, prefs.fullscreen, on_exit) {
@@ -679,14 +685,132 @@ impl Controller {
         }
     }
 
-    fn xemu_closed(&self, id: i64, code: Option<i32>, log: Vec<String>) {
+    fn play_with_rpcs3(&self, detail: GameDetail, rom: PathBuf) {
+        self.preparing.set(true);
+        self.game_status(detail.id, "Getting ready…".into());
+        let http = self.shared.http.clone();
+        let client = self.client.borrow().clone();
+        let offline = self.offline.get();
+        self.shared.rt.spawn(async move {
+            let id = detail.id;
+            let emulator = rpcs3::emulator(paths::cores_dir().join("rpcs3"));
+            let exe = match (emulator.installed(), rpcs3::releases()) {
+                (Some(exe), _) => Ok(exe),
+                (None, Some(releases)) => {
+                    on_ui(move |c| c.game_status(id, "Installing RPCS3…".into()));
+                    emulator.install(&http, &releases).await
+                }
+                (None, None) => Err("RPCS3 has no download for this computer".into()),
+            };
+            let system = paths::system_dir();
+            let mut missing = bios::missing(&detail.platform_slug, &system);
+            if !missing.is_empty() && !offline {
+                if let Some(client) = &client {
+                    if let Ok(still) = bios::ensure(
+                        client,
+                        detail.platform_id,
+                        &detail.platform_slug,
+                        &system,
+                        &AtomicBool::new(false),
+                    )
+                    .await
+                    {
+                        missing = still;
+                    }
+                }
+            }
+            let home = rpcs3::Home(paths::data_dir().join("rpcs3"));
+            let pup = rpcs3::find_firmware(&bios::ps3_dir(&system));
+            let ready = match (exe, pup) {
+                (Ok(exe), Some(pup)) if !home.firmware_installed() => {
+                    on_ui(move |c| {
+                        c.game_status(id, "Installing the PS3 system software…".into());
+                    });
+                    tokio::task::spawn_blocking(move || {
+                        home.install_firmware(&exe, &pup).map(|()| exe)
+                    })
+                    .await
+                    .unwrap_or_else(|e| Err(e.to_string()))
+                }
+                (exe, _) => exe,
+            };
+            on_ui(move |c| c.launch_rpcs3(detail, rom, ready, missing));
+        });
+    }
+
+    fn launch_rpcs3(
+        &self,
+        detail: GameDetail,
+        rom: PathBuf,
+        ready: Result<PathBuf, String>,
+        missing: Vec<String>,
+    ) {
+        self.preparing.set(false);
+        let exe = match ready {
+            Ok(exe) => exe,
+            Err(e) => return self.game_status(detail.id, e),
+        };
+        if !missing.is_empty() {
+            return self.game_status(detail.id, bios::missing_message(&missing));
+        }
+        let boot = match rpcs3::boot_path(&rom) {
+            Ok(boot) => boot.to_path_buf(),
+            Err(e) => return self.game_status(detail.id, e),
+        };
+        let home = rpcs3::Home(paths::data_dir().join("rpcs3"));
+        let prefs = self.prefs.get();
+        let names: Vec<String> = self
+            .gamepads
+            .borrow()
+            .connected()
+            .into_iter()
+            .map(|pad| pad.name)
+            .collect();
+        let keyboard = rpcs3::keyboard_player(
+            self.players.borrow().player(crate::players::KEYBOARD),
+            names.len(),
+        );
+        let bindings = rpcs3::keyboard_bindings(&self.mappings.borrow());
+        let input = rpcs3::input_yml(
+            &rpcs3::pad_devices(&names),
+            keyboard.map(|player| (player, bindings.as_slice())),
+        );
+        let config = rpcs3::config_yml(&rpcs3::LaunchConfig {
+            fullscreen: prefs.fullscreen,
+            volume: prefs.volume,
+        });
+        let config_path = home.0.join("romp.yml");
+        let written = std::fs::create_dir_all(&home.0)
+            .and_then(|()| std::fs::write(&config_path, config))
+            .and_then(|()| home.write_input(&input));
+        if let Err(e) = written {
+            return self.game_status(detail.id, format!("Could not write RPCS3's settings: {e}"));
+        }
+        let id = detail.id;
+        let on_exit = move |code: Option<i32>, log: Vec<String>| {
+            let _ = slint::invoke_from_event_loop(move || {
+                with_controller(|c| c.external_closed(id, "RPCS3", code, log));
+            });
+        };
+        match rpcs3::launch(&exe, &home, &config_path, &boot, prefs.fullscreen, on_exit) {
+            Ok(running) => {
+                *self.running.borrow_mut() = Some(play::RunningGame::External(running));
+                self.game_status(detail.id, String::new());
+                self.record_play(detail.id);
+                *self.playing.borrow_mut() = Some(detail);
+            }
+            Err(e) => self.game_status(detail.id, format!("Could not start RPCS3: {e}")),
+        }
+    }
+
+    fn external_closed(&self, id: i64, name: &str, code: Option<i32>, log: Vec<String>) {
         self.game_closed(None);
         if code != Some(0) {
             let detail = log.last().cloned().unwrap_or_default();
-            tracing::warn!("xemu exited with {code:?}:\n{}", log.join("\n"));
+            tracing::warn!("{name} exited with {code:?}:\n{}", log.join("\n"));
             self.game_status(
                 id,
-                format!("xemu stopped unexpectedly. {detail}")
+                format!("{name} stopped unexpectedly. {detail}")
                     .trim()
                     .to_string(),
             );

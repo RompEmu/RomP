@@ -25,6 +25,11 @@ const XEMU: Notice = notice(
     "GPL-2.0",
     "https://github.com/xemu-project/xemu/blob/master/LICENSE",
 );
+const RPCS3: Notice = notice(
+    "RPCS3",
+    "GPL-2.0",
+    "https://github.com/RPCS3/rpcs3/blob/master/LICENSE",
+);
 const MOLTENVK: Notice = notice(
     "MoltenVK",
     "Apache-2.0",
@@ -228,6 +233,9 @@ pub fn notices() -> Vec<Notice> {
     cores.sort_by_key(|c| c.name.to_lowercase());
     cores.dedup_by_key(|c| c.id);
     notices.extend(cores.into_iter().filter_map(core_notice));
+    if crate::rpcs3::available() {
+        notices.push(RPCS3);
+    }
     if crate::xemu::available() {
         notices.push(XEMU);
     }

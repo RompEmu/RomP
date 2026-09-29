@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicBool;
 
 const DC_FILES: [&str; 4] = ["dc_boot.bin", "dc_flash.bin", "naomi.zip", "awbios.zip"];
 const XEMU_DIR: &str = "xemu";
+const RPCS3_DIR: &str = "rpcs3";
 const PCSX2_BIOS_DIR: &str = "pcsx2/bios";
 const PS2_BIOS_SIZE: std::ops::RangeInclusive<u64> = 4 << 20..=8 << 20;
 pub const ARCADE: [&str; 6] = ["arcade", "neogeoaes", "neogeomvs", "cps1", "cps2", "cps3"];
@@ -42,6 +43,8 @@ pub fn placement(platform_slug: &str, file_name: &str) -> PathBuf {
         Path::new("fbneo").join(file_name)
     } else if platform_slug == crate::xemu::PLATFORM {
         Path::new(XEMU_DIR).join(file_name)
+    } else if platform_slug == crate::rpcs3::PLATFORM {
+        Path::new(RPCS3_DIR).join(file_name)
     } else if uses_pcsx2(platform_slug) {
         Path::new(PCSX2_BIOS_DIR).join(file_name)
     } else if platform_slug == "philips-cd-i" {
@@ -102,7 +105,17 @@ pub fn xbox_dir(system_dir: &Path) -> PathBuf {
     system_dir.join(XEMU_DIR)
 }
 
+pub fn ps3_dir(system_dir: &Path) -> PathBuf {
+    system_dir.join(RPCS3_DIR)
+}
+
 pub fn missing(platform_slug: &str, system_dir: &Path) -> Vec<String> {
+    if platform_slug == crate::rpcs3::PLATFORM {
+        return match crate::rpcs3::find_firmware(&ps3_dir(system_dir)) {
+            Some(_) => Vec::new(),
+            None => vec![crate::rpcs3::FIRMWARE.to_string()],
+        };
+    }
     if platform_slug == crate::xemu::PLATFORM {
         let found = crate::xemu::find_bios(&xbox_dir(system_dir));
         return [
@@ -221,6 +234,19 @@ mod tests {
         assert_eq!(missing("xbox", dir.path()).len(), 1);
         std::fs::write(dir.path().join("xemu/bios.bin"), vec![0u8; 262_144]).unwrap();
         assert!(missing("xbox", dir.path()).is_empty());
+    }
+
+    #[test]
+    fn ps3_needs_the_system_software_in_rpcs3s_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            placement("ps3", "PS3UPDAT.PUP"),
+            PathBuf::from("rpcs3/PS3UPDAT.PUP")
+        );
+        assert_eq!(missing("ps3", dir.path()), [crate::rpcs3::FIRMWARE]);
+        std::fs::create_dir_all(ps3_dir(dir.path())).unwrap();
+        std::fs::write(ps3_dir(dir.path()).join("PS3UPDAT.PUP"), b"fw").unwrap();
+        assert!(missing("ps3", dir.path()).is_empty());
     }
 
     #[test]

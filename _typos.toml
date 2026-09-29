@@ -2,6 +2,8 @@
 sav = "sav"
 typ = "typ"
 UE = "UE"
+UPDAT = "UPDAT"
+updat = "updat"
 
 [files]
 extend-exclude = ["*.png", "*.ico", "LICENSE"]

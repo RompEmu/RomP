@@ -1,17 +1,12 @@
+use crate::external::{Asset, Emulator, Running};
 use crate::input::{A, B, DOWN, L, L2, L3, LEFT, R, R2, R3, RIGHT, SELECT, START, UP, X, Y};
 use crate::mapping::Mappings;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use slint::platform::Key;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub const PLATFORM: &str = "xbox";
-
-#[derive(Debug, Deserialize)]
-pub struct Asset {
-    pub name: String,
-    pub browser_download_url: String,
-}
 
 fn asset_suffix() -> Option<&'static str> {
     if cfg!(target_os = "macos") {
@@ -343,19 +338,6 @@ pub const RELEASES: &str = "https://api.github.com/repos/xemu-project/xemu/relea
 pub const HDD_IMAGE: &str =
     "https://github.com/xemu-project/xemu-hdd-image/releases/download/1.0/xbox_hdd.qcow2.zip";
 const HDD_FILE: &str = "xbox_hdd.qcow2";
-const LOG_TAIL: usize = 40;
-
-#[derive(Deserialize)]
-struct Release {
-    tag_name: String,
-    assets: Vec<Asset>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Manifest {
-    version: String,
-    exe: String,
-}
 
 fn exe_in(dir: &Path, asset: &str) -> PathBuf {
     if cfg!(target_os = "macos") {
@@ -368,74 +350,31 @@ fn exe_in(dir: &Path, asset: &str) -> PathBuf {
 }
 
 pub struct Xemu {
-    dir: PathBuf,
+    emulator: Emulator,
 }
 
 impl Xemu {
     pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+        Self {
+            emulator: Emulator {
+                name: "xemu",
+                dir,
+                pick: release_asset,
+                exe_in,
+            },
+        }
     }
 
     pub fn installed(&self) -> Option<PathBuf> {
-        let manifest: Manifest =
-            serde_json::from_slice(&std::fs::read(self.dir.join("manifest.json")).ok()?).ok()?;
-        let exe = self.dir.join(manifest.exe);
-        exe.is_file().then_some(exe)
+        self.emulator.installed()
     }
 
     pub async fn install(&self, http: &reqwest::Client, releases: &str) -> Result<PathBuf, String> {
-        let unreachable = |_| "Could not reach GitHub to download xemu".to_string();
-        let release: Release = http
-            .get(releases)
-            .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-            .send()
-            .await
-            .map_err(unreachable)?
-            .error_for_status()
-            .map_err(|e| format!("xemu is not available right now ({e})"))?
-            .json()
-            .await
-            .map_err(|e| e.to_string())?;
-        let asset =
-            release_asset(&release.assets).ok_or("xemu has no download for this computer")?;
-        let bytes = http
-            .get(&asset.browser_download_url)
-            .send()
-            .await
-            .map_err(unreachable)?
-            .error_for_status()
-            .map_err(|e| e.to_string())?
-            .bytes()
-            .await
-            .map_err(|e| e.to_string())?;
-        let version_dir = self.dir.join(&release.tag_name);
-        let name = asset.name.clone();
-        let dir = version_dir.clone();
-        tokio::task::spawn_blocking(move || unpack(&bytes, &dir, &name))
-            .await
-            .map_err(|e| e.to_string())??;
-        let exe = exe_in(&version_dir, &asset.name);
-        if !exe.is_file() {
-            return Err("The xemu download did not contain the emulator".into());
-        }
-        let manifest = Manifest {
-            version: release.tag_name.clone(),
-            exe: exe
-                .strip_prefix(&self.dir)
-                .map_err(|e| e.to_string())?
-                .to_string_lossy()
-                .into_owned(),
-        };
-        std::fs::write(
-            self.dir.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest).expect("manifest json"),
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(exe)
+        self.emulator.install(http, releases).await
     }
 
     pub fn hdd_template(&self) -> PathBuf {
-        self.dir.join(HDD_FILE)
+        self.emulator.dir.join(HDD_FILE)
     }
 
     pub async fn ensure_hdd_template(
@@ -477,39 +416,6 @@ impl Xemu {
     }
 }
 
-fn unpack(bytes: &[u8], dir: &Path, name: &str) -> Result<(), String> {
-    let _ = std::fs::remove_dir_all(dir);
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    if name.ends_with(".zip") && cfg!(target_os = "macos") {
-        let zip = dir.join(name);
-        std::fs::write(&zip, bytes).map_err(|e| e.to_string())?;
-        let status = std::process::Command::new("/usr/bin/ditto")
-            .args(["-x", "-k"])
-            .arg(&zip)
-            .arg(dir)
-            .status()
-            .map_err(|e| e.to_string())?;
-        let _ = std::fs::remove_file(&zip);
-        if !status.success() {
-            return Err("Could not unpack xemu".into());
-        }
-    } else if name.ends_with(".zip") {
-        zip::ZipArchive::new(std::io::Cursor::new(bytes))
-            .and_then(|mut archive| archive.extract(dir))
-            .map_err(|_| "Could not unpack xemu".to_string())?;
-    } else {
-        let exe = dir.join(name);
-        std::fs::write(&exe, bytes).map_err(|e| e.to_string())?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
-                .map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}
-
 pub fn prepare_hdd(template: &Path, save_dir: &Path) -> std::io::Result<PathBuf> {
     let hdd = save_dir.join(HDD_FILE);
     if !hdd.exists() {
@@ -519,23 +425,6 @@ pub fn prepare_hdd(template: &Path, save_dir: &Path) -> std::io::Result<PathBuf>
     Ok(hdd)
 }
 
-pub struct Running {
-    child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
-}
-
-impl Running {
-    pub fn wait_exit(&self, timeout: std::time::Duration) -> bool {
-        let deadline = std::time::Instant::now() + timeout;
-        while std::time::Instant::now() < deadline {
-            if !matches!(self.child.lock().unwrap().try_wait(), Ok(None)) {
-                return true;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        }
-        false
-    }
-}
-
 pub fn launch(
     exe: &Path,
     config: &Path,
@@ -543,46 +432,16 @@ pub fn launch(
     fullscreen: bool,
     on_exit: impl FnOnce(Option<i32>, Vec<String>) + Send + 'static,
 ) -> std::io::Result<Running> {
-    use std::io::BufRead;
     let mut command = std::process::Command::new(exe);
     command
         .arg("-config_path")
         .arg(config)
         .arg("-dvd_path")
-        .arg(dvd)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped());
+        .arg(dvd);
     if fullscreen {
         command.arg("-full-screen");
     }
-    let mut child = command.spawn()?;
-    let stderr = child.stderr.take().expect("stderr is piped");
-    let child = std::sync::Arc::new(std::sync::Mutex::new(child));
-    let waiter = child.clone();
-    std::thread::spawn(move || {
-        let mut tail = std::collections::VecDeque::new();
-        for line in std::io::BufReader::new(stderr)
-            .lines()
-            .map_while(Result::ok)
-        {
-            tracing::debug!("[xemu] {line}");
-            if tail.len() == LOG_TAIL {
-                tail.pop_front();
-            }
-            tail.push_back(line);
-        }
-        let code = loop {
-            match waiter.lock().unwrap().try_wait() {
-                Ok(Some(status)) => break status.code(),
-                Ok(None) => {}
-                Err(_) => break None,
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        };
-        on_exit(code, tail.into());
-    });
-    Ok(Running { child })
+    crate::external::launch(command, "xemu", on_exit)
 }
 
 #[cfg(test)]
