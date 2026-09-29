@@ -29,7 +29,7 @@ const fn choice(label: &'static str, value: &'static str) -> Choice {
     Choice { label, value }
 }
 
-const RESOLUTION_DETAIL: &str = "Draws the game at a multiple of the console's resolution. Higher is sharper and needs a faster computer.";
+const RESOLUTION_DETAIL: &str = "Higher is sharper and needs a faster computer.";
 const ANISOTROPIC_DETAIL: &str = "Keeps textures sharp on floors and walls seen at an angle.";
 const WIDESCREEN_DETAIL: &str = "Shows a wider picture in games that have a widescreen patch.";
 
