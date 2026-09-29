@@ -19,3 +19,5 @@ updates:
     groups:
       crates:
         update-types: [minor, patch]
+      crates-breaking:
+        update-types: [major]
