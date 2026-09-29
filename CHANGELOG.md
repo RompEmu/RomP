@@ -12,6 +12,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - On Windows and Linux, GameCube, Wii, PSP, Dreamcast, PlayStation, N64 and PS2 games draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. N64 gets the accurate paraLLEl-RDP renderer, and the resolution settings in the Consoles tab.
 
+### Fixed
+
+- Games RomM hasn't hashed, such as large PS3 ISOs, no longer fail to download with "the downloaded file is corrupted". Romp checks their size instead.
+
 ## [0.6.0] - 2026-09-29
 
 ### Added

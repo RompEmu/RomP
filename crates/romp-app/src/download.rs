@@ -51,7 +51,7 @@ pub fn sha1_file(path: &Path) -> std::io::Result<String> {
 }
 
 async fn matches(path: &Path, sha1: Option<&str>, size: Option<u64>) -> bool {
-    let Some(expected) = sha1 else {
+    let Some(expected) = sha1.filter(|h| !h.is_empty()) else {
         let len = tokio::fs::metadata(path).await.map(|m| m.len()).ok();
         return size.is_none() || len == size;
     };
@@ -199,6 +199,26 @@ mod tests {
         assert_eq!(std::fs::read(&dest).unwrap(), BODY);
         assert_eq!(*seen.lock().unwrap(), BODY.len() as u64);
         assert!(!dest.with_file_name("game.bin.part").exists());
+    }
+
+    #[tokio::test]
+    async fn files_the_server_did_not_hash_are_checked_by_size() {
+        let server = MockServer::start().await;
+        serve(&server).await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("game.iso");
+        download_file(
+            &client,
+            url,
+            &dest,
+            Some(""),
+            Some(BODY.len() as u64),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), BODY);
     }
 
     #[tokio::test]
