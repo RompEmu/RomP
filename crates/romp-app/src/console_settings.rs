@@ -1,4 +1,4 @@
-use crate::cores::{core_for_platform, default_options};
+use crate::cores::{core_for_platform, default_options, uses_vulkan};
 use std::collections::BTreeMap;
 
 pub const STORE_KEY: &str = "console_settings";
@@ -20,6 +20,8 @@ pub struct Console {
     pub name: &'static str,
     pub platform: &'static str,
     pub core: &'static str,
+    /// Settings for an emulator's Vulkan renderer only apply where it draws through Vulkan.
+    pub vulkan: bool,
     pub settings: &'static [Setting],
 }
 
@@ -36,6 +38,7 @@ static CONSOLES: &[Console] = &[
         name: "PlayStation 2",
         platform: "ps2",
         core: "armsx2",
+        vulkan: true,
         settings: &[
             Setting {
                 key: "armsx2_upscale",
@@ -45,6 +48,7 @@ static CONSOLES: &[Console] = &[
                     choice("Native", "1x"),
                     choice("2x", "2x"),
                     choice("3x", "3x"),
+                    choice("4x", "4x"),
                 ],
                 default: 2,
             },
@@ -74,6 +78,7 @@ static CONSOLES: &[Console] = &[
         name: "PlayStation 2",
         platform: "ps2",
         core: "pcsx2",
+        vulkan: false,
         settings: &[
             Setting {
                 key: "pcsx2_upscale_multiplier",
@@ -104,13 +109,100 @@ static CONSOLES: &[Console] = &[
             },
         ],
     },
+    Console {
+        name: "Nintendo 64",
+        platform: "n64",
+        core: "mupen64plus_next",
+        vulkan: true,
+        settings: &[Setting {
+            key: "mupen64plus-parallel-rdp-upscaling",
+            label: "Resolution",
+            detail: RESOLUTION_DETAIL,
+            choices: &[
+                choice("Native", "1x"),
+                choice("2x", "2x"),
+                choice("4x", "4x"),
+            ],
+            default: 1,
+        }],
+    },
+    Console {
+        name: "GameCube and Wii",
+        platform: "ngc",
+        core: "dolphin",
+        vulkan: true,
+        settings: &[Setting {
+            key: "dolphin_efb_scale",
+            label: "Resolution",
+            detail: RESOLUTION_DETAIL,
+            choices: &[
+                choice("Native", "1"),
+                choice("2x (720p)", "2"),
+                choice("3x (1080p)", "3"),
+            ],
+            default: 1,
+        }],
+    },
+    Console {
+        name: "PlayStation",
+        platform: "psx",
+        core: "mednafen_psx_hw",
+        vulkan: true,
+        settings: &[Setting {
+            key: "beetle_psx_hw_internal_resolution",
+            label: "Resolution",
+            detail: RESOLUTION_DETAIL,
+            choices: &[
+                choice("Native", "1x(native)"),
+                choice("2x", "2x"),
+                choice("4x", "4x"),
+            ],
+            default: 1,
+        }],
+    },
+    Console {
+        name: "PSP",
+        platform: "psp",
+        core: "ppsspp",
+        vulkan: true,
+        settings: &[Setting {
+            key: "ppsspp_internal_resolution",
+            label: "Resolution",
+            detail: RESOLUTION_DETAIL,
+            choices: &[
+                choice("Native", "480x272"),
+                choice("2x", "960x544"),
+                choice("3x", "1440x816"),
+                choice("4x", "1920x1088"),
+            ],
+            default: 2,
+        }],
+    },
+    Console {
+        name: "Dreamcast",
+        platform: "dc",
+        core: "flycast",
+        vulkan: true,
+        settings: &[Setting {
+            key: "reicast_internal_resolution",
+            label: "Resolution",
+            detail: RESOLUTION_DETAIL,
+            choices: &[
+                choice("Native", "640x480"),
+                choice("2x", "1280x960"),
+                choice("3x", "1920x1440"),
+            ],
+            default: 1,
+        }],
+    },
 ];
 
 /// The consoles whose emulator on this computer has settings.
 pub fn consoles() -> impl Iterator<Item = &'static Console> {
-    CONSOLES
-        .iter()
-        .filter(|c| core_for_platform(c.platform).is_some_and(|core| core.id == c.core))
+    CONSOLES.iter().filter(|c| {
+        core_for_platform(c.platform).is_some_and(|core| core.id == c.core)
+            && (!c.vulkan || uses_vulkan(c.core))
+    })
 }
 
 pub type Chosen = BTreeMap<String, String>;
@@ -146,8 +238,7 @@ pub fn choose(chosen: &mut Chosen, key: &str, index: usize) -> bool {
 /// The core options a game starts with: the core's own defaults, then its console settings.
 pub fn core_options(core_id: &str, chosen: &Chosen) -> Vec<(String, String)> {
     let mut options = default_options(core_id);
-    for setting in CONSOLES
-        .iter()
+    for setting in consoles()
         .filter(|c| c.core == core_id)
         .flat_map(|c| c.settings)
     {
@@ -171,21 +262,66 @@ mod tests {
         }
     }
 
+    // The largest picture each console draws natively, which the resolution choices scale.
+    fn native(core: &str) -> (u32, u32) {
+        match core {
+            "armsx2" | "pcsx2" => (640, 512),
+            "dolphin" => (640, 528),
+            "ppsspp" => (480, 272),
+            _ => (640, 480),
+        }
+    }
+
+    fn output_size(console: &Console, value: &str) -> (u32, u32) {
+        if let Some((w, h)) = value
+            .split_once('x')
+            .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
+        {
+            return (w, h);
+        }
+        let factor: u32 = value
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .unwrap();
+        let (w, h) = native(console.core);
+        (w * factor, h * factor)
+    }
+
     #[test]
-    fn upscaled_frames_fit_the_frame_buffer() {
-        let widest = |console: &Console| {
-            console.settings[0]
-                .choices
-                .iter()
-                .filter_map(|c| c.value.split('x').next()?.parse::<u32>().ok())
-                .max()
-                .unwrap()
-        };
-        let armsx2 = CONSOLES.iter().find(|c| c.core == "armsx2").unwrap();
-        assert!(640 * widest(armsx2) <= romp_proto::frame::MAX_W);
-        assert!(512 * widest(armsx2) <= romp_proto::frame::MAX_H);
-        let pcsx2 = CONSOLES.iter().find(|c| c.core == "pcsx2").unwrap();
-        assert!(640 * widest(pcsx2) <= 1920);
+    fn every_resolution_choice_fits_the_frame_buffer() {
+        for console in CONSOLES {
+            let (max_w, max_h) = if console.vulkan {
+                (romp_proto::frame::MAX_W, romp_proto::frame::MAX_H)
+            } else {
+                (1920, 1080)
+            };
+            let setting = &console.settings[0];
+            assert_eq!(setting.label, "Resolution", "{}", console.core);
+            for choice in setting.choices {
+                let (w, h) = output_size(console, choice.value);
+                assert!(w <= max_w, "{} {} is {w} wide", console.core, choice.value);
+                if console.vulkan {
+                    assert!(h <= max_h, "{} {} is {h} tall", console.core, choice.value);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn vulkan_settings_only_show_where_the_emulator_uses_vulkan() {
+        let listed: Vec<_> = consoles().map(|c| c.core).collect();
+        assert_eq!(listed.contains(&"dolphin"), cfg!(target_os = "macos"));
+        assert_eq!(
+            listed.contains(&"mupen64plus_next"),
+            cfg!(target_os = "macos")
+        );
+        let n64 = core_options("mupen64plus_next", &Chosen::new());
+        let upscaling = n64
+            .iter()
+            .any(|(k, _)| k == "mupen64plus-parallel-rdp-upscaling");
+        assert_eq!(upscaling, cfg!(target_os = "macos"));
     }
 
     #[test]
@@ -215,9 +351,17 @@ mod tests {
     }
 
     #[test]
-    fn only_the_emulator_this_computer_uses_is_listed() {
-        let listed: Vec<_> = consoles().map(|c| c.core).collect();
-        let ps2 = core_for_platform("ps2").unwrap().id;
-        assert!(listed.iter().all(|&core| core == ps2), "{listed:?}");
+    fn only_the_emulators_this_computer_uses_are_listed() {
+        for console in consoles() {
+            assert_eq!(
+                core_for_platform(console.platform).unwrap().id,
+                console.core
+            );
+        }
+        assert_eq!(
+            consoles().filter(|c| c.platform == "ps2").count(),
+            1,
+            "one PS2 emulator per computer"
+        );
     }
 }

@@ -7,6 +7,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Added
 
 - A Licenses tab in the About window, with the license of Romp and of every emulator it downloads.
+- Resolution settings on Macs for N64, GameCube and Wii, PlayStation, PSP and Dreamcast, and a 4x choice for PS2. They default to 2x, or 3x for PSP.
 
 ### Changed
 

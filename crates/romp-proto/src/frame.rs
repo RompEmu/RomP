@@ -3,8 +3,8 @@ use std::ffi::CString;
 use std::io;
 use std::sync::atomic::{fence, AtomicU64, Ordering};
 
-pub const MAX_W: u32 = 2048;
-pub const MAX_H: u32 = 2048;
+pub const MAX_W: u32 = 4096;
+pub const MAX_H: u32 = 4096;
 
 const MAGIC: u64 = 0xCA27_F4A3_0000_0001;
 const HEADER: usize = 64;
@@ -417,7 +417,7 @@ mod tests {
         let name = unique_name();
         let reader = FrameReader::create(&name).unwrap();
         let mut writer = FrameWriter::open(&name).unwrap();
-        let (w, h) = (3000u32, 3u32);
+        let (w, h) = (MAX_W + 100, 3u32);
         let src = vec![0x7fu8; (w * h * 4) as usize];
         writer.write(&src, w, h, (w * 4) as usize, SrcFormat::Xrgb8888, 4.0 / 3.0);
         let mut out = Vec::new();
