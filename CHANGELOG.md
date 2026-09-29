@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-29
+
 ### Changed
 
 - PS2 games play with ARMSX2 on Macs, in place of Play!. It needs a PS2 BIOS in the platform's firmware on your RomM server.
@@ -75,7 +77,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/RompEmu/RompEmu/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/RompEmu/RompEmu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/RompEmu/RompEmu/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/RompEmu/RompEmu/compare/v0.1.0...v0.2.0
