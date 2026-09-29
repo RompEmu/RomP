@@ -131,7 +131,7 @@ thread_local! {
 fn with_controller(f: impl FnOnce(&Rc<Controller>)) {
     let controller = CONTROLLER.with(|c| c.borrow().clone());
     if let Some(c) = controller {
-        f(&c)
+        f(&c);
     }
 }
 
@@ -276,10 +276,10 @@ impl Controller {
         ui.on_open_settings(|| with_controller(|c| c.open_settings()));
         ui.on_settings_section_changed(|i| with_controller(|c| c.settings_section_changed(i)));
         ui.on_console_option_changed(|key, index| {
-            with_controller(|c| c.console_option_changed(key.to_string(), index))
+            with_controller(|c| c.console_option_changed(key.to_string(), index));
         });
         ui.on_assign_player(|key, player| {
-            with_controller(|c| c.assign_player(key.to_string(), player))
+            with_controller(|c| c.assign_player(key.to_string(), player));
         });
         ui.on_clear_images(|| with_controller(|c| c.clear_images()));
         ui.on_prefs_changed(|| with_controller(|c| c.prefs_changed()));
@@ -294,7 +294,7 @@ impl Controller {
             with_controller(|c| {
                 c.select(key.to_string());
                 c.leave_page();
-            })
+            });
         });
         ui.on_toggle_section(|key| with_controller(|c| c.toggle_section(key.to_string())));
         ui.on_new_collection(|| with_controller(|c| c.new_collection(None)));
@@ -302,10 +302,10 @@ impl Controller {
         ui.on_delete_collection(|key| with_controller(|c| c.delete_collection(key.to_string())));
         ui.on_toggle_favorite(|| with_controller(|c| c.toggle_favorite()));
         ui.on_toggle_membership(|key, on| {
-            with_controller(|c| c.toggle_membership(key.to_string(), on))
+            with_controller(|c| c.toggle_membership(key.to_string(), on));
         });
         ui.on_new_collection_with_game(|| {
-            with_controller(|c| c.new_collection(c.current_game_id()))
+            with_controller(|c| c.new_collection(c.current_game_id()));
         });
         ui.on_dialog_accepted(|value| with_controller(|c| c.dialog_accepted(value.to_string())));
         ui.on_dialog_cancelled(|| with_controller(|c| c.close_dialog()));
@@ -314,7 +314,7 @@ impl Controller {
         ui.on_columns_changed(|n| with_controller(|c| c.set_columns(n)));
         ui.on_row_shown(|i| with_controller(|c| c.row_shown(i.max(0) as usize)));
         ui.on_refresh(|| with_controller(|c| c.sync()));
-        ui.on_open_game(|id| with_controller(|c| c.open_game(id as i64)));
+        ui.on_open_game(|id| with_controller(|c| c.open_game(i64::from(id))));
         ui.on_back_to_library(|| with_controller(|c| c.back_to_library()));
         crate::mouse::on_back_button(|id| with_controller(|c| c.mouse_back(id)));
         crate::mouse::on_exit(|| with_controller(|c| c.save_session()));
@@ -333,7 +333,7 @@ impl Controller {
         let token = server.as_deref().and_then(|s| self.shared.tokens.load(s));
         match (server.as_deref().map(url::Url::parse), token) {
             (Some(Ok(base)), Some(token)) => {
-                self.enter_library(Client::new(base).with_token(token))
+                self.enter_library(Client::new(base).with_token(token));
             }
             _ => {
                 if let Some(ui) = self.ui() {
@@ -660,7 +660,7 @@ impl Controller {
         *self.offline_retry.borrow_mut() = offline.then(|| {
             let timer = Timer::default();
             timer.start(TimerMode::Repeated, OFFLINE_RETRY, || {
-                with_controller(|c| c.sync())
+                with_controller(|c| c.sync());
             });
             timer
         });

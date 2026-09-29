@@ -151,7 +151,11 @@ fn pad_state(pad: &gilrs::Gamepad<'_>, mappings: &Mappings, model: &str) -> PadS
             state.buttons |= 1 << button;
         }
     }
-    let trigger = |b: Button| (pad.button_data(b).map_or(0.0, |d| d.value()) * 32767.0) as i16;
+    let trigger = |b: Button| {
+        (pad.button_data(b)
+            .map_or(0.0, gilrs::ev::state::ButtonData::value)
+            * 32767.0) as i16
+    };
     state.axes = [
         input::stick(pad.value(Axis::LeftStickX), false),
         input::stick(pad.value(Axis::LeftStickY), true),

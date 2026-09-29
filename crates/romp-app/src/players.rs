@@ -49,7 +49,7 @@ mod tests {
     use super::*;
 
     fn pads(keys: &[&str]) -> Vec<String> {
-        keys.iter().map(|k| k.to_string()).collect()
+        keys.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]

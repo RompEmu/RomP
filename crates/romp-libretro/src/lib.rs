@@ -297,7 +297,7 @@ impl Core {
                 .data
                 .map(|d| d.as_ptr().cast::<c_void>())
                 .unwrap_or(ptr::null()),
-            size: info.data.map(|d| d.len()).unwrap_or(0),
+            size: info.data.map(<[u8]>::len).unwrap_or(0),
             meta: ptr::null(),
         };
         let ok = unsafe { (self.syms.load_game)(&g) };
@@ -1392,7 +1392,7 @@ mod tests {
     fn frames_presented_during_a_context_reset_reach_the_frontend() {
         let mut recorder = Recorder::default();
         with_frontend_installed(&mut recorder, || unsafe {
-            video_trampoline(sys::RETRO_HW_FRAME_BUFFER_VALID, 640, 528, 0)
+            video_trampoline(sys::RETRO_HW_FRAME_BUFFER_VALID, 640, 528, 0);
         });
         assert_eq!(recorder.hw_frame, Some((640, 528)));
     }

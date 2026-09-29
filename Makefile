@@ -137,6 +137,6 @@ typos:
 
 workflows:
 	actionlint
-	zizmor .github/workflows
+	zizmor .github
 
 -include signing/signing.mk

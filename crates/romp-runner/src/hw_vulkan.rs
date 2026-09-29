@@ -626,7 +626,9 @@ mod tests {
     static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn context() -> Option<(std::sync::MutexGuard<'static, ()>, Box<HwVulkanContext>)> {
-        let guard = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = ONE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let ctx = HwVulkanContext::create(&library_path()).ok()?;
         Some((guard, Box::new(ctx)))
     }

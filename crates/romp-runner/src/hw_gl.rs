@@ -217,7 +217,7 @@ impl HwGlContext {
 
             let status = (self.gl.check_framebuffer_status)(gl::FRAMEBUFFER);
             if status != gl::FRAMEBUFFER_COMPLETE {
-                anyhow::bail!("GL FBO incomplete: 0x{:x}", status);
+                anyhow::bail!("GL FBO incomplete: 0x{status:x}");
             }
         }
         self.fbo_width = width;

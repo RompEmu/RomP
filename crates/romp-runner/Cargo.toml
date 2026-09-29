@@ -39,3 +39,6 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphic
 [dev-dependencies]
 sevenz-rust2 = { version = "0.23", default-features = false, features = ["compress", "util"] }
 tempfile = "3"
+
+[lints]
+workspace = true

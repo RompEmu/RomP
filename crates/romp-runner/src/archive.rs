@@ -17,7 +17,7 @@ pub fn open_rom(
     let ext = rom_path
         .extension()
         .and_then(|e| e.to_str())
-        .map(|s| s.to_ascii_lowercase());
+        .map(str::to_ascii_lowercase);
     if let Some(ext_str) = ext.as_deref() {
         // .7z is never passed through: cores that list it often cannot decode it.
         if ext_str == "zip" && core_accepts_extension(valid_extensions, ext_str) {
@@ -88,7 +88,7 @@ fn open_zip(
         let Some(entry_ext) = Path::new(&name)
             .extension()
             .and_then(|e| e.to_str())
-            .map(|s| s.to_ascii_lowercase())
+            .map(str::to_ascii_lowercase)
         else {
             continue;
         };
@@ -174,7 +174,7 @@ fn open_7z(
         let Some(entry_ext) = Path::new(entry.name())
             .extension()
             .and_then(|e| e.to_str())
-            .map(|s| s.to_ascii_lowercase())
+            .map(str::to_ascii_lowercase)
         else {
             continue;
         };
@@ -302,7 +302,7 @@ fn record_disc_entry(
     let Some(ext) = Path::new(name)
         .extension()
         .and_then(|e| e.to_str())
-        .map(|s| s.to_ascii_lowercase())
+        .map(str::to_ascii_lowercase)
     else {
         return;
     };
@@ -446,7 +446,7 @@ fn is_disc_relevant_entry(entry_name: &str, primary_entry: &str) -> bool {
     let ext = Path::new(entry_name)
         .extension()
         .and_then(|e| e.to_str())
-        .map(|s| s.to_ascii_lowercase())
+        .map(str::to_ascii_lowercase)
         .unwrap_or_default();
     matches!(
         ext.as_str(),
@@ -481,7 +481,7 @@ fn rename_data_files_to_index_refs(
         let ref_ext = Path::new(ref_name)
             .extension()
             .and_then(|e| e.to_str())
-            .map(|s| s.to_ascii_lowercase())
+            .map(str::to_ascii_lowercase)
             .unwrap_or_default();
         let chosen = extracted
             .iter()
@@ -500,7 +500,7 @@ fn rename_data_files_to_index_refs(
                 let on_disk_ext = on_disk
                     .extension()
                     .and_then(|e| e.to_str())
-                    .map(|s| s.to_ascii_lowercase())
+                    .map(str::to_ascii_lowercase)
                     .unwrap_or_default();
                 on_disk_ext == ref_ext
             });

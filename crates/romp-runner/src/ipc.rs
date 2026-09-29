@@ -23,7 +23,7 @@ impl Link {
             match wire::read_msg::<_, AppMsg>(&mut reader) {
                 Ok(AppMsg::Pad { port, state }) => input.apply_pad(port, state),
                 Ok(AppMsg::Pointer { x, y, pressed }) => {
-                    input.apply_pointer(crate::input::Pointer { x, y, pressed })
+                    input.apply_pointer(crate::input::Pointer { x, y, pressed });
                 }
                 Ok(AppMsg::Mouse { dx, dy, buttons }) => input.apply_mouse(dx, dy, buttons),
                 Ok(msg) => {

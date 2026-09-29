@@ -13,7 +13,7 @@ impl Controller {
     pub(super) fn start_navigation(&self) {
         let timer = Timer::default();
         timer.start(TimerMode::Repeated, Duration::from_millis(16), || {
-            with_controller(|c| c.nav_tick())
+            with_controller(|c| c.nav_tick());
         });
         *self.nav_timer.borrow_mut() = Some(timer);
     }

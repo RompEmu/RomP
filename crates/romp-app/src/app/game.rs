@@ -665,7 +665,7 @@ impl Controller {
         let id = detail.id;
         let on_exit = move |code: Option<i32>, log: Vec<String>| {
             let _ = slint::invoke_from_event_loop(move || {
-                with_controller(|c| c.xemu_closed(id, code, log))
+                with_controller(|c| c.xemu_closed(id, code, log));
             });
         };
         match xemu::launch(&exe, &config_path, &rom, prefs.fullscreen, on_exit) {
@@ -773,7 +773,7 @@ impl Controller {
             port_devices: self.saved_ports(detail.id),
             volume_changed: Box::new(|volume| {
                 let _ = slint::invoke_from_event_loop(move || {
-                    with_controller(|c| c.set_game_volume(volume))
+                    with_controller(|c| c.set_game_volume(volume));
                 });
             }),
             save_ports: {

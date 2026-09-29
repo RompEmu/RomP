@@ -7,7 +7,8 @@ pub const THUMB_WIDTH: u32 = 200;
 pub fn make_thumbnail(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
     let img = if img.width() > THUMB_WIDTH {
-        let height = (img.height() as u64 * THUMB_WIDTH as u64 / img.width() as u64).max(1) as u32;
+        let height = (u64::from(img.height()) * u64::from(THUMB_WIDTH) / u64::from(img.width()))
+            .max(1) as u32;
         img.resize_exact(THUMB_WIDTH, height, image::imageops::FilterType::Triangle)
     } else {
         img

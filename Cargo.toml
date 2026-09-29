@@ -8,6 +8,15 @@ edition = "2021"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/RompEmu/RompEmu"
 
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+cast_lossless = "warn"
+semicolon_if_nothing_returned = "warn"
+redundant_closure_for_method_calls = "warn"
+uninlined_format_args = "warn"
+
 [workspace.dependencies]
 romp-libretro = { path = "crates/romp-libretro" }
 romp-proto = { path = "crates/romp-proto" }

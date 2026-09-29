@@ -122,7 +122,7 @@ impl Controller {
             self.refresh_devices();
             let timer = Timer::default();
             timer.start(TimerMode::Repeated, Duration::from_millis(50), || {
-                with_controller(|c| c.refresh_devices())
+                with_controller(|c| c.refresh_devices());
             });
             *self.settings_timer.borrow_mut() = Some(timer);
         } else {

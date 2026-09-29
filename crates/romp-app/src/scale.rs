@@ -30,7 +30,7 @@ pub fn track<C: ComponentHandle + 'static>(component: &C) {
                 apply(window);
             }
             true
-        }))
+        }));
     });
 }
 

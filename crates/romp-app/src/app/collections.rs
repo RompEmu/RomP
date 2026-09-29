@@ -500,7 +500,7 @@ impl Controller {
         let name = value.trim().to_string();
         match action {
             DialogAction::Create { add_game } if !name.is_empty() => {
-                self.create_collection(name, false, add_game)
+                self.create_collection(name, false, add_game);
             }
             DialogAction::Rename(key) if !name.is_empty() => self.rename(key, name),
             DialogAction::Delete(key) => self.delete(key),

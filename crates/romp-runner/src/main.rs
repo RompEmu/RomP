@@ -114,7 +114,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     if let Some(ctx) = &hw_ctx {
         // SAFETY: the boxed context outlives the core and is uninstalled before it drops.
         unsafe {
-            lr::install_hw_provider(ctx.as_ref() as *const dyn lr::HwContextProvider as *mut _)
+            lr::install_hw_provider(ctx.as_ref() as *const dyn lr::HwContextProvider as *mut _);
         };
     }
 

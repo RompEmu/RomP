@@ -59,7 +59,7 @@ impl CustomApplicationHandler for RawMouse {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) -> EventResult {
         ON_EXIT.with_borrow(|f| {
             if let Some(f) = f {
-                f()
+                f();
             }
         });
         EventResult::Propagate
@@ -86,7 +86,7 @@ impl CustomApplicationHandler for RawMouse {
         {
             ON_BACK.with_borrow(|f| {
                 if let Some(f) = f {
-                    f(window_id)
+                    f(window_id);
                 }
             });
         }
@@ -103,7 +103,7 @@ pub fn on_back_button(f: impl Fn(WindowId) + 'static) {
 }
 
 pub fn window_id(window: &slint::Window) -> Option<WindowId> {
-    window.with_winit_window(|w| w.id())
+    window.with_winit_window(slint::winit_030::winit::window::Window::id)
 }
 
 pub fn take_motion() -> (i16, i16) {

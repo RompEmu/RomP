@@ -47,7 +47,7 @@ pub fn convert_row(src: &[u8], dst: &mut [u8], format: SrcFormat) {
                 .zip(dst.as_chunks_mut::<4>().0)
             {
                 let p = u16::from_le_bytes(*s);
-                let g = ((p >> 5) & 0x3f) as u32 * 255 / 63;
+                let g = u32::from((p >> 5) & 0x3f) * 255 / 63;
                 *d = [expand5(p >> 11), g as u8, expand5(p), 0xff];
             }
         }
@@ -66,7 +66,7 @@ pub fn convert_row(src: &[u8], dst: &mut [u8], format: SrcFormat) {
 }
 
 fn expand5(v: u16) -> u8 {
-    ((v & 0x1f) as u32 * 255 / 31) as u8
+    (u32::from(v & 0x1f) * 255 / 31) as u8
 }
 
 struct Shm {
@@ -260,7 +260,7 @@ impl FrameReader {
                 self.shm.ptr.add(base + SLOT_HEADER),
                 out.as_mut_ptr(),
                 len,
-            )
+            );
         };
         fence(Ordering::Acquire);
         if generation.load(Ordering::Relaxed) != before || len == 0 {

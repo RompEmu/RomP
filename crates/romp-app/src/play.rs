@@ -926,7 +926,7 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
                 g.release_keys();
                 let released = g.controls.borrow_mut().release_all();
                 g.run_commands(released);
-            })
+            });
         }
     });
     window.on_window_active({
@@ -951,7 +951,7 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
                 if let Some(port) = port {
                     g.cycle_port(port, step);
                 }
-            })
+            });
         }
     });
     window.on_resume({
@@ -1032,7 +1032,7 @@ fn handle_event(
             },
         ),
         SessionEvent::Runner(RunnerMsg::Exited { error: Some(error) }) => {
-            ui.set_status(error.into())
+            ui.set_status(error.into());
         }
         SessionEvent::Runner(_) => {}
         SessionEvent::Ended { code: Some(0), .. } => finish(),
