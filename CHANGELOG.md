@@ -4,19 +4,23 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-29
+
 ### Added
 
 - A Licenses tab in the About window, with the license of Romp and of every emulator it downloads.
 - Resolution settings on Macs for N64, GameCube and Wii, PlayStation, PSP and Dreamcast, and a 4x choice for PS2. They default to 2x, or 3x for PSP.
 - PS2 memory cards sync with RomM like other in-game saves, and follow a game between ARMSX2 on a Mac and PCSX2 on Windows or Linux.
 
-### Fixed
-
-- PS2 games on Windows and Linux can save to their memory card. Each game now gets its own card in its save folder.
-
 ### Changed
 
 - The About window is roomier and easier to read, and says who makes Romp.
+- The audio library and other dependencies are up to date.
+
+### Fixed
+
+- PS2 games on Windows and Linux can save to their memory card. Each game now gets its own card in its save folder.
+- The last options on long Settings tabs are no longer cut off.
 
 ## [0.5.0] - 2026-09-29
 
@@ -91,7 +95,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/RompEmu/RompEmu/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/RompEmu/RompEmu/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/RompEmu/RompEmu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/RompEmu/RompEmu/compare/v0.2.0...v0.3.0
