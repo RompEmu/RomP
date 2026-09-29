@@ -18,6 +18,7 @@ mod identity;
 mod input;
 mod keyboard;
 mod layout;
+mod licenses;
 mod mapping;
 mod mouse;
 mod navigation;

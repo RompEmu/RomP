@@ -217,6 +217,16 @@ pub fn run() -> anyhow::Result<()> {
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
     controller.wire(&ui);
     ui.set_app_version(env!("CARGO_PKG_VERSION").into());
+    ui.set_about_licenses(ModelRc::new(VecModel::from(
+        crate::licenses::notices()
+            .into_iter()
+            .map(|n| crate::LicenseRow {
+                name: n.name.into(),
+                license: n.license.into(),
+                url: n.url.into(),
+            })
+            .collect::<Vec<_>>(),
+    )));
     controller.start_navigation();
     controller.start();
     crate::scale::set_factor(prefs.scale_factor());

@@ -6,6 +6,7 @@ export struct SidebarEntry { header: bool, key: string, name: string, initial: s
 export struct Membership { key: string, name: string, member: bool }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
+export struct LicenseRow { name: string, license: string, url: string }
 export struct ConsoleOption { key: string, label: string, detail: string, choices: [string], current: int }
 export struct ConsoleGroup { name: string, options: [ConsoleOption] }
 export struct KeyHint { keys: string, action: string }
@@ -19,6 +20,7 @@ export global Brand {
     out property <string> name: "Romp";
     out property <string> website: "https://github.com/RompEmu/RompEmu";
     out property <string> website-label: "github.com/RompEmu/RompEmu";
+    out property <string> author: "Beshr Kayali Reinholdsson";
     out property <string> tagline: @tr("Play your RomM library, each game in its own sandboxed emulator.");
 }
 
@@ -1658,12 +1660,36 @@ component Dialog inherits Rectangle {
     }
 }
 
+component AboutFact inherits Text {
+    font-size: Theme.font-small;
+    color: Theme.text-muted;
+    horizontal-alignment: center;
+    wrap: word-wrap;
+}
+
+component LinkButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    width: link-label.preferred-width + 12px;
+    height: 24px;
+    border-radius: Theme.radius-small;
+    background: link-touch.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    link-label := Text { text: root.text; font-size: Theme.font-small; color: Theme.accent-text; }
+    link-touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
 component AboutDialog inherits Rectangle {
     in property <string> version;
     in property <image> icon;
     in property <bool> has-icon;
+    in property <[LicenseRow]> licenses;
+    in-out property <int> tab;
     callback close();
     callback open-website();
+    callback open-link(string);
     background: Theme.scrim;
     TouchArea { clicked => { root.close(); } }
     FocusScope {
@@ -1677,8 +1703,8 @@ component AboutDialog inherits Rectangle {
         }
     }
     Rectangle {
-        width: 340px;
-        height: about-box.preferred-height;
+        width: min(420px, parent.width - 32px);
+        height: min(500px, parent.height - 32px);
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: Theme.surface;
@@ -1687,54 +1713,96 @@ component AboutDialog inherits Rectangle {
         border-color: Theme.border;
         drop-shadow-blur: 30px;
         drop-shadow-color: Theme.shadow;
+        clip: true;
         TouchArea { }
-        about-box := VerticalLayout {
-            padding: 28px;
-            padding-bottom: 22px;
-            spacing: 6px;
+        VerticalLayout {
+            padding-top: 12px;
+            padding-bottom: 20px;
             HorizontalLayout {
                 alignment: center;
-                AppTile { size: 76px; icon: root.icon; has-icon: root.has-icon; }
+                SettingsTab { label: @tr("About"); selected: root.tab == 0; clicked => { root.tab = 0; } }
+                SettingsTab { label: @tr("Licenses"); selected: root.tab == 1; clicked => { root.tab = 1; } }
             }
-            Rectangle { height: 8px; }
-            Text { text: Brand.name; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; horizontal-alignment: center; }
-            Text { text: @tr("Version {}", root.version); font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
-            HorizontalLayout {
+            Rectangle { height: 1px; background: Theme.divider; }
+            if root.tab == 0: VerticalLayout {
+                vertical-stretch: 1;
                 alignment: center;
-                Rectangle {
-                    width: link-text.preferred-width + 12px;
-                    height: 24px;
-                    border-radius: Theme.radius-small;
-                    background: link-touch.has-hover ? Theme.hover : transparent;
-                    accessible-role: button;
-                    accessible-label: Brand.website-label;
-                    accessible-action-default => { root.open-website(); }
-                    link-text := Text {
-                        text: Brand.website-label;
-                        font-size: Theme.font-small;
-                        color: Theme.accent-text;
-                    }
-                    link-touch := TouchArea { mouse-cursor: pointer; clicked => { root.open-website(); } }
+                padding-left: 32px;
+                padding-right: 32px;
+                HorizontalLayout {
+                    alignment: center;
+                    AppTile { size: 72px; icon: root.icon; has-icon: root.has-icon; }
+                }
+                Rectangle { height: 14px; }
+                Text { text: Brand.name; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; horizontal-alignment: center; }
+                Rectangle { height: 4px; }
+                Text { text: @tr("Version {}", root.version); font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
+                Rectangle { height: 5px; }
+                Text { text: @tr("By {}", Brand.author); font-size: Theme.font-small; color: Theme.text-secondary; horizontal-alignment: center; }
+                Rectangle { height: 16px; }
+                Text {
+                    text: Brand.tagline;
+                    font-size: Theme.font-body-large;
+                    color: Theme.text-secondary;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                    line-height-factor: 1.4;
+                }
+                Rectangle { height: 20px; }
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle { width: 48px; height: 1px; background: Theme.border; }
+                }
+                Rectangle { height: 18px; }
+                VerticalLayout {
+                    spacing: 6px;
+                    AboutFact { text: @tr("Games and saves come from your RomM server."); }
+                    AboutFact { text: @tr("Emulation by libretro cores and xemu."); }
+                    AboutFact { text: @tr("Free software under the GNU GPL, version 3 or later."); }
                 }
             }
-            Rectangle { height: 6px; }
-            Text {
-                text: Brand.tagline;
-                font-size: Theme.font-body;
-                color: Theme.text-secondary;
-                horizontal-alignment: center;
-                wrap: word-wrap;
-                line-height-factor: 1.35;
-            }
-            Rectangle { height: 10px; }
-            Rectangle { height: 1px; background: Theme.border; }
-            Rectangle { height: 10px; }
-            Text {
-                text: @tr("Games and saves from RomM. Emulation by libretro cores and xemu.\nFree software under the GNU GPL, version 3 or later.");
-                font-size: Theme.font-caption;
-                color: Theme.text-muted;
-                horizontal-alignment: center;
-                wrap: word-wrap;
+            if root.tab == 1: VerticalLayout {
+                vertical-stretch: 1;
+                padding-top: 14px;
+                spacing: 10px;
+                Text {
+                    x: 24px;
+                    width: parent.width - 48px;
+                    text: @tr("Romp and the emulators it downloads are each covered by their own license.");
+                    font-size: Theme.font-small;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                    line-height-factor: 1.3;
+                }
+                ScrollView {
+                    vertical-stretch: 1;
+                    content-width: self.visible-width;
+                    content-height: license-list.preferred-height;
+                    license-list := VerticalLayout {
+                        width: parent.width;
+                        padding-left: 24px;
+                        padding-right: 16px;
+                        for row[i] in root.licenses: VerticalLayout {
+                            if i > 0: Rectangle { height: 1px; background: Theme.divider; }
+                            HorizontalLayout {
+                                padding-top: 8px;
+                                padding-bottom: 8px;
+                                spacing: 12px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+                                    Text { text: row.name; font-size: Theme.font-body; font-weight: 600; color: Theme.text-strong; }
+                                    Text { text: row.license; font-size: Theme.font-small; color: Theme.text-muted; }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    LinkButton { text: @tr("License"); clicked => { root.open-link(row.url); } }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Rectangle { height: 12px; }
             HorizontalLayout {
@@ -1798,6 +1866,7 @@ export component AppWindow inherits Window {
     in property <[DeviceRow]> settings-devices;
     in property <[KeyHint]> settings-keys;
     in property <[StorageRow]> settings-storage;
+    in property <[LicenseRow]> about-licenses;
     in property <[ConsoleGroup]> settings-consoles;
     callback console-option-changed(string, int);
     in property <string> settings-storage-total;
@@ -2106,8 +2175,10 @@ export component AppWindow inherits Window {
         version: root.app-version;
         icon: root.app-icon;
         has-icon: root.has-app-icon;
+        licenses: root.about-licenses;
         close => { root.about-open = false; }
         open-website => { root.open-url(Brand.website); }
+        open-link(url) => { root.open-url(url); }
     }
     if root.dialog-open: Dialog {
         title: root.dialog-title;

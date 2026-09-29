@@ -29,6 +29,10 @@ fn asset_suffix() -> Option<&'static str> {
     }
 }
 
+pub fn available() -> bool {
+    asset_suffix().is_some()
+}
+
 pub fn release_asset(assets: &[Asset]) -> Option<&Asset> {
     let suffix = asset_suffix()?;
     assets.iter().find(|a| {

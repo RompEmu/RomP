@@ -195,6 +195,10 @@ static CORES: &[(&[&str], CoreInfo)] = &[
     ),
 ];
 
+pub fn all_cores() -> impl Iterator<Item = &'static CoreInfo> {
+    CORES.iter().map(|(_, core)| core)
+}
+
 pub fn core_for_platform(slug: &str) -> Option<&'static CoreInfo> {
     CORES
         .iter()

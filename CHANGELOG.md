@@ -4,6 +4,14 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- A Licenses tab in the About window, with the license of Romp and of every emulator it downloads.
+
+### Changed
+
+- The About window is roomier and easier to read, and says who makes Romp.
+
 ## [0.5.0] - 2026-09-29
 
 ### Changed
