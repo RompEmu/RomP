@@ -150,6 +150,14 @@ pub fn library_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
+/// Whether a Vulkan device can be created here.
+pub fn probe() -> bool {
+    HwVulkanContext::create(&library_path())
+        .and_then(|ctx| ctx.create_own_device().map(|_| ()))
+        .map_err(|e| tracing::info!("no Vulkan: {e}"))
+        .is_ok()
+}
+
 impl HwVulkanContext {
     pub fn create(library: &Path) -> anyhow::Result<Self> {
         // SAFETY: loading the Vulkan library runs its initializers, as any Vulkan frontend does.

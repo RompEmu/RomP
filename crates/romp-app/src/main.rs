@@ -37,6 +37,7 @@ mod session;
 mod storage;
 mod store;
 mod sync;
+mod vulkan;
 mod xemu;
 
 use clap::Parser;

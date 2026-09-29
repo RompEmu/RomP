@@ -57,6 +57,9 @@ fn main() -> anyhow::Result<()> {
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
+    if std::env::args().nth(1).as_deref() == Some("--probe-vulkan") {
+        std::process::exit(if hw_vulkan::probe() { 0 } else { 1 });
+    }
     let args = Args::parse();
     #[cfg(windows)]
     unsafe {

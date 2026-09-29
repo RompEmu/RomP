@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Changed
+
+- On Windows and Linux, GameCube, Wii, PSP, Dreamcast, PlayStation, N64 and PS2 games draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. N64 gets the accurate paraLLEl-RDP renderer, and the resolution settings in the Consoles tab.
+
 ## [0.6.0] - 2026-09-29
 
 ### Added

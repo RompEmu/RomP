@@ -228,8 +228,9 @@ pub fn is_computer(core_id: &str) -> bool {
     matches!(core_id, "puae" | "dosbox_pure" | "vice_x64sc" | "fuse")
 }
 
-// OpenGL on macOS is old and deprecated, so these draw through Vulkan (MoltenVK) there.
-const VULKAN_ON_MACOS: [(&str, &[(&str, &str)]); 5] = [
+// These draw through Vulkan where this computer has a working Vulkan device, which on
+// macOS is the bundled MoltenVK.
+const VULKAN_CORES: [(&str, &[(&str, &str)]); 6] = [
     ("dolphin", &[]),
     ("flycast", &[]),
     (
@@ -241,16 +242,17 @@ const VULKAN_ON_MACOS: [(&str, &[(&str, &str)]); 5] = [
         &[("mupen64plus-rdp-plugin", "parallel")],
     ),
     ("ppsspp", &[("ppsspp_backend", "vulkan")]),
+    ("pcsx2", &[("pcsx2_renderer", "Vulkan")]),
 ];
 
 fn vulkan_options(core_id: &str) -> Option<&'static [(&'static str, &'static str)]> {
     if core_id == ARMSX2.id {
         return Some(&[("armsx2_renderer", "Vulkan")]);
     }
-    if !cfg!(target_os = "macos") {
+    if !crate::vulkan::available() {
         return None;
     }
-    VULKAN_ON_MACOS
+    VULKAN_CORES
         .iter()
         .find(|(id, _)| *id == core_id)
         .map(|(_, options)| *options)
@@ -329,11 +331,17 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         ],
         _ => &[],
     };
-    options
+    let mut options: Vec<(String, String)> = options
         .iter()
-        .chain(vulkan_options(core_id).unwrap_or_default())
         .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect()
+        .collect();
+    for (key, value) in vulkan_options(core_id).unwrap_or_default() {
+        match options.iter_mut().find(|(k, _)| k == key) {
+            Some(existing) => existing.1 = value.to_string(),
+            None => options.push((key.to_string(), value.to_string())),
+        }
+    }
+    options
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -612,9 +620,9 @@ mod tests {
     }
 
     #[test]
-    fn cores_draw_with_vulkan_where_opengl_falls_short() {
+    fn cores_draw_with_vulkan_where_it_works() {
+        let vulkan = crate::vulkan::available();
         assert!(uses_vulkan("armsx2"));
-        assert!(!uses_vulkan("pcsx2"));
         assert!(!uses_vulkan("snes9x"));
         for core in [
             "dolphin",
@@ -622,15 +630,16 @@ mod tests {
             "mednafen_psx_hw",
             "mupen64plus_next",
             "ppsspp",
+            "pcsx2",
         ] {
-            assert_eq!(uses_vulkan(core), cfg!(target_os = "macos"), "{core}");
+            assert_eq!(uses_vulkan(core), vulkan, "{core}");
         }
         let n64 = default_options("mupen64plus_next");
         let rdp = n64.iter().find(|(k, _)| k == "mupen64plus-rdp-plugin");
-        assert_eq!(
-            rdp.map(|(_, v)| v.as_str()),
-            cfg!(target_os = "macos").then_some("parallel")
-        );
+        assert_eq!(rdp.map(|(_, v)| v.as_str()), vulkan.then_some("parallel"));
+        let ps2 = default_options("pcsx2");
+        let renderer = ps2.iter().filter(|(k, _)| k == "pcsx2_renderer").count();
+        assert_eq!(renderer, 1, "one renderer choice, Vulkan replacing OpenGL");
         assert!(default_options("mednafen_psx_hw")
             .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
         assert_eq!(download_base(&ARMSX2), ARMSX2_RELEASE);

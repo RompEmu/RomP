@@ -148,6 +148,7 @@ fn open_store() -> rusqlite::Result<Store> {
 }
 
 pub fn run() -> anyhow::Result<()> {
+    crate::vulkan::start_probe();
     let shared = Shared {
         rt: Runtime::new()?,
         store: Arc::new(Mutex::new(open_store()?)),
