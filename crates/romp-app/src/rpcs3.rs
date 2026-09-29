@@ -164,8 +164,81 @@ pub fn boot_path(rom: &Path) -> Result<&Path, String> {
         .map(|e| format!(".{}", e.to_string_lossy()))
         .unwrap_or_else(|| name.clone());
     Err(format!(
-        "Romp plays PS3 games stored as a game folder or an ISO, and this one is a {kind} file."
+        "Romp plays PS3 games stored as a game folder, an ISO, or a zip or 7z of one, and this one is a {kind} file."
     ))
+}
+
+pub fn is_archive(rom: &Path) -> bool {
+    rom.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("7z") || e.eq_ignore_ascii_case("zip"))
+}
+
+/// The game folder's EBOOT.BIN, or else a disc image, nearest the top of `dir`.
+pub fn find_boot(dir: &Path) -> Option<PathBuf> {
+    let mut files = Vec::new();
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(next) = dirs.pop() {
+        for entry in std::fs::read_dir(&next).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else {
+                files.push(path);
+            }
+        }
+    }
+    let nearest = |wanted: fn(&str) -> bool| {
+        files
+            .iter()
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| wanted(&n.to_string_lossy().to_ascii_lowercase()))
+            })
+            .min_by_key(|p| (p.components().count(), p.to_path_buf()))
+            .cloned()
+    };
+    nearest(|n| n == "eboot.bin").or_else(|| nearest(|n| n.ends_with(".iso")))
+}
+
+/// Unpacks a downloaded archive into a folder beside it and removes the archive, returning what to boot.
+pub fn unpack_game(archive: &Path) -> Result<PathBuf, String> {
+    let (Some(parent), Some(stem), Some(name)) =
+        (archive.parent(), archive.file_stem(), archive.file_name())
+    else {
+        return Err("The download has no name".into());
+    };
+    let dir = parent.join(stem);
+    let mut unpacking = stem.to_os_string();
+    unpacking.push(".unpacking");
+    let unpacking = parent.join(unpacking);
+    let _ = std::fs::remove_dir_all(&unpacking);
+    std::fs::create_dir_all(&unpacking).map_err(|e| e.to_string())?;
+    let file = std::fs::File::open(archive).map_err(|e| e.to_string())?;
+    let unpacked = crate::external::extract(
+        std::io::BufReader::new(file),
+        &name.to_string_lossy(),
+        &unpacking,
+    )
+    .map_err(|e| format!("Could not unpack the game: {e}"))
+    .and_then(|()| {
+        find_boot(&unpacking)
+            .ok_or_else(|| "The archive has no PS3 game folder or ISO in it".into())
+    });
+    let boot = match unpacked {
+        Ok(boot) => boot,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&unpacking);
+            return Err(e);
+        }
+    };
+    let rel = boot
+        .strip_prefix(&unpacking)
+        .map_err(|e| e.to_string())?
+        .to_path_buf();
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::rename(&unpacking, &dir).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(archive);
+    Ok(dir.join(rel))
 }
 
 pub struct LaunchConfig {
@@ -432,6 +505,88 @@ mod tests {
         assert_eq!(boot_path(iso), Ok(iso));
         let pkg = boot_path(Path::new("/roms/ps3/9/Game.pkg")).unwrap_err();
         assert!(pkg.contains(".pkg"), "{pkg}");
+    }
+
+    fn zip_of(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for (name, data) in files {
+            zip.start_file(*name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            std::io::Write::write_all(&mut zip, data).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn archived_games_are_unpacked_beside_the_download() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("Bejeweled 3 (USA).zip");
+        std::fs::write(
+            &archive,
+            zip_of(&[
+                ("Bejeweled 3 (USA).iso", b"disc"),
+                ("Bejeweled 3 (USA).dkey", b"key"),
+            ]),
+        )
+        .unwrap();
+        assert!(is_archive(&archive));
+        let boot = unpack_game(&archive).unwrap();
+        let game = dir.path().join("Bejeweled 3 (USA)");
+        assert_eq!(boot, game.join("Bejeweled 3 (USA).iso"));
+        assert_eq!(std::fs::read(&boot).unwrap(), b"disc");
+        assert!(game.join("Bejeweled 3 (USA).dkey").is_file());
+        assert!(!archive.exists(), "the archive is removed");
+        assert_eq!(boot_path(&boot), Ok(boot.as_path()));
+    }
+
+    #[test]
+    fn archived_game_folders_boot_their_top_eboot() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("Game.zip");
+        std::fs::write(
+            &archive,
+            zip_of(&[
+                ("Game/PS3_DISC.SFB", b"sfb"),
+                ("Game/PS3_GAME/USRDIR/EBOOT.BIN", b"elf"),
+                ("Game/PS3_GAME/USRDIR/bin/EBOOT.BIN", b"other"),
+            ]),
+        )
+        .unwrap();
+        let boot = unpack_game(&archive).unwrap();
+        assert_eq!(boot, dir.path().join("Game/Game/PS3_GAME/USRDIR/EBOOT.BIN"));
+    }
+
+    #[test]
+    fn an_archive_without_a_game_is_kept_and_explained() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("Manual.zip");
+        std::fs::write(&archive, zip_of(&[("manual.pdf", b"pdf")])).unwrap();
+        let err = unpack_game(&archive).unwrap_err();
+        assert!(err.contains("no PS3 game"), "{err}");
+        assert!(archive.exists());
+        assert!(!dir.path().join("Manual").exists());
+        assert!(!dir.path().join("Manual.unpacking").exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn seven_zip_games_unpack() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("Game.iso"), b"disc").unwrap();
+        let archive = dir.path().join("Game.7z");
+        let made = std::process::Command::new("/usr/bin/tar")
+            .args(["--format", "7zip", "-cf"])
+            .arg(&archive)
+            .arg("-C")
+            .arg(&src)
+            .arg("Game.iso")
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let boot = unpack_game(&archive).unwrap();
+        assert_eq!(std::fs::read(boot).unwrap(), b"disc");
     }
 
     #[test]

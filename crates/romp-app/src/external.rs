@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::io::{Read, Seek};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -147,16 +148,46 @@ fn unpack_7z(bytes: &[u8], dir: &Path, name: &str) -> Result<(), String> {
     })
 }
 
-#[cfg(windows)]
-fn unpack_7z(bytes: &[u8], dir: &Path, _name: &str) -> Result<(), String> {
-    sevenz_rust2::decompress(std::io::Cursor::new(bytes), dir).map_err(|e| e.to_string())
+#[cfg(not(target_os = "macos"))]
+fn unpack_7z(bytes: &[u8], dir: &Path, name: &str) -> Result<(), String> {
+    extract(std::io::Cursor::new(bytes), name, dir)
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
-fn unpack_7z(_bytes: &[u8], _dir: &Path, name: &str) -> Result<(), String> {
-    Err(format!(
-        "{name} is a 7z archive, which Romp cannot unpack here"
-    ))
+/// Unpacks a .zip or .7z into `dir`, refusing entries that would land outside it.
+pub fn extract<R: Read + Seek>(reader: R, name: &str, dir: &Path) -> Result<(), String> {
+    let lower = name.to_ascii_lowercase();
+    if lower.ends_with(".zip") {
+        return zip::ZipArchive::new(reader)
+            .and_then(|mut archive| archive.extract(dir))
+            .map_err(|e| e.to_string());
+    }
+    if !lower.ends_with(".7z") {
+        return Err(format!("{name} is not a zip or 7z archive"));
+    }
+    let mut archive = sevenz_rust2::ArchiveReader::new(reader, sevenz_rust2::Password::empty())
+        .map_err(|e| e.to_string())?;
+    archive
+        .for_each_entries(|entry, data| {
+            let rel = Path::new(entry.name());
+            if rel.as_os_str().is_empty()
+                || !rel
+                    .components()
+                    .all(|c| matches!(c, std::path::Component::Normal(_)))
+            {
+                return Err(std::io::Error::other(format!("unsafe path {}", entry.name())).into());
+            }
+            let path = dir.join(rel);
+            if entry.is_directory() {
+                std::fs::create_dir_all(&path)?;
+                return Ok(true);
+            }
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::io::copy(data, &mut std::fs::File::create(&path)?)?;
+            Ok(true)
+        })
+        .map_err(|e| e.to_string())
 }
 
 pub struct Running {

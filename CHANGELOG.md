@@ -6,7 +6,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Added
 
-- PS3 games play through RPCS3, which Romp downloads the first time along with the PS3 system software from RomM's firmware. Games can be folders or ISOs, and RPCS3 keeps its settings and saves apart from any RPCS3 you installed yourself.
+- PS3 games play through RPCS3, which Romp downloads the first time along with the PS3 system software from RomM's firmware. Games can be folders or ISOs, or a zip or 7z of one, which Romp unpacks after downloading, and RPCS3 keeps its settings and saves apart from any RPCS3 you installed yourself.
 
 ### Changed
 

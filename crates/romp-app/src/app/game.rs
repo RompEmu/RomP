@@ -401,7 +401,17 @@ impl Controller {
                 }
             };
             let roms = paths::server_roms_dir(client.base().as_str());
-            let result = download_game(&client, id, &roms, &progress, &cancel).await;
+            let mut result = download_game(&client, id, &roms, &progress, &cancel).await;
+            if let Ok(path) = &result {
+                if detail.platform_slug == rpcs3::PLATFORM && rpcs3::is_archive(path) {
+                    on_ui(move |c| c.game_status(id, "Unpacking…".into()));
+                    let archive = path.clone();
+                    result = tokio::task::spawn_blocking(move || rpcs3::unpack_game(&archive))
+                        .await
+                        .unwrap_or_else(|e| Err(e.to_string()))
+                        .map_err(DownloadError::Unpack);
+                }
+            }
             let mut missing = Vec::new();
             if result.is_ok() {
                 if let Some(cover) = detail.cover_large.as_deref() {

@@ -12,6 +12,7 @@ pub enum DownloadError {
     HashMismatch,
     Cancelled,
     UnsafePath,
+    Unpack(String),
 }
 
 impl std::fmt::Display for DownloadError {
@@ -23,6 +24,7 @@ impl std::fmt::Display for DownloadError {
             Self::HashMismatch => write!(f, "The downloaded file is corrupted; try again"),
             Self::Cancelled => write!(f, "Download cancelled"),
             Self::UnsafePath => write!(f, "The server sent an invalid file path"),
+            Self::Unpack(e) => write!(f, "{e}"),
         }
     }
 }
