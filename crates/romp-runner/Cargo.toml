@@ -19,7 +19,7 @@ romp-proto = { workspace = true }
 anyhow = "1"
 ash = "0.38"
 clap = { version = "4", features = ["derive"] }
-cubeb = "0.34"
+cubeb = "0.38"
 parking_lot = "0.12"
 ringbuf = "0.5"
 sevenz-rust2 = { version = "0.23", default-features = false, features = ["bzip2", "deflate", "ppmd"] }
