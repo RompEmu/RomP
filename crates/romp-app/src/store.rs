@@ -64,6 +64,7 @@ pub enum Scope {
     Platform(i64),
     Collection(String),
     Recent,
+    ForYou,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -197,6 +198,15 @@ impl Store {
                  CREATE TABLE IF NOT EXISTS play_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,
                    rom_id INTEGER NOT NULL, start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL);
                  PRAGMA user_version = 6;
+                 COMMIT;",
+            )?;
+        }
+        if version < 7 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS recommendations (rom_id INTEGER PRIMARY KEY,
+                   rank INTEGER NOT NULL, reason TEXT NOT NULL);
+                 PRAGMA user_version = 7;
                  COMMIT;",
             )?;
         }
@@ -338,6 +348,7 @@ impl Store {
             filter.sort
         };
         let order = match sort {
+            _ if filter.scope == Scope::ForYou => "r.rank",
             SortOrder::Name => "g.title COLLATE NOCASE, g.id",
             SortOrder::Added => "g.added_at IS NULL, g.added_at DESC, g.title COLLATE NOCASE, g.id",
             SortOrder::LastPlayed => {
@@ -352,26 +363,30 @@ impl Store {
                                 WHERE m.rom_id = g.id AND c.kind = 0),
                         COALESCE(p.slug, '')
                  FROM games g LEFT JOIN platforms p ON p.id = g.platform_id
+                   LEFT JOIN recommendations r ON r.rom_id = g.id
                  WHERE (?1 IS NULL OR g.platform_id = ?1) AND g.title LIKE ?2 ESCAPE '\\'
                    AND (?3 = 0 OR g.local_path IS NOT NULL)
                    AND (?4 IS NULL OR g.id IN (SELECT rom_id FROM collection_roms WHERE key = ?4))
                    AND (?5 = 0 OR g.last_played IS NOT NULL)
+                   AND (?6 = 0 OR r.rom_id IS NOT NULL)
                  ORDER BY {order}",
             ))
             .expect("prepare");
         let (platform, collection) = match &filter.scope {
-            Scope::All | Scope::Recent => (None, None),
+            Scope::All | Scope::Recent | Scope::ForYou => (None, None),
             Scope::Platform(id) => (Some(*id), None),
             Scope::Collection(key) => (None, Some(key.as_str())),
         };
         let recent = filter.scope == Scope::Recent;
+        let for_you = filter.scope == Scope::ForYou;
         stmt.query_map(
             params![
                 platform,
                 pattern,
                 filter.downloaded_only,
                 collection,
-                recent
+                recent,
+                for_you
             ],
             |r| {
                 Ok(GameItem {
@@ -409,6 +424,41 @@ impl Store {
                 |r| r.get(0),
             )
             .expect("count recent")
+    }
+
+    pub fn replace_recommendations(&mut self, picks: &[(i64, String)]) {
+        let tx = self.conn.transaction().expect("tx");
+        tx.execute("DELETE FROM recommendations", [])
+            .expect("clear recommendations");
+        for (rank, (rom_id, reason)) in picks.iter().enumerate() {
+            tx.execute(
+                "INSERT OR IGNORE INTO recommendations (rom_id, rank, reason) VALUES (?1, ?2, ?3)",
+                params![rom_id, rank as i64, reason],
+            )
+            .expect("add recommendation");
+        }
+        tx.commit().expect("commit");
+    }
+
+    pub fn recommended_count(&self, downloaded_only: bool) -> i64 {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM recommendations r JOIN games g ON g.id = r.rom_id
+                 WHERE ?1 = 0 OR g.local_path IS NOT NULL",
+                [downloaded_only],
+                |r| r.get(0),
+            )
+            .expect("count recommendations")
+    }
+
+    pub fn reason(&self, rom_id: i64) -> Option<String> {
+        self.conn
+            .query_row(
+                "SELECT reason FROM recommendations WHERE rom_id = ?1",
+                [rom_id],
+                |r| r.get(0),
+            )
+            .ok()
     }
 
     #[cfg(test)]
@@ -589,7 +639,7 @@ impl Store {
         self.conn
             .execute_batch(
                 "DELETE FROM games; DELETE FROM platforms; DELETE FROM state_sync; DELETE FROM pending_saves;
-                 DELETE FROM play_sessions;
+                 DELETE FROM play_sessions; DELETE FROM recommendations;
                  DELETE FROM collections; DELETE FROM collection_roms;
                  DELETE FROM kv WHERE key = 'last_sync_at';",
             )
@@ -732,6 +782,31 @@ mod tests {
         );
         assert_eq!(s.recent_count(false), 2);
         assert_eq!(s.recent_count(true), 0);
+    }
+
+    #[test]
+    fn recommendations_keep_the_servers_order_and_reasons() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.upsert_games(&[
+            rom(1, 1, "Aladdin", "t"),
+            rom(2, 1, "Banjo", "t"),
+            rom(3, 1, "Castlevania", "t"),
+        ]);
+        assert_eq!(s.recommended_count(false), 0);
+        s.replace_recommendations(&[
+            (3, "Because you played Contra".into()),
+            (1, "Because you played Bomberman".into()),
+            (99, "Not in the library".into()),
+        ]);
+        assert_eq!(sorted(&s, Scope::ForYou, SortOrder::Name), [3, 1]);
+        assert_eq!(s.recommended_count(false), 2);
+        assert_eq!(s.recommended_count(true), 0);
+        assert_eq!(s.reason(1).as_deref(), Some("Because you played Bomberman"));
+        assert_eq!(s.reason(2), None);
+        s.replace_recommendations(&[(2, "New".into())]);
+        assert_eq!(sorted(&s, Scope::ForYou, SortOrder::Name), [2]);
+        s.clear_library();
+        assert_eq!(s.reason(2), None);
     }
 
     #[test]

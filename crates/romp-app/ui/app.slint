@@ -891,6 +891,7 @@ component GamePage inherits FocusScope {
     in property <string> title;
     in property <string> category;
     in property <string> subtitle;
+    in property <string> reason;
     in property <string> summary;
     in property <[Fact]> facts;
     in property <[Shot]> shots;
@@ -1008,6 +1009,7 @@ component GamePage inherits FocusScope {
                         }
                         Text { text: root.title; font-size: Theme.font-display; font-weight: 800; wrap: word-wrap; }
                         Text { text: root.subtitle; font-size: Theme.font-subtitle; color: Theme.text-muted; wrap: word-wrap; }
+                        if root.reason != "": Text { text: root.reason; font-size: Theme.font-body; color: Theme.accent; wrap: word-wrap; }
                         HorizontalLayout {
                             padding-top: 8px;
                             alignment: start;
@@ -1916,6 +1918,7 @@ export component AppWindow inherits Window {
     in property <string> game-title;
     in property <string> game-category;
     in property <string> game-subtitle;
+    in property <string> game-reason;
     in property <string> game-summary;
     in property <[Fact]> game-facts;
     in property <[Shot]> game-shots;
@@ -2084,6 +2087,7 @@ export component AppWindow inherits Window {
             title: root.game-title;
             category: root.game-category;
             subtitle: root.game-subtitle;
+            reason: root.game-reason;
             summary: root.game-summary;
             facts: root.game-facts;
             shots: root.game-shots;

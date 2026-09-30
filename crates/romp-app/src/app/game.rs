@@ -284,6 +284,8 @@ impl Controller {
                 .into(),
         );
         ui.set_game_subtitle(details::subtitle(&detail).into());
+        let reason = self.shared.store.lock().unwrap().reason(detail.id);
+        ui.set_game_reason(reason.unwrap_or_default().into());
         ui.set_game_cover_aspect(details::box_aspect(&detail.platform_slug));
         ui.set_game_summary(detail.summary.clone().unwrap_or_default().into());
         ui.set_game_facts(ModelRc::new(VecModel::from(

@@ -1009,6 +1009,7 @@ impl Controller {
                 ui.set_sync_status("".into());
                 self.sync_pending();
                 self.upload_play_sessions();
+                self.refresh_recommendations();
             }
             Err(Error::Cancelled) => return,
             Err(Error::Unauthorized) => return self.needs_repair(),

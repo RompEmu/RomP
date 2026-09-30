@@ -14,6 +14,7 @@ const AUTO_SECTIONS: [(&str, &str, CollectionKind); 3] = [
 
 const PAIR_KEY: &str = "pair";
 pub(super) const RECENT_KEY: &str = "recent";
+pub(super) const FOR_YOU_KEY: &str = "for-you";
 
 pub(super) enum DialogAction {
     Create { add_game: Option<i64> },
@@ -59,6 +60,7 @@ pub(super) fn heading_for(key: &str, entries: &[(String, String)]) -> String {
         "all" => "All games".into(),
         "favorites" | PAIR_KEY => "Favorites".into(),
         RECENT_KEY => "Recently played".into(),
+        FOR_YOU_KEY => "For you".into(),
         _ => entries
             .iter()
             .find(|(k, _)| k == key)
@@ -86,6 +88,7 @@ pub(super) fn scope_for(key: &str) -> Scope {
     match key {
         "all" => Scope::All,
         RECENT_KEY => Scope::Recent,
+        FOR_YOU_KEY => Scope::ForYou,
         _ => match key.strip_prefix("p:").and_then(|id| id.parse().ok()) {
             Some(id) => Scope::Platform(id),
             None => Scope::Collection(key.to_string()),
@@ -95,6 +98,10 @@ pub(super) fn scope_for(key: &str) -> Scope {
 
 fn recent_icon() -> Image {
     Image::load_from_svg_data(include_bytes!("../../ui/icons/recent.svg")).unwrap_or_default()
+}
+
+fn for_you_icon() -> Image {
+    Image::load_from_svg_data(include_bytes!("../../ui/icons/for-you.svg")).unwrap_or_default()
 }
 
 fn numeric_id(item: &CollectionItem) -> Option<i64> {
@@ -111,6 +118,27 @@ impl Controller {
             .is_some_and(|s| s.split(' ').any(|s| s == scope))
     }
 
+    pub(super) fn refresh_recommendations(&self) {
+        let Some(client) = self.client.borrow().clone().filter(|_| !self.offline.get()) else {
+            return;
+        };
+        let store = self.shared.store.clone();
+        self.shared.rt.spawn(async move {
+            match client.recommendations(24).await {
+                Ok(picks) => {
+                    store.lock().unwrap().replace_recommendations(&picks);
+                    on_ui(|c| {
+                        c.reload_sidebar();
+                        if *c.selected.borrow() == FOR_YOU_KEY {
+                            c.reload_games();
+                        }
+                    });
+                }
+                Err(e) => tracing::debug!("recommendations: {e}"),
+            }
+        });
+    }
+
     fn can_edit_collections(&self) -> bool {
         self.has_scope("collections.write") && !self.offline.get() && self.client.borrow().is_some()
     }
@@ -120,7 +148,7 @@ impl Controller {
         let downloaded_only = self.library.borrow().filter.downloaded_only;
         let show_collections = self.has_scope("collections.read");
         let can_edit = self.can_edit_collections();
-        let (platforms, collections, recent) = {
+        let (platforms, collections, recent, for_you) = {
             let store = self.shared.store.lock().unwrap();
             let collections = if show_collections {
                 store.collections(downloaded_only)
@@ -131,6 +159,7 @@ impl Controller {
                 store.platforms(downloaded_only),
                 collections,
                 store.recent_count(downloaded_only),
+                store.recommended_count(downloaded_only),
             )
         };
         let expanded = self.expanded.borrow().clone();
@@ -159,6 +188,14 @@ impl Controller {
                 ..item(RECENT_KEY, "Recently played", recent, "")
             });
             keys.push(RECENT_KEY.to_string());
+        }
+        if for_you > 0 {
+            entries.push(SidebarEntry {
+                has_icon: true,
+                icon: for_you_icon(),
+                ..item(FOR_YOU_KEY, "For you", for_you, "")
+            });
+            keys.push(FOR_YOU_KEY.to_string());
         }
 
         let open = expanded.contains("platforms");
@@ -569,6 +606,7 @@ mod tests {
         assert_eq!(heading_for("p:3", &entries), "Super Nintendo");
         assert_eq!(heading_for("favorites", &entries), "Favorites");
         assert_eq!(heading_for(RECENT_KEY, &entries), "Recently played");
+        assert_eq!(heading_for(FOR_YOU_KEY, &entries), "For you");
         assert_eq!(heading_for("v:gone", &entries), "Games");
         assert_eq!(games_label(0), "No games");
         assert_eq!(games_label(1), "1 game");
@@ -588,6 +626,7 @@ mod tests {
     fn sidebar_keys_map_to_library_scopes() {
         assert_eq!(scope_for("all"), Scope::All);
         assert_eq!(scope_for(RECENT_KEY), Scope::Recent);
+        assert_eq!(scope_for(FOR_YOU_KEY), Scope::ForYou);
         assert_eq!(scope_for("p:12"), Scope::Platform(12));
         assert_eq!(scope_for("c:3"), Scope::Collection("c:3".into()));
         assert_eq!(scope_for("v:eyJu"), Scope::Collection("v:eyJu".into()));

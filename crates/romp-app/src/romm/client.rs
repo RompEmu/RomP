@@ -293,6 +293,49 @@ impl Client {
         .map(|_| ())
     }
 
+    /// Games RomM suggests from what was played, best first, each with why it was picked.
+    pub async fn recommendations(&self, limit: u32) -> Result<Vec<(i64, String)>, Error> {
+        #[derive(serde::Deserialize)]
+        struct Pick {
+            rom: RomRef,
+            #[serde(default)]
+            reasons: Vec<Reason>,
+            seed_rom_name: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct RomRef {
+            id: i64,
+        }
+        #[derive(serde::Deserialize)]
+        struct Reason {
+            value: String,
+        }
+        let picks: Vec<Pick> = self
+            .get_json("/api/recommendations", &[("limit", limit.to_string())])
+            .await?;
+        Ok(picks
+            .into_iter()
+            .map(|pick| {
+                let mut values: Vec<String> = Vec::new();
+                for reason in pick.reasons {
+                    if !reason.value.is_empty() && !values.contains(&reason.value) {
+                        values.push(reason.value);
+                    }
+                }
+                let lead = match pick.seed_rom_name.filter(|n| !n.is_empty()) {
+                    Some(seed) => format!("Because you played {seed}"),
+                    None => "Picked for you".to_string(),
+                };
+                let text = if values.is_empty() {
+                    lead
+                } else {
+                    format!("{lead} · {}", values.join(", "))
+                };
+                (pick.rom.id, text)
+            })
+            .collect())
+    }
+
     pub async fn similar(&self, id: i64, limit: u32) -> Result<Vec<i64>, Error> {
         #[derive(serde::Deserialize)]
         struct Similar {
@@ -964,6 +1007,33 @@ pub(crate) mod tests {
         let client = authed(&server);
         client.now_playing(7, "dev").await.unwrap();
         client.clear_activity("dev").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn recommendations_explain_themselves() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/recommendations"))
+            .and(query_param("limit", "24"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"rom": {"id": 5, "name": "1942"}, "score": 0.2,
+                 "reasons": [{"facet": "franchise", "value": "194X"},
+                             {"facet": "company", "value": "Capcom"},
+                             {"facet": "company", "value": "Capcom"}],
+                 "seed_rom_id": 67, "seed_rom_name": "1943 Kai"},
+                {"rom": {"id": 6}, "score": 0.1, "reasons": [], "seed_rom_id": null,
+                 "seed_rom_name": null}
+            ])))
+            .mount(&server)
+            .await;
+        let picks = authed(&server).recommendations(24).await.unwrap();
+        assert_eq!(
+            picks,
+            [
+                (5, "Because you played 1943 Kai · 194X, Capcom".to_string()),
+                (6, "Picked for you".to_string())
+            ]
+        );
     }
 
     #[tokio::test]
