@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-30
+
 ### Added
 
 - PS3 games play through RPCS3, which Romp downloads the first time along with the PS3 system software from RomM's firmware. Games can be folders or ISOs, or a zip or 7z of one, which Romp unpacks after downloading. RPCS3 follows Romp's fullscreen, volume and controller settings, and keeps its own settings and saves apart from any RPCS3 you installed yourself.
@@ -113,7 +115,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/RompEmu/RompEmu/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/RompEmu/RompEmu/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/RompEmu/RompEmu/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/RompEmu/RompEmu/compare/v0.3.0...v0.4.0
