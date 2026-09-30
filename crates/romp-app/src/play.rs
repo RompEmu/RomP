@@ -616,7 +616,7 @@ impl Game {
         }
     }
 
-    fn key(&self, text: &str, pressed: bool, repeat: bool) -> bool {
+    fn key(&self, text: &str, mods: crate::mapping::Mods, pressed: bool, repeat: bool) -> bool {
         if self.computer {
             let menu_key = text.chars().eq([char::from(slint::platform::Key::F12)]);
             if menu_key {
@@ -630,7 +630,7 @@ impl Game {
             }
         }
         let mappings = self.mappings.borrow();
-        let action = map_key(text, &mappings);
+        let action = map_key(text, mods, &mappings);
         if self.menu_open.get() {
             if let Some(KeyAction::Button(button)) = action {
                 if pressed {
@@ -642,7 +642,7 @@ impl Game {
         let result = self
             .controls
             .borrow_mut()
-            .key(text, pressed, repeat, &mappings);
+            .key(text, mods, pressed, repeat, &mappings);
         match result {
             None => false,
             Some(commands) => {
@@ -704,7 +704,7 @@ pub fn launch(
     ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());
     {
         let mappings = opts.mappings.borrow();
-        let label = |hotkey| crate::mapping::key_label(&mappings.hotkey_key(hotkey)).into();
+        let label = |hotkey| crate::mapping::combo_label(&mappings.hotkey_key(hotkey)).into();
         ui.set_pause_key(label(Hotkey::Pause));
         ui.set_save_key(label(Hotkey::SaveState));
         ui.set_load_key(label(Hotkey::LoadState));
@@ -982,9 +982,15 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     });
     window.on_key_event({
         let with = with.clone();
-        move |text, pressed, repeat| {
+        move |text, pressed, repeat, modifiers| {
+            let mods = crate::mapping::Mods {
+                ctrl: modifiers.control,
+                alt: modifiers.alt,
+                shift: modifiers.shift,
+                meta: modifiers.meta,
+            };
             let handled = Cell::new(false);
-            with(&|g| handled.set(g.key(&text, pressed, repeat)));
+            with(&|g| handled.set(g.key(&text, mods, pressed, repeat)));
             handled.get()
         }
     });

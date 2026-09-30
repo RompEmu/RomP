@@ -216,7 +216,7 @@ impl Controller {
             action: "Game menu".into(),
         })
         .chain(HOTKEYS.iter().map(|(hotkey, _, label)| KeyHint {
-            keys: mapping::key_label(&mappings.hotkey_key(*hotkey)).into(),
+            keys: mapping::combo_label(&mappings.hotkey_key(*hotkey)).into(),
             action: (*label).into(),
         }))
         .collect();
@@ -256,7 +256,7 @@ impl Controller {
                 .enumerate()
                 .map(|(i, (hotkey, _, label))| RemapRow {
                     name: (*label).into(),
-                    binding: mapping::key_label(&mappings.hotkey_key(*hotkey)).into(),
+                    binding: mapping::combo_label(&mappings.hotkey_key(*hotkey)).into(),
                     waiting: waiting == Some(i as u32),
                 })
                 .collect();
@@ -301,7 +301,7 @@ impl Controller {
         self.show_remap(None);
     }
 
-    pub(super) fn remap_key(&self, text: String) {
+    pub(super) fn remap_key(&self, text: String, mods: mapping::Mods) {
         let (Some(button), Some(device)) =
             (self.remap_waiting.get(), self.remap_device.borrow().clone())
         else {
@@ -314,12 +314,18 @@ impl Controller {
         if device != KEYBOARD && device != SHORTCUTS {
             return;
         }
+        if device == SHORTCUTS && mapping::is_modifier(&text) {
+            return;
+        }
         let outcome = {
             let mut mappings = self.mappings.borrow_mut();
             if device == SHORTCUTS {
                 let hotkey = HOTKEYS[button as usize].0;
                 let previous = mappings.hotkey_key(hotkey);
-                (mappings.set_hotkey(hotkey, &text), previous)
+                (
+                    mappings.set_hotkey(hotkey, &mapping::combo(mods, &text)),
+                    previous,
+                )
             } else {
                 let previous = mappings.key_for(button);
                 (mappings.set_key(button, &text), previous)
@@ -333,7 +339,7 @@ impl Controller {
             }
             (Assigned::Swapped(other), previous) => Some(format!(
                 "{other} now uses {}.",
-                mapping::key_label(&previous)
+                mapping::combo_label(&previous)
             )),
             (Assigned::Set, _) => None,
         };

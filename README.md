@@ -124,7 +124,7 @@ Default keyboard layout:
 | F12 | Screenshot |
 | Esc | Game menu |
 
-Every key except Esc can be changed in Settings → Players.
+Every key except Esc can be changed in Settings → Players, and shortcuts can be combinations such as Ctrl+S.
 
 Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS, `%LOCALAPPDATA%\Romp` on Windows and `~/.local/share/Romp` on Linux.
 

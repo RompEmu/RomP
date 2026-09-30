@@ -459,7 +459,7 @@ export component GameWindow inherits Window {
     in property <image> frame;
     in property <float> aspect: 4 / 3;
     in property <string> status;
-    callback key-event(string, bool, bool) -> bool;
+    callback key-event(string, bool, bool, KeyboardModifiers) -> bool;
     callback pointer(float, float, bool);
     callback focus-lost();
 
@@ -472,7 +472,7 @@ export component GameWindow inherits Window {
 
     keys := FocusScope {
         key-pressed(event) => {
-            return root.key-event(event.text, true, event.repeat) ? EventResult.accept : EventResult.reject;
+            return root.key-event(event.text, true, event.repeat, event.modifiers) ? EventResult.accept : EventResult.reject;
         }
         focus-lost(reason) => {
             root.focus-lost();
@@ -486,7 +486,7 @@ export component GameWindow inherits Window {
             }
         }
         key-released(event) => {
-            return root.key-event(event.text, false, false) ? EventResult.accept : EventResult.reject;
+            return root.key-event(event.text, false, false, event.modifiers) ? EventResult.accept : EventResult.reject;
         }
 
         frame := Image {

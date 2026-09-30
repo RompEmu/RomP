@@ -147,9 +147,78 @@ pub fn default_hotkey(hotkey: Hotkey) -> String {
     }
 }
 
+/// The modifier keys held with a key press.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Mods {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+    pub meta: bool,
+}
+
+const MOD_PREFIXES: [(&str, &str); 4] = [
+    ("ctrl+", "Ctrl+"),
+    ("alt+", "Alt+"),
+    ("shift+", "Shift+"),
+    ("cmd+", "Cmd+"),
+];
+
+pub fn is_modifier(text: &str) -> bool {
+    [
+        Key::Shift,
+        Key::ShiftR,
+        Key::Control,
+        Key::ControlR,
+        Key::Alt,
+        Key::AltGr,
+        Key::Meta,
+        Key::MetaR,
+    ]
+    .iter()
+    .any(|k| key_char(*k) == text)
+}
+
+/// A key press with its modifiers, as shortcuts are stored, like `ctrl+s`.
+pub fn combo(mods: Mods, text: &str) -> String {
+    let mut chars = text.chars();
+    let key = match (chars.next(), chars.next()) {
+        (Some(c @ '\u{1}'..='\u{1a}'), None) if mods.ctrl => {
+            char::from(c as u8 + b'a' - 1).to_string()
+        }
+        _ => normalize_key(text),
+    };
+    let held = [mods.ctrl, mods.alt, mods.shift, mods.meta];
+    MOD_PREFIXES
+        .iter()
+        .zip(held)
+        .filter(|(_, on)| *on)
+        .map(|((prefix, _), _)| *prefix)
+        .chain(std::iter::once(key.as_str()))
+        .collect()
+}
+
+/// Splits a combination into its modifier prefixes and the key itself.
+fn split_combo(combo: &str) -> (Vec<&'static str>, &str) {
+    let mut rest = combo;
+    let mut labels = Vec::new();
+    for (prefix, label) in MOD_PREFIXES {
+        if rest.len() > prefix.len() && rest.starts_with(prefix) {
+            rest = &rest[prefix.len()..];
+            labels.push(label);
+        }
+    }
+    (labels, rest)
+}
+
+pub fn combo_label(combo: &str) -> String {
+    let (mods, key) = split_combo(combo);
+    format!("{}{}", mods.concat(), key_label(key))
+}
+
 /// Escape always opens the game menu, so it can never be taken by anything else.
 pub fn is_reserved(text: &str) -> bool {
-    text.is_empty() || text == key_char(Key::Escape)
+    let (_, key) = split_combo(text);
+    key.is_empty() || key == key_char(Key::Escape)
 }
 
 /// What happened when a key was given to a button or hotkey.
@@ -283,7 +352,11 @@ impl Mappings {
         button: Option<u32>,
         hotkey: Option<Hotkey>,
     ) -> Assigned {
-        if let Some(other) = self.button_for_key(text).filter(|b| Some(*b) != button) {
+        let plain = split_combo(text).0.is_empty();
+        if let Some(other) = self
+            .button_for_key(text)
+            .filter(|b| plain && Some(*b) != button)
+        {
             self.keyboard.insert(name(other).into(), previous);
             return Assigned::Swapped(name(other).into());
         }
@@ -445,6 +518,65 @@ mod tests {
         assert_eq!(m.set_hotkey(Hotkey::Pause, "k"), Assigned::Set);
         let restored = Mappings::from_json(Some(&m.to_json()));
         assert_eq!(restored, m);
+    }
+
+    fn ctrl() -> Mods {
+        Mods {
+            ctrl: true,
+            ..Mods::default()
+        }
+    }
+
+    #[test]
+    fn shortcuts_can_be_key_combinations() {
+        assert_eq!(combo(ctrl(), "s"), "ctrl+s");
+        assert_eq!(
+            combo(ctrl(), "\u{13}"),
+            "ctrl+s",
+            "Ctrl+S may arrive as a control character"
+        );
+        let every = Mods {
+            ctrl: true,
+            alt: true,
+            shift: true,
+            meta: true,
+        };
+        assert_eq!(
+            combo(every, &key(Key::F5)),
+            format!("ctrl+alt+shift+cmd+{}", key(Key::F5))
+        );
+        assert_eq!(combo(Mods::default(), "P"), "p");
+        assert!(is_modifier(&key(Key::Control)));
+        assert!(!is_modifier("s"));
+        assert_eq!(combo_label("ctrl+s"), "Ctrl+S");
+        assert_eq!(
+            combo_label(&combo(every, &key(Key::F5))),
+            "Ctrl+Alt+Shift+Cmd+F5"
+        );
+        assert_eq!(combo_label("ctrl++"), "Ctrl++");
+        assert_eq!(combo_label("p"), "P");
+    }
+
+    #[test]
+    fn a_combination_leaves_its_plain_key_to_the_game() {
+        let mut m = Mappings::default();
+        assert_eq!(
+            m.set_hotkey(Hotkey::SaveState, &combo(ctrl(), "s")),
+            Assigned::Set
+        );
+        assert_eq!(m.hotkey_for("ctrl+s"), Some(Hotkey::SaveState));
+        assert_eq!(m.hotkey_for("s"), None);
+        assert_eq!(m.button_for_key("s"), Some(X), "S still presses X");
+        assert_eq!(m.set_key(Y, "s"), Assigned::Swapped("X".into()));
+        assert_eq!(m.hotkey_key(Hotkey::SaveState), "ctrl+s");
+        assert_eq!(
+            m.set_hotkey(Hotkey::Pause, "ctrl+s"),
+            Assigned::Swapped("Save state".into())
+        );
+        assert_eq!(
+            m.set_hotkey(Hotkey::Pause, &combo(ctrl(), &key(Key::Escape))),
+            Assigned::Reserved
+        );
     }
 
     #[test]

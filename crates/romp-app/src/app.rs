@@ -291,7 +291,15 @@ impl Controller {
         ui.on_controller_options_changed(|| with_controller(|c| c.controller_options_changed()));
         ui.on_customize(|device| with_controller(|c| c.customize(device.to_string())));
         ui.on_remap_pick(|i| with_controller(|c| c.remap_pick(i)));
-        ui.on_remap_key(|text| with_controller(|c| c.remap_key(text.to_string())));
+        ui.on_remap_key(|text, m| {
+            let mods = crate::mapping::Mods {
+                ctrl: m.control,
+                alt: m.alt,
+                shift: m.shift,
+                meta: m.meta,
+            };
+            with_controller(|c| c.remap_key(text.to_string(), mods));
+        });
         ui.on_remap_reset(|| with_controller(|c| c.remap_reset()));
         ui.on_remap_close(|| with_controller(|c| c.remap_close()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));

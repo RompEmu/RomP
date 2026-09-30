@@ -1543,7 +1543,7 @@ component RemapDialog inherits Rectangle {
     in property <bool> waiting;
     in property <[RemapRow]> rows;
     callback pick(int);
-    callback key(string);
+    callback key(string, KeyboardModifiers);
     callback reset();
     callback close();
     background: Theme.scrim;
@@ -1562,7 +1562,7 @@ component RemapDialog inherits Rectangle {
             init => { self.focus(); }
             key-pressed(event) => {
                 if root.waiting {
-                    root.key(event.text);
+                    root.key(event.text, event.modifiers);
                     return accept;
                 }
                 if event.text == Key.Escape {
@@ -1897,7 +1897,7 @@ export component AppWindow inherits Window {
     in property <[RemapRow]> remap-rows;
     callback customize(string);
     callback remap-pick(int);
-    callback remap-key(string);
+    callback remap-key(string, KeyboardModifiers);
     callback remap-reset();
     callback remap-close();
 
@@ -2163,7 +2163,7 @@ export component AppWindow inherits Window {
         waiting: root.remap-waiting;
         rows: root.remap-rows;
         pick(i) => { root.remap-pick(i); }
-        key(text) => { root.remap-key(text); }
+        key(text, modifiers) => { root.remap-key(text, modifiers); }
         reset => { root.remap-reset(); }
         close => { root.remap-close(); }
     }

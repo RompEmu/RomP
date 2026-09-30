@@ -1,4 +1,4 @@
-use crate::mapping::{Hotkey, Mappings};
+use crate::mapping::{combo, Hotkey, Mappings, Mods};
 use crate::players::PLAYERS;
 use romp_proto::msg::{AppMsg, PadState};
 use slint::platform::Key;
@@ -32,7 +32,7 @@ pub enum KeyAction {
 
 pub const SLOTS: u8 = 4;
 
-pub fn map_key(text: &str, mappings: &Mappings) -> Option<KeyAction> {
+pub fn map_key(text: &str, mods: Mods, mappings: &Mappings) -> Option<KeyAction> {
     let mut chars = text.chars();
     let c = chars.next()?;
     if chars.next().is_some() {
@@ -41,7 +41,7 @@ pub fn map_key(text: &str, mappings: &Mappings) -> Option<KeyAction> {
     if c == char::from(Key::Escape) {
         return Some(KeyAction::Menu);
     }
-    let action = match mappings.hotkey_for(text) {
+    let action = match mappings.hotkey_for(&combo(mods, text)) {
         Some(Hotkey::SaveState) => KeyAction::Save,
         Some(Hotkey::NextSlot) => KeyAction::NextSlot,
         Some(Hotkey::LoadState) => KeyAction::Load,
@@ -151,14 +151,17 @@ impl Controls {
         self.push()
     }
 
+    /// Releases always reach the game, so a button let go while a modifier is held never sticks.
     pub fn key(
         &mut self,
         text: &str,
+        mods: Mods,
         pressed: bool,
         repeat: bool,
         mappings: &Mappings,
     ) -> Option<Vec<Command>> {
-        let action = map_key(text, mappings)?;
+        let mods = if pressed { mods } else { Mods::default() };
+        let action = map_key(text, mods, mappings)?;
         let commands = match action {
             KeyAction::Button(button) => {
                 self.keyboard.set(button, pressed);
@@ -251,52 +254,108 @@ mod tests {
     #[test]
     fn arrows_map_to_dpad() {
         assert_eq!(
-            map_key(&key(Key::UpArrow), &m()),
+            map_key(&key(Key::UpArrow), Mods::default(), &m()),
             Some(KeyAction::Button(UP))
         );
         assert_eq!(
-            map_key(&key(Key::DownArrow), &m()),
+            map_key(&key(Key::DownArrow), Mods::default(), &m()),
             Some(KeyAction::Button(DOWN))
         );
         assert_eq!(
-            map_key(&key(Key::LeftArrow), &m()),
+            map_key(&key(Key::LeftArrow), Mods::default(), &m()),
             Some(KeyAction::Button(LEFT))
         );
         assert_eq!(
-            map_key(&key(Key::RightArrow), &m()),
+            map_key(&key(Key::RightArrow), Mods::default(), &m()),
             Some(KeyAction::Button(RIGHT))
         );
     }
 
     #[test]
     fn letters_map_case_insensitively() {
-        assert_eq!(map_key("x", &m()), Some(KeyAction::Button(A)));
-        assert_eq!(map_key("X", &m()), Some(KeyAction::Button(A)));
-        assert_eq!(map_key("z", &m()), Some(KeyAction::Button(B)));
-        assert_eq!(map_key("a", &m()), Some(KeyAction::Button(Y)));
-        assert_eq!(map_key("s", &m()), Some(KeyAction::Button(X)));
+        assert_eq!(
+            map_key("x", Mods::default(), &m()),
+            Some(KeyAction::Button(A))
+        );
+        assert_eq!(
+            map_key("X", Mods::default(), &m()),
+            Some(KeyAction::Button(A))
+        );
+        assert_eq!(
+            map_key("z", Mods::default(), &m()),
+            Some(KeyAction::Button(B))
+        );
+        assert_eq!(
+            map_key("a", Mods::default(), &m()),
+            Some(KeyAction::Button(Y))
+        );
+        assert_eq!(
+            map_key("s", Mods::default(), &m()),
+            Some(KeyAction::Button(X))
+        );
     }
 
     #[test]
     fn start_select_and_hotkeys() {
         assert_eq!(
-            map_key(&key(Key::Return), &m()),
+            map_key(&key(Key::Return), Mods::default(), &m()),
             Some(KeyAction::Button(START))
         );
         assert_eq!(
-            map_key(&key(Key::Backspace), &m()),
+            map_key(&key(Key::Backspace), Mods::default(), &m()),
             Some(KeyAction::Button(SELECT))
         );
-        assert_eq!(map_key(&key(Key::F5), &m()), Some(KeyAction::Save));
-        assert_eq!(map_key(&key(Key::F6), &m()), Some(KeyAction::NextSlot));
-        assert_eq!(map_key(&key(Key::F7), &m()), Some(KeyAction::Load));
         assert_eq!(
-            map_key(&key(Key::F11), &m()),
+            map_key(&key(Key::F5), Mods::default(), &m()),
+            Some(KeyAction::Save)
+        );
+        assert_eq!(
+            map_key(&key(Key::F6), Mods::default(), &m()),
+            Some(KeyAction::NextSlot)
+        );
+        assert_eq!(
+            map_key(&key(Key::F7), Mods::default(), &m()),
+            Some(KeyAction::Load)
+        );
+        assert_eq!(
+            map_key(&key(Key::F11), Mods::default(), &m()),
             Some(KeyAction::ToggleFullscreen)
         );
-        assert_eq!(map_key(&key(Key::F12), &m()), Some(KeyAction::Screenshot));
-        assert_eq!(map_key(&key(Key::Escape), &m()), Some(KeyAction::Menu));
-        assert_eq!(map_key("P", &m()), Some(KeyAction::TogglePause));
+        assert_eq!(
+            map_key(&key(Key::F12), Mods::default(), &m()),
+            Some(KeyAction::Screenshot)
+        );
+        assert_eq!(
+            map_key(&key(Key::Escape), Mods::default(), &m()),
+            Some(KeyAction::Menu)
+        );
+        assert_eq!(
+            map_key("P", Mods::default(), &m()),
+            Some(KeyAction::TogglePause)
+        );
+    }
+
+    #[test]
+    fn a_ctrl_combination_saves_and_releases_still_reach_the_game() {
+        let mut mappings = Mappings::default();
+        let ctrl = Mods {
+            ctrl: true,
+            ..Mods::default()
+        };
+        mappings.set_hotkey(Hotkey::SaveState, &combo(ctrl, "s"));
+        let mut controls = Controls::default();
+        let commands = controls.key("s", ctrl, true, false, &mappings).unwrap();
+        assert!(matches!(commands[..], [Command::Send(AppMsg::SaveSlot(1))]));
+
+        let pressed = controls
+            .key("s", Mods::default(), true, false, &mappings)
+            .unwrap();
+        assert!(matches!(pressed[..], [Command::Send(AppMsg::Pad { .. })]));
+        let released = controls.key("s", ctrl, false, false, &mappings).unwrap();
+        assert!(
+            matches!(released[..], [Command::Send(AppMsg::Pad { state, .. })] if state.buttons == 0),
+            "letting go of S with Ctrl held still releases X"
+        );
     }
 
     #[test]
@@ -304,21 +363,30 @@ mod tests {
         let mut mappings = Mappings::default();
         mappings.set_hotkey(Hotkey::Screenshot, "k");
         mappings.set_hotkey(Hotkey::SaveState, "x");
-        assert_eq!(map_key("K", &mappings), Some(KeyAction::Screenshot));
-        assert_eq!(map_key("x", &mappings), Some(KeyAction::Save));
         assert_eq!(
-            map_key(&key(Key::F5), &mappings),
+            map_key("K", Mods::default(), &mappings),
+            Some(KeyAction::Screenshot)
+        );
+        assert_eq!(
+            map_key("x", Mods::default(), &mappings),
+            Some(KeyAction::Save)
+        );
+        assert_eq!(
+            map_key(&key(Key::F5), Mods::default(), &mappings),
             Some(KeyAction::Button(A))
         );
-        assert_eq!(map_key(&key(Key::F12), &mappings), None);
-        assert_eq!(map_key(&key(Key::Escape), &mappings), Some(KeyAction::Menu));
+        assert_eq!(map_key(&key(Key::F12), Mods::default(), &mappings), None);
+        assert_eq!(
+            map_key(&key(Key::Escape), Mods::default(), &mappings),
+            Some(KeyAction::Menu)
+        );
     }
 
     #[test]
     fn unknown_or_multi_char_is_none() {
-        assert_eq!(map_key("k", &m()), None);
-        assert_eq!(map_key("", &m()), None);
-        assert_eq!(map_key("xz", &m()), None);
+        assert_eq!(map_key("k", Mods::default(), &m()), None);
+        assert_eq!(map_key("", Mods::default(), &m()), None);
+        assert_eq!(map_key("xz", Mods::default(), &m()), None);
     }
 
     #[test]
@@ -338,11 +406,17 @@ mod tests {
     fn held_hotkey_fires_once() {
         let mut controls = Controls::default();
         assert_eq!(
-            controls.key(&f5(), true, false, &m()),
+            controls.key(&f5(), Mods::default(), true, false, &m()),
             Some(vec![Command::Send(AppMsg::SaveSlot(1))])
         );
-        assert_eq!(controls.key(&f5(), true, true, &m()), Some(vec![]));
-        assert_eq!(controls.key(&f5(), false, false, &m()), Some(vec![]));
+        assert_eq!(
+            controls.key(&f5(), Mods::default(), true, true, &m()),
+            Some(vec![])
+        );
+        assert_eq!(
+            controls.key(&f5(), Mods::default(), false, false, &m()),
+            Some(vec![])
+        );
     }
 
     #[test]
@@ -353,43 +427,46 @@ mod tests {
             axes: [0; 6],
         };
         assert_eq!(
-            controls.key("x", true, false, &m()),
+            controls.key("x", Mods::default(), true, false, &m()),
             Some(vec![Command::Send(AppMsg::Pad {
                 port: 0,
                 state: pressed
             })])
         );
-        assert_eq!(controls.key("x", true, true, &m()), Some(vec![]));
+        assert_eq!(
+            controls.key("x", Mods::default(), true, true, &m()),
+            Some(vec![])
+        );
     }
 
     #[test]
     fn escape_opens_the_menu_and_unknown_keys_are_not_handled() {
         let mut controls = Controls::default();
         assert_eq!(
-            controls.key(&key(Key::Escape), true, false, &m()),
+            controls.key(&key(Key::Escape), Mods::default(), true, false, &m()),
             Some(vec![Command::Menu])
         );
-        assert_eq!(controls.key("k", true, false, &m()), None);
+        assert_eq!(controls.key("k", Mods::default(), true, false, &m()), None);
     }
 
     #[test]
     fn f6_cycles_the_slot_used_by_save_and_load() {
         let mut controls = Controls::default();
         assert_eq!(
-            controls.key(&key(Key::F6), true, false, &m()),
+            controls.key(&key(Key::F6), Mods::default(), true, false, &m()),
             Some(vec![Command::SlotChanged(2)])
         );
         assert_eq!(
-            controls.key(&f5(), true, false, &m()),
+            controls.key(&f5(), Mods::default(), true, false, &m()),
             Some(vec![Command::Send(AppMsg::SaveSlot(2))])
         );
         controls.set_slot(4);
         assert_eq!(
-            controls.key(&key(Key::F6), true, false, &m()),
+            controls.key(&key(Key::F6), Mods::default(), true, false, &m()),
             Some(vec![Command::SlotChanged(1)])
         );
         assert_eq!(
-            controls.key(&key(Key::F7), true, false, &m()),
+            controls.key(&key(Key::F7), Mods::default(), true, false, &m()),
             Some(vec![Command::Send(AppMsg::LoadSlot(1))])
         );
     }
@@ -397,8 +474,8 @@ mod tests {
     #[test]
     fn release_all_clears_held_buttons_once() {
         let mut controls = Controls::default();
-        controls.key("x", true, false, &m());
-        controls.key(&key(Key::UpArrow), true, false, &m());
+        controls.key("x", Mods::default(), true, false, &m());
+        controls.key(&key(Key::UpArrow), Mods::default(), true, false, &m());
         assert_eq!(
             controls.release_all(),
             [Command::Send(AppMsg::Pad {
@@ -431,7 +508,7 @@ mod tests {
     #[test]
     fn keyboard_and_gamepad_are_merged() {
         let mut controls = Controls::default();
-        controls.key("x", true, false, &m());
+        controls.key("x", Mods::default(), true, false, &m());
         let pad = PadState {
             buttons: 1 << B,
             axes: [100, 0, 0, 0, 0, 0],
@@ -489,7 +566,7 @@ mod tests {
     #[test]
     fn moving_the_keyboard_releases_its_old_player() {
         let mut controls = Controls::default();
-        controls.key("x", true, false, &m());
+        controls.key("x", Mods::default(), true, false, &m());
         assert_eq!(
             controls.set_keyboard_player(Some(3)),
             [

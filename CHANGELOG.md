@@ -10,7 +10,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - RomM learns how long you play each game, and shows the game you're playing right now. Play time recorded offline uploads the next time Romp reaches the server.
 - A "For you" list in the sidebar with games RomM recommends from what you've played. A recommended game's page says why it was picked.
 - Screenshots. Press F12 or choose Take screenshot in the game menu. Romp keeps them with the game's saves, uploads them to your RomM gallery, and shows them first on the game's page.
-- The keyboard shortcuts for pause, save and load state, save slots, full screen and screenshots can be changed under Settings → Players → Shortcuts. Esc always opens the game menu.
+- The keyboard shortcuts for pause, save and load state, save slots, full screen and screenshots can be changed under Settings → Players → Shortcuts, including to combinations such as Ctrl+S. Esc always opens the game menu.
 
 ### Changed
 
