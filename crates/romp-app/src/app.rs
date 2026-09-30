@@ -1,3 +1,4 @@
+mod activity;
 mod collections;
 mod game;
 mod navigation;
@@ -105,6 +106,7 @@ struct Controller {
     downloaded_choice: Cell<bool>,
     icon_requests: RefCell<HashSet<String>>,
     running: RefCell<Option<crate::play::RunningGame>>,
+    session: RefCell<Option<activity::Session>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
     selected: RefCell<String>,
@@ -191,6 +193,7 @@ pub fn run() -> anyhow::Result<()> {
         downloaded_choice: Cell::new(false),
         icon_requests: RefCell::default(),
         running: RefCell::new(None),
+        session: RefCell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
         selected: RefCell::new("all".into()),
@@ -718,6 +721,7 @@ impl Controller {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_millis() as i64);
         self.shared.store.lock().unwrap().mark_played(id, now);
+        self.start_session(id);
         self.reload_sidebar();
         self.reload_games();
         let client = self.client.borrow().clone();
@@ -1004,6 +1008,7 @@ impl Controller {
                 self.set_offline(false);
                 ui.set_sync_status("".into());
                 self.sync_pending();
+                self.upload_play_sessions();
             }
             Err(Error::Cancelled) => return,
             Err(Error::Unauthorized) => return self.needs_repair(),

@@ -26,6 +26,14 @@ pub struct GameItem {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PlaySession {
+    pub id: i64,
+    pub rom_id: i64,
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct GameDetail {
     pub id: i64,
     pub title: String,
@@ -180,6 +188,15 @@ impl Store {
                  ALTER TABLE games ADD COLUMN last_played INTEGER;
                  DELETE FROM kv WHERE key = 'last_sync_at';
                  PRAGMA user_version = 5;
+                 COMMIT;",
+            )?;
+        }
+        if version < 6 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS play_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   rom_id INTEGER NOT NULL, start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL);
+                 PRAGMA user_version = 6;
                  COMMIT;",
             )?;
         }
@@ -519,6 +536,42 @@ impl Store {
             .collect()
     }
 
+    pub fn add_play_session(&self, rom_id: i64, start_ms: i64, end_ms: i64) {
+        self.conn
+            .execute(
+                "INSERT INTO play_sessions (rom_id, start_ms, end_ms) VALUES (?1, ?2, ?3)",
+                [rom_id, start_ms, end_ms],
+            )
+            .expect("add play session");
+    }
+
+    pub fn play_sessions(&self) -> Vec<PlaySession> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, rom_id, start_ms, end_ms FROM play_sessions ORDER BY id")
+            .expect("prepare");
+        stmt.query_map([], |r| {
+            Ok(PlaySession {
+                id: r.get(0)?,
+                rom_id: r.get(1)?,
+                start_ms: r.get(2)?,
+                end_ms: r.get(3)?,
+            })
+        })
+        .expect("query")
+        .filter_map(Result::ok)
+        .collect()
+    }
+
+    pub fn remove_play_sessions(&mut self, ids: &[i64]) {
+        let tx = self.conn.transaction().expect("tx");
+        for id in ids {
+            tx.execute("DELETE FROM play_sessions WHERE id = ?1", [id])
+                .expect("remove play session");
+        }
+        tx.commit().expect("commit");
+    }
+
     pub fn switch_server(&mut self, server: &str) {
         if self.get("server").as_deref() != Some(server) {
             self.clear_library();
@@ -536,6 +589,7 @@ impl Store {
         self.conn
             .execute_batch(
                 "DELETE FROM games; DELETE FROM platforms; DELETE FROM state_sync; DELETE FROM pending_saves;
+                 DELETE FROM play_sessions;
                  DELETE FROM collections; DELETE FROM collection_roms;
                  DELETE FROM kv WHERE key = 'last_sync_at';",
             )
@@ -897,6 +951,30 @@ mod tests {
         };
         s.set_state_record(10, "slot-1", &newer);
         assert_eq!(s.state_record(10, "slot-1"), Some(newer));
+    }
+
+    #[test]
+    fn play_sessions_wait_until_uploaded() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("c.db");
+        {
+            let s = Store::open(&path).unwrap();
+            s.add_play_session(7, 1_000, 61_000);
+            s.add_play_session(3, 5_000, 95_000);
+        }
+        let mut s = Store::open(&path).unwrap();
+        let sessions = s.play_sessions();
+        assert_eq!(
+            sessions
+                .iter()
+                .map(|p| (p.rom_id, p.start_ms, p.end_ms))
+                .collect::<Vec<_>>(),
+            [(7, 1_000, 61_000), (3, 5_000, 95_000)]
+        );
+        s.remove_play_sessions(&[sessions[0].id]);
+        assert_eq!(s.play_sessions().len(), 1);
+        s.clear_library();
+        assert!(s.play_sessions().is_empty());
     }
 
     #[test]

@@ -960,6 +960,7 @@ impl Controller {
 
     fn game_closed(&self, identity: Option<CoreIdentity>) {
         self.running.borrow_mut().take();
+        self.end_session();
         self.save_players();
         let playing = self.playing.borrow_mut().take();
         if let Some(detail) = playing {

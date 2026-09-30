@@ -2,6 +2,7 @@ use crate::romm::types::{
     ClientSave, DeviceAuth, Firmware, Heartbeat, Negotiation, Platform, PollOutcome,
     RemoteCollection, RemoteSave, RemoteState, RomDetail, RomFile, RomPage, User,
 };
+use crate::store::PlaySession;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use url::Url;
@@ -240,6 +241,53 @@ impl Client {
             self.request(reqwest::Method::PUT, &format!("/api/roms/{id}/props"))
                 .query(&[("update_last_played", "true")])
                 .json(&serde_json::json!({})),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn upload_play_sessions(
+        &self,
+        device: Option<&str>,
+        sessions: &[PlaySession],
+    ) -> Result<(), Error> {
+        let time = |ms: i64| {
+            crate::sync::iso_utc(
+                std::time::UNIX_EPOCH + Duration::from_millis(u64::try_from(ms).unwrap_or(0)),
+            )
+        };
+        let sessions: Vec<_> = sessions
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "rom_id": s.rom_id,
+                    "start_time": time(s.start_ms),
+                    "end_time": time(s.end_ms),
+                    "duration_ms": (s.end_ms - s.start_ms).max(0),
+                })
+            })
+            .collect();
+        self.send(
+            self.request(reqwest::Method::POST, "/api/play-sessions")
+                .json(&serde_json::json!({"device_id": device, "sessions": sessions})),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn now_playing(&self, rom_id: i64, device: &str) -> Result<(), Error> {
+        self.send(
+            self.request(reqwest::Method::POST, "/api/activity/heartbeat")
+                .json(&serde_json::json!({"rom_id": rom_id, "device_id": device})),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn clear_activity(&self, device: &str) -> Result<(), Error> {
+        self.send(
+            self.request(reqwest::Method::DELETE, "/api/activity/heartbeat")
+                .query(&[("device_id", device)]),
         )
         .await
         .map(|_| ())
@@ -856,6 +904,66 @@ pub(crate) mod tests {
             .unwrap()
             .items
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn play_sessions_upload_with_utc_times() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/play-sessions"))
+            .and(body_json(serde_json::json!({
+                "device_id": "dev",
+                "sessions": [{
+                    "rom_id": 7,
+                    "start_time": "2026-09-30T10:00:00+00:00",
+                    "end_time": "2026-09-30T10:30:00+00:00",
+                    "duration_ms": 1_800_000
+                }]
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+                "results": [{"index": 0, "status": "created", "id": 1}],
+                "created_count": 1, "skipped_count": 0
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let start = 1_790_762_400_000;
+        authed(&server)
+            .upload_play_sessions(
+                Some("dev"),
+                &[PlaySession {
+                    id: 1,
+                    rom_id: 7,
+                    start_ms: start,
+                    end_ms: start + 1_800_000,
+                }],
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn now_playing_names_the_game_and_device_and_clears_by_device() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/activity/heartbeat"))
+            .and(body_json(
+                serde_json::json!({"rom_id": 7, "device_id": "dev"}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/api/activity/heartbeat"))
+            .and(query_param("device_id", "dev"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        client.now_playing(7, "dev").await.unwrap();
+        client.clear_activity("dev").await.unwrap();
     }
 
     #[tokio::test]
