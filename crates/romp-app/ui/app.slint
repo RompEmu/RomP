@@ -1469,7 +1469,10 @@ component SettingsPage inherits FocusScope {
                                 Switch { checked <=> root.stick-dpad; toggled => { root.controller-options-changed(); } }
                             }
                         }
-                        Text { text: @tr("Shortcuts"); font-size: Theme.font-body-large; font-weight: 700; }
+                        HorizontalLayout {
+                            Text { text: @tr("Shortcuts"); font-size: Theme.font-body-large; font-weight: 700; vertical-alignment: center; horizontal-stretch: 1; }
+                            Button { text: @tr("Customize…"); clicked => { root.customize("shortcuts"); } }
+                        }
                         Panel {
                             for hint[i] in root.keys: SettingRow {
                                 divider: i > 0;

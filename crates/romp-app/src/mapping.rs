@@ -105,15 +105,79 @@ pub fn normalize_key(text: &str) -> String {
     text.to_lowercase()
 }
 
-pub fn is_hotkey(text: &str) -> bool {
-    [Key::Escape, Key::F5, Key::F6, Key::F7, Key::F11, Key::F12]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hotkey {
+    Pause,
+    SaveState,
+    LoadState,
+    NextSlot,
+    Fullscreen,
+    Screenshot,
+}
+
+/// Each hotkey with the name it is saved under and the label people see.
+pub const HOTKEYS: [(Hotkey, &str, &str); 6] = [
+    (Hotkey::Pause, "pause", "Pause"),
+    (Hotkey::SaveState, "save", "Save state"),
+    (Hotkey::LoadState, "load", "Load state"),
+    (Hotkey::NextSlot, "next_slot", "Next save slot"),
+    (Hotkey::Fullscreen, "fullscreen", "Full screen"),
+    (Hotkey::Screenshot, "screenshot", "Screenshot"),
+];
+
+fn hotkey_entry(hotkey: Hotkey) -> (Hotkey, &'static str, &'static str) {
+    *HOTKEYS
         .iter()
-        .any(|k| key_char(*k) == text)
-        || normalize_key(text) == "p"
+        .find(|(h, _, _)| *h == hotkey)
+        .expect("every hotkey is listed")
+}
+
+pub fn hotkey_label(hotkey: Hotkey) -> &'static str {
+    hotkey_entry(hotkey).2
+}
+
+pub fn default_hotkey(hotkey: Hotkey) -> String {
+    match hotkey {
+        Hotkey::Pause => "p".into(),
+        Hotkey::SaveState => key_char(Key::F5),
+        Hotkey::LoadState => key_char(Key::F7),
+        Hotkey::NextSlot => key_char(Key::F6),
+        Hotkey::Fullscreen => key_char(Key::F11),
+        Hotkey::Screenshot => key_char(Key::F12),
+    }
+}
+
+/// Escape always opens the game menu, so it can never be taken by anything else.
+pub fn is_reserved(text: &str) -> bool {
+    text.is_empty() || text == key_char(Key::Escape)
+}
+
+/// What happened when a key was given to a button or hotkey.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Assigned {
+    Set,
+    /// The key belonged to this button or hotkey, which now has the old key instead.
+    Swapped(String),
+    Reserved,
 }
 
 pub fn key_label(text: &str) -> String {
-    const NAMES: [(Key, &str); 14] = [
+    const NAMES: [(Key, &str); 29] = [
+        (Key::Escape, "Esc"),
+        (Key::F1, "F1"),
+        (Key::F2, "F2"),
+        (Key::F3, "F3"),
+        (Key::F4, "F4"),
+        (Key::F5, "F5"),
+        (Key::F6, "F6"),
+        (Key::F7, "F7"),
+        (Key::F8, "F8"),
+        (Key::F9, "F9"),
+        (Key::F10, "F10"),
+        (Key::F11, "F11"),
+        (Key::F12, "F12"),
+        (Key::Delete, "Delete"),
+        (Key::Home, "Home"),
         (Key::UpArrow, "↑"),
         (Key::DownArrow, "↓"),
         (Key::LeftArrow, "←"),
@@ -142,6 +206,7 @@ pub fn key_label(text: &str) -> String {
 #[serde(default)]
 pub struct Mappings {
     keyboard: BTreeMap<String, String>,
+    hotkeys: BTreeMap<String, String>,
     pads: BTreeMap<String, BTreeMap<String, String>>,
     pub nintendo_labels: bool,
     pub stick_dpad: bool,
@@ -172,21 +237,81 @@ impl Mappings {
             .find(|b| normalize_key(&self.key_for(*b)) == text)
     }
 
-    pub fn set_key(&mut self, button: u32, text: &str) -> bool {
-        if text.is_empty() || is_hotkey(text) {
-            return false;
+    pub fn hotkey_key(&self, hotkey: Hotkey) -> String {
+        self.hotkeys
+            .get(hotkey_entry(hotkey).1)
+            .cloned()
+            .unwrap_or_else(|| default_hotkey(hotkey))
+    }
+
+    pub fn hotkey_for(&self, text: &str) -> Option<Hotkey> {
+        let text = normalize_key(text);
+        HOTKEYS
+            .iter()
+            .map(|(h, _, _)| *h)
+            .find(|h| normalize_key(&self.hotkey_key(*h)) == text)
+    }
+
+    /// Hands `text` to `button`; whatever had it before gets the button's old key.
+    pub fn set_key(&mut self, button: u32, text: &str) -> Assigned {
+        if is_reserved(text) {
+            return Assigned::Reserved;
         }
         let text = normalize_key(text);
         let previous = self.key_for(button);
-        if let Some(other) = self.button_for_key(&text).filter(|b| *b != button) {
-            self.keyboard.insert(name(other).into(), previous);
-        }
+        let outcome = self.give_away(&text, previous, Some(button), None);
         self.keyboard.insert(name(button).into(), text);
-        true
+        outcome
+    }
+
+    /// Hands `text` to `hotkey`; whatever had it before gets the hotkey's old key.
+    pub fn set_hotkey(&mut self, hotkey: Hotkey, text: &str) -> Assigned {
+        if is_reserved(text) {
+            return Assigned::Reserved;
+        }
+        let text = normalize_key(text);
+        let previous = self.hotkey_key(hotkey);
+        let outcome = self.give_away(&text, previous, None, Some(hotkey));
+        self.hotkeys.insert(hotkey_entry(hotkey).1.into(), text);
+        outcome
+    }
+
+    fn give_away(
+        &mut self,
+        text: &str,
+        previous: String,
+        button: Option<u32>,
+        hotkey: Option<Hotkey>,
+    ) -> Assigned {
+        if let Some(other) = self.button_for_key(text).filter(|b| Some(*b) != button) {
+            self.keyboard.insert(name(other).into(), previous);
+            return Assigned::Swapped(name(other).into());
+        }
+        if let Some(other) = self.hotkey_for(text).filter(|h| Some(*h) != hotkey) {
+            self.hotkeys.insert(hotkey_entry(other).1.into(), previous);
+            return Assigned::Swapped(hotkey_label(other).into());
+        }
+        Assigned::Set
+    }
+
+    fn keys_clash(&self) -> bool {
+        HOTKEYS
+            .iter()
+            .any(|(h, _, _)| self.button_for_key(&self.hotkey_key(*h)).is_some())
     }
 
     pub fn reset_keyboard(&mut self) {
         self.keyboard.clear();
+        if self.keys_clash() {
+            self.hotkeys.clear();
+        }
+    }
+
+    pub fn reset_hotkeys(&mut self) {
+        self.hotkeys.clear();
+        if self.keys_clash() {
+            self.keyboard.clear();
+        }
     }
 
     pub fn pad_button(&self, model: &str, button: u32) -> Button {
@@ -273,7 +398,7 @@ mod tests {
     #[test]
     fn rebinding_a_key_swaps_with_the_button_that_had_it() {
         let mut m = Mappings::default();
-        assert!(m.set_key(A, "Z"));
+        assert_eq!(m.set_key(A, "Z"), Assigned::Swapped("B".into()));
         assert_eq!(m.button_for_key("z"), Some(A));
         assert_eq!(m.button_for_key("x"), Some(B));
         assert_eq!(m.key_for(B), "x");
@@ -282,12 +407,72 @@ mod tests {
     }
 
     #[test]
-    fn shortcut_keys_cannot_be_bound() {
+    fn hotkeys_default_to_the_function_keys_and_p() {
+        let m = Mappings::default();
+        assert_eq!(m.hotkey_for(&key(Key::F5)), Some(Hotkey::SaveState));
+        assert_eq!(m.hotkey_for(&key(Key::F6)), Some(Hotkey::NextSlot));
+        assert_eq!(m.hotkey_for(&key(Key::F7)), Some(Hotkey::LoadState));
+        assert_eq!(m.hotkey_for(&key(Key::F11)), Some(Hotkey::Fullscreen));
+        assert_eq!(m.hotkey_for(&key(Key::F12)), Some(Hotkey::Screenshot));
+        assert_eq!(m.hotkey_for("P"), Some(Hotkey::Pause));
+        assert_eq!(m.hotkey_for("x"), None);
+        assert_eq!(m.hotkey_for(&key(Key::Escape)), None);
+    }
+
+    #[test]
+    fn a_hotkey_and_a_button_trade_keys_instead_of_sharing_one() {
         let mut m = Mappings::default();
-        assert!(!m.set_key(A, &key(Key::Escape)));
-        assert!(!m.set_key(A, "p"));
-        assert!(!m.set_key(A, &key(Key::F5)));
+        assert_eq!(
+            m.set_hotkey(Hotkey::Screenshot, "x"),
+            Assigned::Swapped("A".into())
+        );
+        assert_eq!(m.hotkey_for("x"), Some(Hotkey::Screenshot));
+        assert_eq!(m.key_for(A), key(Key::F12));
+        assert_eq!(m.button_for_key("x"), None);
+
+        assert_eq!(
+            m.set_key(B, &key(Key::F5)),
+            Assigned::Swapped("Save state".into())
+        );
+        assert_eq!(m.hotkey_key(Hotkey::SaveState), "z");
+        assert_eq!(m.hotkey_for(&key(Key::F5)), None);
+
+        assert_eq!(
+            m.set_hotkey(Hotkey::Pause, &key(Key::F11)),
+            Assigned::Swapped("Full screen".into())
+        );
+        assert_eq!(m.hotkey_key(Hotkey::Fullscreen), "p");
+        assert_eq!(m.set_hotkey(Hotkey::Pause, "k"), Assigned::Set);
+        let restored = Mappings::from_json(Some(&m.to_json()));
+        assert_eq!(restored, m);
+    }
+
+    #[test]
+    fn escape_stays_the_menu_key() {
+        let mut m = Mappings::default();
+        assert_eq!(m.set_key(A, &key(Key::Escape)), Assigned::Reserved);
+        assert_eq!(
+            m.set_hotkey(Hotkey::Pause, &key(Key::Escape)),
+            Assigned::Reserved
+        );
+        assert_eq!(m.set_hotkey(Hotkey::Pause, ""), Assigned::Reserved);
         assert_eq!(m.button_for_key("x"), Some(A));
+        assert_eq!(m.hotkey_for("p"), Some(Hotkey::Pause));
+    }
+
+    #[test]
+    fn resetting_one_side_never_leaves_two_meanings_on_a_key() {
+        let mut m = Mappings::default();
+        m.set_hotkey(Hotkey::Screenshot, "x");
+        m.reset_keyboard();
+        assert_eq!(m.button_for_key("x"), Some(A));
+        assert_eq!(m.hotkey_for("x"), None);
+        assert_eq!(m.hotkey_key(Hotkey::Screenshot), key(Key::F12));
+
+        m.set_key(A, "p");
+        m.reset_hotkeys();
+        assert_eq!(m.hotkey_for("p"), Some(Hotkey::Pause));
+        assert_eq!(m.key_for(A), "x");
     }
 
     #[test]
@@ -338,6 +523,8 @@ mod tests {
     fn labels_are_readable() {
         assert_eq!(key_label(&key(Key::UpArrow)), "↑");
         assert_eq!(key_label("x"), "X");
+        assert_eq!(key_label(&key(Key::F12)), "F12");
+        assert_eq!(key_label(&key(Key::Escape)), "Esc");
         assert_eq!(key_label(""), "Not set");
         assert_eq!(physical_label(Button::South), "Bottom face button");
         assert_eq!(name(L2), "L2");

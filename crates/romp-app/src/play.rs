@@ -1,6 +1,6 @@
 use crate::gamepads::Gamepads;
 use crate::input::{self, map_key, Command, Controls, KeyAction};
-use crate::mapping::Mappings;
+use crate::mapping::{Hotkey, Mappings};
 use crate::paths;
 use crate::players::{Assignments, KEYBOARD};
 use crate::ports;
@@ -702,6 +702,16 @@ pub fn launch(
     ui.set_game_name(opts.title.clone().into());
     ui.set_mouse_mode(opts.mouse);
     ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());
+    {
+        let mappings = opts.mappings.borrow();
+        let label = |hotkey| crate::mapping::key_label(&mappings.hotkey_key(hotkey)).into();
+        ui.set_pause_key(label(Hotkey::Pause));
+        ui.set_save_key(label(Hotkey::SaveState));
+        ui.set_load_key(label(Hotkey::LoadState));
+        ui.set_slot_key(label(Hotkey::NextSlot));
+        ui.set_fullscreen_key(label(Hotkey::Fullscreen));
+        ui.set_screenshot_key(label(Hotkey::Screenshot));
+    }
     ui.set_has_menu(true);
     ui.set_status("Starting…".into());
     let mut windows = vec![ui];

@@ -1,4 +1,4 @@
-use crate::mapping::Mappings;
+use crate::mapping::{Hotkey, Mappings};
 use crate::players::PLAYERS;
 use romp_proto::msg::{AppMsg, PadState};
 use slint::platform::Key;
@@ -38,23 +38,17 @@ pub fn map_key(text: &str, mappings: &Mappings) -> Option<KeyAction> {
     if chars.next().is_some() {
         return None;
     }
-    let is = |k: Key| char::from(k) == c;
-    let action = if is(Key::F5) {
-        KeyAction::Save
-    } else if is(Key::F6) {
-        KeyAction::NextSlot
-    } else if is(Key::F7) {
-        KeyAction::Load
-    } else if is(Key::F11) {
-        KeyAction::ToggleFullscreen
-    } else if is(Key::F12) {
-        KeyAction::Screenshot
-    } else if is(Key::Escape) {
-        KeyAction::Menu
-    } else if c.eq_ignore_ascii_case(&'p') {
-        KeyAction::TogglePause
-    } else {
-        KeyAction::Button(mappings.button_for_key(text)?)
+    if c == char::from(Key::Escape) {
+        return Some(KeyAction::Menu);
+    }
+    let action = match mappings.hotkey_for(text) {
+        Some(Hotkey::SaveState) => KeyAction::Save,
+        Some(Hotkey::NextSlot) => KeyAction::NextSlot,
+        Some(Hotkey::LoadState) => KeyAction::Load,
+        Some(Hotkey::Fullscreen) => KeyAction::ToggleFullscreen,
+        Some(Hotkey::Screenshot) => KeyAction::Screenshot,
+        Some(Hotkey::Pause) => KeyAction::TogglePause,
+        None => KeyAction::Button(mappings.button_for_key(text)?),
     };
     Some(action)
 }
@@ -303,6 +297,21 @@ mod tests {
         assert_eq!(map_key(&key(Key::F12), &m()), Some(KeyAction::Screenshot));
         assert_eq!(map_key(&key(Key::Escape), &m()), Some(KeyAction::Menu));
         assert_eq!(map_key("P", &m()), Some(KeyAction::TogglePause));
+    }
+
+    #[test]
+    fn changed_hotkeys_take_effect_in_game() {
+        let mut mappings = Mappings::default();
+        mappings.set_hotkey(Hotkey::Screenshot, "k");
+        mappings.set_hotkey(Hotkey::SaveState, "x");
+        assert_eq!(map_key("K", &mappings), Some(KeyAction::Screenshot));
+        assert_eq!(map_key("x", &mappings), Some(KeyAction::Save));
+        assert_eq!(
+            map_key(&key(Key::F5), &mappings),
+            Some(KeyAction::Button(A))
+        );
+        assert_eq!(map_key(&key(Key::F12), &mappings), None);
+        assert_eq!(map_key(&key(Key::Escape), &mappings), Some(KeyAction::Menu));
     }
 
     #[test]

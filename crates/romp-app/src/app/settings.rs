@@ -1,7 +1,7 @@
 use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::console_settings::{self, Chosen};
 use crate::details::human_size;
-use crate::mapping::{self, BUTTONS};
+use crate::mapping::{self, Assigned, BUTTONS, HOTKEYS};
 use crate::players::KEYBOARD;
 use crate::prefs::{Preferences, UI_SCALES};
 use crate::RemapRow;
@@ -13,17 +13,11 @@ const SECTION_PLAYERS: i32 = 2;
 const SECTION_STORAGE: i32 = 3;
 const SECTION_CONSOLES: i32 = 4;
 
-const KEY_HINTS: [(&str, &str); 7] = [
-    ("Esc", "Game menu"),
-    ("P", "Pause"),
-    ("F5", "Save state"),
-    ("F7", "Load state"),
-    ("F6", "Next save slot"),
-    ("F11", "Full screen"),
-    ("F12", "Screenshot"),
-];
+pub(super) const SHORTCUTS: &str = "shortcuts";
 
 const KEYBOARD_HINT: &str = "Choose a button, then press the key you want for it.";
+const SHORTCUTS_HINT: &str =
+    "Choose a shortcut, then press the key you want for it. Esc always opens the game menu.";
 const PAD_HINT: &str = "Choose a button, then press the controller button you want for it.";
 
 impl Controller {
@@ -35,15 +29,7 @@ impl Controller {
     pub(super) fn open_settings(&self) {
         let Some(ui) = self.ui() else { return };
         ui.set_settings_server(self.server().trim_end_matches('/').into());
-        ui.set_settings_keys(ModelRc::new(VecModel::from(
-            KEY_HINTS
-                .iter()
-                .map(|(keys, action)| KeyHint {
-                    keys: (*keys).into(),
-                    action: (*action).into(),
-                })
-                .collect::<Vec<_>>(),
-        )));
+        self.show_key_hints();
         let prefs = self.prefs.get();
         ui.set_pref_pause_unfocused(prefs.pause_unfocused);
         ui.set_pref_resume(prefs.resume);
@@ -222,9 +208,26 @@ impl Controller {
         self.save_mappings();
     }
 
+    fn show_key_hints(&self) {
+        let Some(ui) = self.ui() else { return };
+        let mappings = self.mappings.borrow();
+        let hints: Vec<KeyHint> = std::iter::once(KeyHint {
+            keys: "Esc".into(),
+            action: "Game menu".into(),
+        })
+        .chain(HOTKEYS.iter().map(|(hotkey, _, label)| KeyHint {
+            keys: mapping::key_label(&mappings.hotkey_key(*hotkey)).into(),
+            action: (*label).into(),
+        }))
+        .collect();
+        ui.set_settings_keys(ModelRc::new(VecModel::from(hints)));
+    }
+
     pub(super) fn customize(&self, device: String) {
         let Some(ui) = self.ui() else { return };
-        let title = if device == KEYBOARD {
+        let title = if device == SHORTCUTS {
+            "Shortcuts".to_string()
+        } else if device == KEYBOARD {
             "Keyboard".to_string()
         } else {
             let pads = self.gamepads.borrow().connected();
@@ -247,6 +250,21 @@ impl Controller {
         let keyboard = device == KEYBOARD;
         let waiting = self.remap_waiting.get();
         let mappings = self.mappings.borrow();
+        if device == SHORTCUTS {
+            let rows: Vec<RemapRow> = HOTKEYS
+                .iter()
+                .enumerate()
+                .map(|(i, (hotkey, _, label))| RemapRow {
+                    name: (*label).into(),
+                    binding: mapping::key_label(&mappings.hotkey_key(*hotkey)).into(),
+                    waiting: waiting == Some(i as u32),
+                })
+                .collect();
+            ui.set_remap_rows(ModelRc::new(VecModel::from(rows)));
+            ui.set_remap_waiting(waiting.is_some());
+            ui.set_remap_hint(notice.unwrap_or(SHORTCUTS_HINT).into());
+            return;
+        }
         let rows: Vec<RemapRow> = BUTTONS
             .iter()
             .map(|(button, name)| RemapRow {
@@ -270,10 +288,14 @@ impl Controller {
     }
 
     pub(super) fn remap_pick(&self, index: i32) {
-        let button = usize::try_from(index)
-            .ok()
-            .and_then(|i| BUTTONS.get(i))
-            .map(|(b, _)| *b);
+        let shortcuts = self.remap_device.borrow().as_deref() == Some(SHORTCUTS);
+        let button = usize::try_from(index).ok().and_then(|i| {
+            if shortcuts {
+                (i < HOTKEYS.len()).then_some(i as u32)
+            } else {
+                BUTTONS.get(i).map(|(b, _)| *b)
+            }
+        });
         self.remap_waiting.set(button);
         self.gamepads.borrow_mut().take_presses();
         self.show_remap(None);
@@ -289,17 +311,36 @@ impl Controller {
             self.remap_waiting.set(None);
             return self.show_remap(None);
         }
-        if device != KEYBOARD {
+        if device != KEYBOARD && device != SHORTCUTS {
             return;
         }
-        if !self.mappings.borrow_mut().set_key(button, &text) {
-            return self.show_remap(Some(
-                "That key is a shortcut. Choose a different key for this button.",
-            ));
-        }
+        let outcome = {
+            let mut mappings = self.mappings.borrow_mut();
+            if device == SHORTCUTS {
+                let hotkey = HOTKEYS[button as usize].0;
+                let previous = mappings.hotkey_key(hotkey);
+                (mappings.set_hotkey(hotkey, &text), previous)
+            } else {
+                let previous = mappings.key_for(button);
+                (mappings.set_key(button, &text), previous)
+            }
+        };
+        let notice = match outcome {
+            (Assigned::Reserved, _) => {
+                return self.show_remap(Some(
+                    "Esc always opens the game menu. Choose a different key.",
+                ));
+            }
+            (Assigned::Swapped(other), previous) => Some(format!(
+                "{other} now uses {}.",
+                mapping::key_label(&previous)
+            )),
+            (Assigned::Set, _) => None,
+        };
         self.remap_waiting.set(None);
         self.save_mappings();
-        self.show_remap(None);
+        self.show_key_hints();
+        self.show_remap(notice.as_deref());
     }
 
     fn capture_pad_press(&self) {
@@ -308,7 +349,7 @@ impl Controller {
         else {
             return;
         };
-        if device == KEYBOARD {
+        if device == KEYBOARD || device == SHORTCUTS {
             return;
         }
         let model = mapping::model_of(&device).to_string();
@@ -331,7 +372,9 @@ impl Controller {
         let Some(device) = self.remap_device.borrow().clone() else {
             return;
         };
-        if device == KEYBOARD {
+        if device == SHORTCUTS {
+            self.mappings.borrow_mut().reset_hotkeys();
+        } else if device == KEYBOARD {
             self.mappings.borrow_mut().reset_keyboard();
         } else {
             self.mappings
@@ -340,6 +383,7 @@ impl Controller {
         }
         self.remap_waiting.set(None);
         self.save_mappings();
+        self.show_key_hints();
         self.show_remap(None);
     }
 

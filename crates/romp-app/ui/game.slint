@@ -221,6 +221,12 @@ component GameMenu inherits Rectangle {
     in property <int> focused-item: -1;
     in property <[PortRow]> ports;
     in property <string> menu-key: "Esc";
+    in property <string> pause-key: "P";
+    in property <string> save-key: "F5";
+    in property <string> load-key: "F7";
+    in property <string> slot-key: "F6";
+    in property <string> fullscreen-key: "F11";
+    in property <string> screenshot-key: "F12";
     callback cycle-port(int, int);
     callback resume();
     callback toggle-pause();
@@ -346,7 +352,7 @@ component GameMenu inherits Rectangle {
                     horizontal-stretch: 1;
                     text: @tr("Save");
                     icon: @image-url("icons/save.svg");
-                    shortcut: root.keyboard ? "F5" : "";
+                    shortcut: root.keyboard ? root.save-key : "";
                     focused: root.focused-item == 4;
                     clicked => { root.save-state(); }
                 }
@@ -354,7 +360,7 @@ component GameMenu inherits Rectangle {
                     horizontal-stretch: 1;
                     text: @tr("Load");
                     icon: @image-url("icons/load.svg");
-                    shortcut: root.keyboard ? "F7" : "";
+                    shortcut: root.keyboard ? root.load-key : "";
                     focused: root.focused-item == 5;
                     clicked => { root.load-state(); }
                 }
@@ -369,14 +375,14 @@ component GameMenu inherits Rectangle {
             MenuRow {
                 text: root.fullscreen ? @tr("Exit full screen") : @tr("Full screen");
                 icon: root.fullscreen ? @image-url("icons/exit-fullscreen.svg") : @image-url("icons/fullscreen.svg");
-                shortcut: root.keyboard ? "F11" : "";
+                shortcut: root.keyboard ? root.fullscreen-key : "";
                 focused: root.focused-item == 7;
                 clicked => { root.toggle-fullscreen(); }
             }
             MenuRow {
                 text: @tr("Take screenshot");
                 icon: @image-url("icons/camera.svg");
-                shortcut: root.keyboard ? "F12" : "";
+                shortcut: root.keyboard ? root.screenshot-key : "";
                 focused: root.focused-item == 8;
                 clicked => { root.take-screenshot(); }
             }
@@ -401,7 +407,7 @@ component GameMenu inherits Rectangle {
                 clicked => { root.quit(); }
             }
             Text {
-                text: root.keyboard ? @tr("F6 next slot  ·  Guide opens this menu") : @tr("Keyboard goes to the game  ·  Guide opens this menu");
+                text: root.keyboard ? @tr("{} next slot  ·  Guide opens this menu", root.slot-key) : @tr("Keyboard goes to the game  ·  Guide opens this menu");
                 color: Theme.text-subtle;
                 font-size: Theme.font-caption;
                 horizontal-alignment: center;
@@ -428,6 +434,12 @@ export component GameWindow inherits Window {
     in property <bool> mouse-captured;
     in property <bool> lightgun-mode;
     in property <string> menu-key: "Esc";
+    in property <string> pause-key: "P";
+    in property <string> save-key: "F5";
+    in property <string> load-key: "F7";
+    in property <string> slot-key: "F6";
+    in property <string> fullscreen-key: "F11";
+    in property <string> screenshot-key: "F12";
     in property <[PortRow]> ports;
     callback cycle-port(int, int);
     callback capture-mouse();
@@ -551,7 +563,7 @@ export component GameWindow inherits Window {
                 Text { text: @tr("Paused"); vertical-alignment: center; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
                 VerticalLayout {
                     alignment: center;
-                    KeyCap { text: root.menu-key == "Esc" ? "P" : root.menu-key; }
+                    KeyCap { text: root.menu-key == "Esc" ? root.pause-key : root.menu-key; }
                 }
             }
         }
@@ -567,6 +579,12 @@ export component GameWindow inherits Window {
             focused-item: root.menu-focus;
             ports: root.ports;
             menu-key: root.menu-key;
+            pause-key: root.pause-key;
+            save-key: root.save-key;
+            load-key: root.load-key;
+            slot-key: root.slot-key;
+            fullscreen-key: root.fullscreen-key;
+            screenshot-key: root.screenshot-key;
             cycle-port(i, step) => { root.cycle-port(i, step); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
