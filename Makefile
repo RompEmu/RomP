@@ -47,7 +47,7 @@ $(call checksum,$(MACOS_ZIP))
 endef
 
 .PHONY: build app appimage dist dist-macos dist-linux dist-windows clean
-.PHONY: check fmt-check clippy test deny machete typos workflows
+.PHONY: check fmt-check clippy test deny machete typos workflows release-notes
 
 build:
 	cargo build --release --locked
@@ -138,5 +138,11 @@ typos:
 workflows:
 	actionlint
 	zizmor .github
+
+release-notes:
+	@awk -v heading="## [$(VERSION)]" ' \
+		index($$0, "## [") == 1 { if (found) exit; found = index($$0, heading) == 1; next } \
+		found && (printed || NF) { print; printed = 1 } \
+		END { if (!printed) { print "No changelog entry for $(VERSION)" > "/dev/stderr"; exit 1 } }' CHANGELOG.md
 
 -include signing/signing.mk
