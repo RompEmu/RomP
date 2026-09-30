@@ -9,6 +9,12 @@ pub struct Keychain {
 }
 
 impl Keychain {
+    pub fn retro_achievements() -> Keychain {
+        Keychain {
+            service: "Romp RetroAchievements",
+        }
+    }
+
     pub fn app() -> Migrating<Keychain, Keychain> {
         Migrating {
             current: Keychain { service: "Romp" },

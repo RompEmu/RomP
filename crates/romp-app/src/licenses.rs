@@ -30,6 +30,11 @@ const RPCS3: Notice = notice(
     "GPL-2.0",
     "https://github.com/RPCS3/rpcs3/blob/master/LICENSE",
 );
+const RCHEEVOS: Notice = notice(
+    "rcheevos",
+    "MIT",
+    "https://github.com/RetroAchievements/rcheevos/blob/develop/LICENSE",
+);
 const MOLTENVK: Notice = notice(
     "MoltenVK",
     "Apache-2.0",
@@ -242,6 +247,7 @@ pub fn notices() -> Vec<Notice> {
     if cfg!(target_os = "macos") {
         notices.push(MOLTENVK);
     }
+    notices.push(RCHEEVOS);
     notices.push(SLINT);
     notices
 }

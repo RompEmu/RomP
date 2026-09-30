@@ -527,6 +527,7 @@ impl Controller {
         let http = self.shared.http.clone();
         let client = self.client.borrow().clone();
         let offline = self.offline.get();
+        let achievements = self.ra_account().is_some();
         let id = detail.id;
         let sync = self
             .sync_device()
@@ -577,6 +578,13 @@ impl Controller {
                     .await
                     {
                         missing = still;
+                    }
+                }
+            }
+            if let (Some(client), true) = (&client, achievements && !offline) {
+                if let Ok(rom) = client.rom_detail(id).await {
+                    if let Some(hash) = rom.ra_hash.filter(|h| !h.is_empty()) {
+                        on_ui(move |c| *c.ra_hash.borrow_mut() = Some((id, hash)));
                     }
                 }
             }
@@ -934,6 +942,7 @@ impl Controller {
                     })
                     .collect()
             },
+            achievements: self.achievements_launch(&detail),
             screenshot_taken: {
                 let id = detail.id;
                 Box::new(move |path| {

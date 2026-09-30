@@ -3,6 +3,7 @@ use clap::Parser;
 use romp_libretro as lr;
 use romp_proto::frame::{self, FrameWriter, SrcFormat};
 use romp_proto::msg::{AppMsg, RunnerMsg};
+use romp_runner::achievements::Achievements;
 use romp_runner::frontend::Frontend;
 use romp_runner::ipc::Link;
 use romp_runner::state::StateManager;
@@ -124,6 +125,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     archive::remove_stale_scratch(&std::env::temp_dir());
     apply_sandbox(args, vulkan_library.as_deref())?;
 
+    lr::set_memory_map_hook(Some(|map| unsafe { romp_cheevos::set_memory_map(map) }));
     let mut core = unsafe { lr::Core::load(&args.core) }.context("load core")?;
     lr::set_core_option_values(&args.options);
     let sys = core.system_info();
@@ -156,6 +158,9 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     for port in 0..4 {
         core.set_controller_port_device(port, lr::RETRO_DEVICE_JOYPAD, frontend);
     }
+    let (memory_data, memory_size) = core.memory_functions();
+    romp_cheevos::set_core_memory(memory_data, memory_size);
+    let mut achievements: Option<Achievements> = None;
 
     let mut saves = StateManager::new(&args.save_dir);
     saves.load_initial_sram(&mut core, frontend);
@@ -231,10 +236,41 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                 }
                 AppMsg::LoadSlot(slot) => {
                     let ok = saves.load_state(slot, &mut core, frontend);
+                    if ok {
+                        if let Some(a) = &mut achievements {
+                            a.reset();
+                        }
+                    }
                     link.send(&RunnerMsg::StateLoaded { slot, ok });
                 }
                 AppMsg::Shutdown => stop_requested = true,
-                AppMsg::Reset => core.reset(frontend),
+                AppMsg::Reset => {
+                    core.reset(frontend);
+                    if let Some(a) = &mut achievements {
+                        a.reset();
+                    }
+                }
+                AppMsg::Achievements {
+                    username,
+                    token,
+                    hardcore,
+                    console_id,
+                    hash,
+                } => {
+                    achievements = Achievements::start(
+                        &username,
+                        &token,
+                        hardcore,
+                        console_id,
+                        hash,
+                        (&sys.library_name, &sys.library_version),
+                    );
+                }
+                AppMsg::AchievementsResponse { id, status, body } => {
+                    if let Some(a) = &mut achievements {
+                        a.respond(id, status, &body);
+                    }
+                }
                 AppMsg::Pad { .. } | AppMsg::Pointer { .. } | AppMsg::Mouse { .. } => {}
             }
         }
@@ -309,6 +345,15 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             }
             if saves.tick_sram(&mut core, frontend) {
                 link.send(&RunnerMsg::SramWritten);
+            }
+        }
+        if let Some(a) = &mut achievements {
+            let tick = a.tick(!paused, &rom);
+            for message in &tick.messages {
+                link.send(message);
+            }
+            if tick.reset_core {
+                core.reset(frontend);
             }
         }
         if frontend.shutdown {

@@ -1,0 +1,19 @@
+[package]
+name = "romp-cheevos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+romp-proto = { workspace = true }
+
+[build-dependencies]
+cc = "1"
+
+[dev-dependencies]
+md-5 = "0.11"
+
+[lints]
+workspace = true

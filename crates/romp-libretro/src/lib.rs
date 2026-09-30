@@ -375,6 +375,16 @@ impl Core {
         Ok(())
     }
 
+    /// The core's own `retro_get_memory_data` and `retro_get_memory_size`.
+    pub fn memory_functions(
+        &self,
+    ) -> (
+        unsafe extern "C" fn(c_uint) -> *mut c_void,
+        unsafe extern "C" fn(c_uint) -> usize,
+    ) {
+        (self.syms.get_memory_data, self.syms.get_memory_size)
+    }
+
     /// # Safety
     /// The slice aliases core-owned memory and must not outlive the loaded game.
     pub unsafe fn memory_region<F: Frontend>(
@@ -557,6 +567,14 @@ static HW_CONTEXT_DESTROY: std::sync::Mutex<Option<unsafe extern "C" fn()>> =
 pub struct ControllerType {
     pub name: String,
     pub id: u32,
+}
+
+type MemoryMapHook = fn(*const c_void);
+static MEMORY_MAP_HOOK: std::sync::Mutex<Option<MemoryMapHook>> = std::sync::Mutex::new(None);
+
+/// Receives the memory map a core announces, while the call lasts; the hook copies what it keeps.
+pub fn set_memory_map_hook(hook: Option<MemoryMapHook>) {
+    *MEMORY_MAP_HOOK.lock().unwrap() = hook;
 }
 
 static ROTATION: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -1063,6 +1081,13 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             let _ = data;
             false
         }
+        sys::RETRO_ENVIRONMENT_SET_MEMORY_MAPS => {
+            if let Some(hook) = *MEMORY_MAP_HOOK.lock().unwrap() {
+                hook(data.cast_const());
+            }
+            true
+        }
+        sys::RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS => true,
         sys::RETRO_ENVIRONMENT_SHUTDOWN => {
             if CURRENT_FRONTEND.with(|c| c.borrow().is_some()) {
                 with_frontend(|f| f.shutdown());

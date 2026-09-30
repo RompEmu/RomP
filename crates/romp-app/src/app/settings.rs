@@ -30,6 +30,7 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         ui.set_settings_server(self.server().trim_end_matches('/').into());
         self.show_key_hints();
+        self.show_ra_account();
         let prefs = self.prefs.get();
         ui.set_pref_pause_unfocused(prefs.pause_unfocused);
         ui.set_pref_resume(prefs.resume);

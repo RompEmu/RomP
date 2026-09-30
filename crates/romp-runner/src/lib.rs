@@ -1,3 +1,4 @@
+pub mod achievements;
 pub mod archive;
 pub mod audio;
 pub mod audio_pipe;

@@ -49,6 +49,7 @@ pub struct GameOptions {
     pub placements: Vec<Option<Placement>>,
     pub save_placement: SavePlacement,
     pub screenshot_taken: ScreenshotTaken,
+    pub achievements: Option<crate::achievements::popups::Launch>,
 }
 
 pub struct CoreGame {
@@ -96,6 +97,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Resu
     let game = launch(
         GameOptions {
             screenshot_taken: Box::new(|_| {}),
+            achievements: None,
             core,
             rom,
             save_dir,
@@ -168,6 +170,7 @@ struct Game {
         std::sync::mpsc::Receiver<Saved>,
     ),
     screenshot_taken: ScreenshotTaken,
+    achievements: RefCell<Option<crate::achievements::popups::Link>>,
 }
 
 const MENU_RESUME: i32 = 0;
@@ -378,6 +381,31 @@ impl Game {
                 }
                 Err(e) => flash(self.primary(), format!("Couldn't save the screenshot: {e}")),
             }
+        }
+    }
+
+    fn show_achievements(&self, now: std::time::Instant) {
+        let polled = self.achievements.borrow_mut().as_mut().map(|l| l.poll(now));
+        let Some((replies, view)) = polled else {
+            return;
+        };
+        for reply in &replies {
+            self.send(reply);
+        }
+        let ui = self.primary();
+        match view {
+            Some(view) => {
+                let changed = ui.get_toast_title() != view.title.as_str()
+                    || ui.get_toast_detail() != view.detail.as_str();
+                if changed || ui.get_toast_has_badge() != view.badge.is_some() {
+                    ui.set_toast_title(view.title.into());
+                    ui.set_toast_detail(view.detail.into());
+                    ui.set_toast_has_badge(view.badge.is_some());
+                    ui.set_toast_badge(view.badge.unwrap_or_default());
+                }
+            }
+            None if !ui.get_toast_title().is_empty() => ui.set_toast_title("".into()),
+            None => {}
         }
     }
 
@@ -780,6 +808,10 @@ pub fn launch(
             screenshot_wanted: Cell::new(false),
             screenshots: std::sync::mpsc::channel(),
             screenshot_taken: opts.screenshot_taken,
+            achievements: RefCell::new(
+                opts.achievements
+                    .map(crate::achievements::popups::Link::new),
+            ),
         }
     });
     let _ = game
@@ -877,7 +909,27 @@ pub fn launch(
                 game.capture(&buf, shown);
             }
             game.screenshot_saved();
+            game.show_achievements(std::time::Instant::now());
             for event in events {
+                if let SessionEvent::Runner(RunnerMsg::AchievementsRequest {
+                    id,
+                    url,
+                    post,
+                    content_type,
+                    agent,
+                }) = event
+                {
+                    if let Some(link) = game.achievements.borrow().as_ref() {
+                        link.request(id, url, post, content_type, agent);
+                    }
+                    continue;
+                }
+                if let SessionEvent::Runner(RunnerMsg::Achievement(event)) = event {
+                    if let Some(link) = game.achievements.borrow_mut().as_mut() {
+                        link.event(&event);
+                    }
+                    continue;
+                }
                 if let SessionEvent::Runner(RunnerMsg::Controllers { ports }) = event {
                     game.set_ports(ports);
                     continue;
@@ -907,6 +959,16 @@ pub fn launch(
                     ui.set_status(
                         "The game couldn't continue from where you left off, so that automatic save was set aside. Start the game again to play from the beginning or from a save slot.".into(),
                     );
+                }
+                if started_now {
+                    let start = game
+                        .achievements
+                        .borrow()
+                        .as_ref()
+                        .map(crate::achievements::popups::Link::start_message);
+                    if let Some(message) = start {
+                        game.send(&message);
+                    }
                 }
                 if started_now && game.computer {
                     flash(

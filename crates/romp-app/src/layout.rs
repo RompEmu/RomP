@@ -138,6 +138,7 @@ mod tests {
             fs_path: "roms/psx".into(),
             has_multiple_files: multi,
             files,
+            ra_hash: None,
         }
     }
 

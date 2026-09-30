@@ -1,3 +1,4 @@
+mod achievements;
 mod activity;
 mod collections;
 mod game;
@@ -108,6 +109,7 @@ struct Controller {
     icon_requests: RefCell<HashSet<String>>,
     running: RefCell<Option<crate::play::RunningGame>>,
     session: RefCell<Option<activity::Session>>,
+    ra_hash: RefCell<Option<(i64, String)>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
     selected: RefCell<String>,
@@ -195,6 +197,7 @@ pub fn run() -> anyhow::Result<()> {
         icon_requests: RefCell::default(),
         running: RefCell::new(None),
         session: RefCell::new(None),
+        ra_hash: RefCell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
         selected: RefCell::new("all".into()),
@@ -338,6 +341,10 @@ impl Controller {
         ui.on_keep_local_save(|| with_controller(|c| c.keep_save(crate::saves::Keep::Local)));
         ui.on_keep_server_save(|| with_controller(|c| c.keep_save(crate::saves::Keep::Server)));
         ui.on_pair_again(|| with_controller(|c| c.pair_again()));
+        ui.on_ra_sign_in(|user, password| {
+            with_controller(|c| c.ra_sign_in(user.to_string(), password.to_string()));
+        });
+        ui.on_ra_sign_out(|| with_controller(|c| c.ra_sign_out()));
         ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
     }
 
@@ -565,6 +572,13 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         match me {
             Ok(user) => {
+                if let Some(ra) = user.ra_username.as_deref().filter(|n| !n.is_empty()) {
+                    self.shared
+                        .store
+                        .lock()
+                        .unwrap()
+                        .set("romm_ra_username", ra);
+                }
                 let initial = user
                     .username
                     .chars()

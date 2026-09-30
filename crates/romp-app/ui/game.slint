@@ -459,6 +459,10 @@ export component GameWindow inherits Window {
     in property <image> frame;
     in property <float> aspect: 4 / 3;
     in property <string> status;
+    in property <string> toast-title;
+    in property <string> toast-detail;
+    in property <image> toast-badge;
+    in property <bool> toast-has-badge;
     callback key-event(string, bool, bool, KeyboardModifiers) -> bool;
     callback pointer(float, float, bool);
     callback focus-lost();
@@ -597,6 +601,33 @@ export component GameWindow inherits Window {
             take-screenshot => { root.take-screenshot(); }
             open-controllers => { root.open-controllers(); }
             quit => { root.quit(); }
+        }
+
+        if root.toast-title != "": Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: 16px;
+            width: min(parent.width - 32px, 420px);
+            height: toast-row.preferred-height;
+            background: Theme.scrim-strong;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            toast-row := HorizontalLayout {
+                padding: 10px;
+                spacing: 12px;
+                if root.toast-has-badge: Image {
+                    source: root.toast-badge;
+                    width: 48px;
+                    height: 48px;
+                    image-fit: contain;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text { text: root.toast-title; color: Theme.text-strong; font-size: Theme.font-body-large; font-weight: 700; wrap: word-wrap; }
+                    Text { text: root.toast-detail; color: Theme.text-secondary; font-size: Theme.font-body; wrap: word-wrap; }
+                }
+            }
         }
 
         if root.status != "": Rectangle {

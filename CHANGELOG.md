@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- RetroAchievements. Sign in under Settings → Account, and games with achievements show a popup with the badge when you earn one, and tell you when a leaderboard attempt starts or is submitted. Romp keeps RetroAchievements' sign-in token in the keychain, not your password, and only the app talks to RetroAchievements, never the sandboxed emulator.
+
 ## [0.7.0] - 2026-09-30
 
 ### Added

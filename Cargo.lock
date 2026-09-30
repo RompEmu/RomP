@@ -4883,6 +4883,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "romp-cheevos"
+version = "0.7.0"
+dependencies = [
+ "cc",
+ "md-5",
+ "romp-proto",
+]
+
+[[package]]
 name = "romp-libretro"
 version = "0.7.0"
 dependencies = [
@@ -4914,6 +4923,7 @@ dependencies = [
  "libc",
  "parking_lot",
  "ringbuf",
+ "romp-cheevos",
  "romp-libretro",
  "romp-proto",
  "sevenz-rust2",

@@ -18,6 +18,7 @@ redundant_closure_for_method_calls = "warn"
 uninlined_format_args = "warn"
 
 [workspace.dependencies]
+romp-cheevos = { path = "crates/romp-cheevos" }
 romp-libretro = { path = "crates/romp-libretro" }
 romp-proto = { path = "crates/romp-proto" }
 

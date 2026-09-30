@@ -1,7 +1,7 @@
 use serde::{de::DeserializeOwned, Serialize};
 use std::io::{self, Read, Write};
 
-const MAX_LEN: u32 = 1 << 20;
+const MAX_LEN: u32 = 8 << 20;
 
 pub fn write_msg<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()> {
     let body =

@@ -6,4 +6,4 @@ UPDAT = "UPDAT"
 updat = "updat"
 
 [files]
-extend-exclude = ["*.png", "*.ico", "LICENSE"]
+extend-exclude = ["*.png", "*.ico", "LICENSE", "crates/romp-cheevos/rcheevos", "crates/romp-cheevos/libretro"]

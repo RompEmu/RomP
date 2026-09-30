@@ -38,6 +38,76 @@ pub enum AppMsg {
     LoadSlot(u8),
     Shutdown,
     Reset,
+    /// Signs in to RetroAchievements and starts tracking the loaded game.
+    Achievements {
+        username: String,
+        token: String,
+        hardcore: bool,
+        console_id: u32,
+        /// RomM's RetroAchievements hash for the game, which spares hashing disc images.
+        hash: Option<String>,
+    },
+    /// The answer to an `AchievementsRequest`, fetched by the app.
+    AchievementsResponse {
+        id: u64,
+        status: i32,
+        body: Vec<u8>,
+    },
+}
+
+/// Something that happened while tracking achievements.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AchievementEvent {
+    SignedIn,
+    SignInFailed(String),
+    GameLoaded {
+        title: String,
+        achievements: u32,
+    },
+    GameUnavailable(String),
+    Unlocked {
+        id: u32,
+        title: String,
+        description: String,
+        points: u32,
+        badge_url: String,
+    },
+    Mastered,
+    LeaderboardStarted {
+        title: String,
+        description: String,
+    },
+    LeaderboardFailed {
+        title: String,
+    },
+    LeaderboardSubmitted {
+        title: String,
+        score: String,
+    },
+    Progress {
+        title: String,
+        badge_url: String,
+        progress: String,
+    },
+    ProgressHidden,
+    Tracker {
+        id: u32,
+        display: String,
+    },
+    TrackerHidden {
+        id: u32,
+    },
+    Challenge {
+        id: u32,
+        badge_url: String,
+    },
+    ChallengeHidden {
+        id: u32,
+    },
+    Offline,
+    Online,
+    Reset,
+    ServerError(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,4 +134,13 @@ pub enum RunnerMsg {
     Exited {
         error: Option<String>,
     },
+    /// A request to RetroAchievements; the sandboxed runner has no network of its own.
+    AchievementsRequest {
+        id: u64,
+        url: String,
+        post: Option<String>,
+        content_type: Option<String>,
+        agent: String,
+    },
+    Achievement(AchievementEvent),
 }

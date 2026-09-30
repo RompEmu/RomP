@@ -38,6 +38,8 @@ pub struct User {
     pub current_device_id: Option<String>,
     #[serde(default)]
     pub avatar_path: Option<String>,
+    #[serde(default)]
+    pub ra_username: Option<String>,
 }
 
 impl User {
@@ -174,6 +176,8 @@ pub struct RomDetail {
     pub fs_path: String,
     pub has_multiple_files: bool,
     pub files: Vec<RomFile>,
+    #[serde(default)]
+    pub ra_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

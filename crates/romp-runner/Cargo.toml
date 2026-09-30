@@ -14,6 +14,7 @@ name = "romp-runner"
 path = "src/main.rs"
 
 [dependencies]
+romp-cheevos = { workspace = true }
 romp-libretro = { workspace = true }
 romp-proto = { workspace = true }
 anyhow = "1"

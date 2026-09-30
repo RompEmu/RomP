@@ -1,0 +1,394 @@
+//! RetroAchievements through rcheevos' rc_client, with its network requests handed to the caller.
+
+use romp_proto::msg::AchievementEvent;
+use std::collections::HashMap;
+use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
+use std::path::Path;
+use std::ptr::NonNull;
+
+#[repr(C)]
+struct RawEvent {
+    kind: u32,
+    id: u32,
+    points: u32,
+    title: *const c_char,
+    description: *const c_char,
+    badge_url: *const c_char,
+    progress: *const c_char,
+    tracker: *const c_char,
+    error: *const c_char,
+}
+
+pub type MemoryData = unsafe extern "C" fn(c_uint) -> *mut c_void;
+pub type MemorySize = unsafe extern "C" fn(c_uint) -> usize;
+
+unsafe extern "C" {
+    fn romp_rc_create(host: *mut c_void, hardcore: c_int) -> *mut c_void;
+    fn romp_rc_destroy(client: *mut c_void);
+    fn romp_rc_login(client: *mut c_void, username: *const c_char, token: *const c_char);
+    fn romp_rc_load_game(
+        client: *mut c_void,
+        console_id: u32,
+        path: *const c_char,
+        data: *const u8,
+        size: usize,
+    );
+    fn romp_rc_load_hash(client: *mut c_void, hash: *const c_char);
+    fn romp_rc_respond(
+        callback: *const c_void,
+        callback_data: *mut c_void,
+        body: *const c_char,
+        body_length: usize,
+        status: c_int,
+    );
+    fn romp_rc_game(client: *mut c_void, title: *mut *const c_char, achievements: *mut u32) -> u32;
+    fn romp_rc_user_agent_clause(client: *mut c_void, buffer: *mut c_char, size: usize) -> usize;
+    fn romp_rc_set_memory_map(map: *const c_void);
+    fn romp_rc_set_core_memory(data: Option<MemoryData>, size: Option<MemorySize>);
+    fn rc_client_do_frame(client: *mut c_void);
+    fn rc_client_idle(client: *mut c_void);
+    fn rc_client_reset(client: *mut c_void);
+}
+
+/// Keeps a copy of the memory map a core announces, for reading the memory achievements watch.
+///
+/// # Safety
+/// `map` is null or points to a valid `retro_memory_map` for the duration of the call.
+pub unsafe fn set_memory_map(map: *const c_void) {
+    unsafe { romp_rc_set_memory_map(map) }
+}
+
+/// The core's `retro_get_memory_data` and `retro_get_memory_size`, used when it has no memory map.
+pub fn set_core_memory(data: MemoryData, size: MemorySize) {
+    unsafe { romp_rc_set_core_memory(Some(data), Some(size)) }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Request {
+    pub id: u64,
+    pub url: String,
+    pub post: Option<String>,
+    pub content_type: Option<String>,
+}
+
+struct Pending {
+    callback: *const c_void,
+    data: *mut c_void,
+}
+
+#[derive(Default)]
+struct Host {
+    client: Option<NonNull<c_void>>,
+    next_id: u64,
+    requests: Vec<Request>,
+    pending: HashMap<u64, Pending>,
+    events: Vec<AchievementEvent>,
+}
+
+fn text(ptr: *const c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    // SAFETY: rcheevos hands over nul-terminated strings that live through the callback.
+    unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn host<'a>(ptr: *mut c_void) -> &'a mut Host {
+    // SAFETY: `ptr` is the boxed Host a Session registered, alive for as long as its client.
+    unsafe { &mut *(ptr as *mut Host) }
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn romp_rc_on_request(
+    host_ptr: *mut c_void,
+    url: *const c_char,
+    post: *const c_char,
+    content_type: *const c_char,
+    callback: *const c_void,
+    callback_data: *mut c_void,
+) {
+    let host = host(host_ptr);
+    host.next_id += 1;
+    let id = host.next_id;
+    let optional = |p: *const c_char| (!p.is_null()).then(|| text(p));
+    host.requests.push(Request {
+        id,
+        url: text(url),
+        post: optional(post),
+        content_type: optional(content_type),
+    });
+    host.pending.insert(
+        id,
+        Pending {
+            callback,
+            data: callback_data,
+        },
+    );
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn romp_rc_on_event(host_ptr: *mut c_void, event: *const RawEvent) {
+    // SAFETY: the shim passes a pointer to an event on its stack for the length of the call.
+    let e = unsafe { &*event };
+    let event = match e.kind {
+        1 => AchievementEvent::Unlocked {
+            id: e.id,
+            title: text(e.title),
+            description: text(e.description),
+            points: e.points,
+            badge_url: text(e.badge_url),
+        },
+        2 => AchievementEvent::LeaderboardStarted {
+            title: text(e.title),
+            description: text(e.description),
+        },
+        3 => AchievementEvent::LeaderboardFailed {
+            title: text(e.title),
+        },
+        4 => AchievementEvent::LeaderboardSubmitted {
+            title: text(e.title),
+            score: text(e.tracker),
+        },
+        5 => AchievementEvent::Challenge {
+            id: e.id,
+            badge_url: text(e.badge_url),
+        },
+        6 => AchievementEvent::ChallengeHidden { id: e.id },
+        7 | 9 => AchievementEvent::Progress {
+            title: text(e.title),
+            badge_url: text(e.badge_url),
+            progress: text(e.progress),
+        },
+        8 => AchievementEvent::ProgressHidden,
+        10 | 12 => AchievementEvent::Tracker {
+            id: e.id,
+            display: text(e.tracker),
+        },
+        11 => AchievementEvent::TrackerHidden { id: e.id },
+        14 => AchievementEvent::Reset,
+        15 => AchievementEvent::Mastered,
+        16 => AchievementEvent::ServerError(text(e.error)),
+        17 => AchievementEvent::Offline,
+        18 => AchievementEvent::Online,
+        _ => return,
+    };
+    host(host_ptr).events.push(event);
+}
+
+const DONE_LOGIN: c_int = 0;
+
+#[unsafe(no_mangle)]
+extern "C" fn romp_rc_on_done(
+    host_ptr: *mut c_void,
+    what: c_int,
+    result: c_int,
+    error: *const c_char,
+) {
+    let host = host(host_ptr);
+    let error = || {
+        let message = text(error);
+        if message.is_empty() {
+            format!("error {result}")
+        } else {
+            message
+        }
+    };
+    let event = match (what, result) {
+        (DONE_LOGIN, 0) => AchievementEvent::SignedIn,
+        (DONE_LOGIN, _) => AchievementEvent::SignInFailed(error()),
+        (_, 0) => {
+            let mut title = std::ptr::null();
+            let mut achievements = 0;
+            let id = match host.client {
+                // SAFETY: the client is alive while it reports on itself.
+                Some(client) => unsafe {
+                    romp_rc_game(client.as_ptr(), &mut title, &mut achievements)
+                },
+                None => 0,
+            };
+            if id == 0 {
+                AchievementEvent::GameUnavailable("This game has no achievements".into())
+            } else {
+                AchievementEvent::GameLoaded {
+                    title: text(title),
+                    achievements,
+                }
+            }
+        }
+        _ => AchievementEvent::GameUnavailable(error()),
+    };
+    host.events.push(event);
+}
+
+/// One player's achievement session for one game.
+pub struct Session {
+    client: NonNull<c_void>,
+    host: Box<Host>,
+}
+
+impl Session {
+    pub fn new(hardcore: bool) -> Option<Self> {
+        let mut host = Box::<Host>::default();
+        let host_ptr = std::ptr::from_mut(host.as_mut()).cast::<c_void>();
+        // SAFETY: the boxed host outlives the client, which is destroyed in Drop.
+        let client = NonNull::new(unsafe { romp_rc_create(host_ptr, c_int::from(hardcore)) })?;
+        host.client = Some(client);
+        Some(Self { client, host })
+    }
+
+    pub fn sign_in(&mut self, username: &str, token: &str) {
+        let (Ok(username), Ok(token)) = (CString::new(username), CString::new(token)) else {
+            return self
+                .host
+                .events
+                .push(AchievementEvent::SignInFailed("invalid sign-in".into()));
+        };
+        unsafe { romp_rc_login(self.client.as_ptr(), username.as_ptr(), token.as_ptr()) }
+    }
+
+    /// Identifies the game from its file, or from its contents when the core loaded it into memory.
+    pub fn load_game(&mut self, console_id: u32, path: &Path, data: Option<&[u8]>) {
+        let path = CString::new(path.to_string_lossy().as_bytes()).unwrap_or_default();
+        let (ptr, len) = data.map_or((std::ptr::null(), 0), |d| (d.as_ptr(), d.len()));
+        unsafe { romp_rc_load_game(self.client.as_ptr(), console_id, path.as_ptr(), ptr, len) }
+    }
+
+    /// Loads the game by the hash RetroAchievements knows it by, as RomM computes it.
+    pub fn load_hash(&mut self, hash: &str) {
+        let Ok(hash) = CString::new(hash) else { return };
+        unsafe { romp_rc_load_hash(self.client.as_ptr(), hash.as_ptr()) }
+    }
+
+    pub fn do_frame(&mut self) {
+        unsafe { rc_client_do_frame(self.client.as_ptr()) }
+    }
+
+    /// Keeps the session alive while the game is paused; call at least once a second.
+    pub fn idle(&mut self) {
+        unsafe { rc_client_idle(self.client.as_ptr()) }
+    }
+
+    pub fn reset(&mut self) {
+        unsafe { rc_client_reset(self.client.as_ptr()) }
+    }
+
+    pub fn take_requests(&mut self) -> Vec<Request> {
+        std::mem::take(&mut self.host.requests)
+    }
+
+    pub fn take_events(&mut self) -> Vec<AchievementEvent> {
+        std::mem::take(&mut self.host.events)
+    }
+
+    /// Hands the server's answer to request `id` back to rcheevos; `status` is the HTTP status.
+    pub fn respond(&mut self, id: u64, status: i32, body: &[u8]) {
+        let Some(pending) = self.host.pending.remove(&id) else {
+            return;
+        };
+        unsafe {
+            romp_rc_respond(
+                pending.callback,
+                pending.data,
+                body.as_ptr().cast(),
+                body.len(),
+                status,
+            );
+        }
+    }
+
+    /// The `rcheevos/x.y` part of the user agent, which the app adds to its own.
+    pub fn user_agent_clause(&mut self) -> String {
+        let mut buffer = [0 as c_char; 64];
+        let len = unsafe {
+            romp_rc_user_agent_clause(self.client.as_ptr(), buffer.as_mut_ptr(), buffer.len())
+        };
+        let bytes: Vec<u8> = buffer[..len.min(buffer.len())]
+            .iter()
+            .map(|c| *c as u8)
+            .collect();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        unsafe { romp_rc_destroy(self.client.as_ptr()) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn post(request: &Request) -> &str {
+        request.post.as_deref().unwrap_or_default()
+    }
+
+    fn sign_in() -> Session {
+        let mut session = Session::new(false).unwrap();
+        session.sign_in("player", "secret-token");
+        let requests = session.take_requests();
+        assert_eq!(requests.len(), 1);
+        assert!(
+            requests[0].url.ends_with("/dorequest.php"),
+            "{}",
+            requests[0].url
+        );
+        assert!(
+            post(&requests[0]).contains("r=login2"),
+            "{}",
+            post(&requests[0])
+        );
+        assert!(post(&requests[0]).contains("u=player"));
+        assert!(post(&requests[0]).contains("t=secret-token"));
+        session.respond(
+            requests[0].id,
+            200,
+            br#"{"Success":true,"User":"player","DisplayName":"player","Token":"secret-token","Score":10,"SoftcoreScore":5,"Messages":0,"Permissions":1,"AccountType":"Registered"}"#,
+        );
+        assert_eq!(session.take_events(), [AchievementEvent::SignedIn]);
+        session
+    }
+
+    #[test]
+    fn signing_in_goes_through_the_callers_requests() {
+        sign_in();
+    }
+
+    #[test]
+    fn a_rejected_token_is_reported() {
+        let mut session = Session::new(false).unwrap();
+        session.sign_in("player", "stale");
+        let id = session.take_requests()[0].id;
+        session.respond(
+            id,
+            401,
+            br#"{"Success":false,"Error":"Invalid token","Code":"invalid_credentials"}"#,
+        );
+        let events = session.take_events();
+        assert!(
+            matches!(&events[..], [AchievementEvent::SignInFailed(m)] if m.contains("Invalid token")),
+            "{events:?}"
+        );
+    }
+
+    #[test]
+    fn games_are_identified_by_the_hash_of_their_contents() {
+        use md5::Digest;
+        let mut session = sign_in();
+        let rom = vec![0x42u8; 32 * 1024];
+        session.load_game(4, Path::new("Game.gb"), Some(&rom));
+        let requests = session.take_requests();
+        let hash: String = md5::Md5::digest(&rom)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert!(
+            requests.iter().any(|r| post(r).contains(&hash)),
+            "{requests:?}"
+        );
+        assert!(session.user_agent_clause().starts_with("rcheevos/"));
+    }
+}

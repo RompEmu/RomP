@@ -1287,6 +1287,14 @@ component SettingsPage inherits FocusScope {
     in property <string> user;
     in property <string> server;
     in property <bool> offline;
+    in property <bool> ra-signed-in;
+    in property <string> ra-user;
+    in property <bool> ra-busy;
+    in property <string> ra-status;
+    in-out property <string> ra-username-input;
+    in-out property <string> ra-password-input;
+    callback ra-sign-in(string, string);
+    callback ra-sign-out();
     in property <[DeviceRow]> devices;
     in property <[KeyHint]> keys;
     in property <[StorageRow]> storage;
@@ -1431,6 +1439,38 @@ component SettingsPage inherits FocusScope {
                                 label: @tr("Sign out");
                                 detail: @tr("Signs this device out and clears the library list. Downloaded files stay on disk.");
                                 Button { text: @tr("Sign out"); clicked => { root.sign-out(); } }
+                            }
+                        }
+                        Text { text: @tr("RetroAchievements"); font-size: Theme.font-body-large; font-weight: 700; }
+                        Panel {
+                            if root.ra-signed-in: SettingRow {
+                                label: @tr("Signed in as {}", root.ra-user);
+                                detail: @tr("Games with achievements show them as you play. Romp keeps a sign-in token, not your password.");
+                                Button { text: @tr("Sign out"); clicked => { root.ra-sign-out(); } }
+                            }
+                            if !root.ra-signed-in: SettingRow {
+                                label: @tr("Sign in");
+                                detail: root.ra-status != "" ? root.ra-status : @tr("Earn achievements while you play. Romp keeps a sign-in token, not your password.");
+                                detail-color: root.ra-status != "" && !root.ra-busy ? Theme.danger : Theme.text-muted;
+                                LineEdit {
+                                    width: 150px;
+                                    placeholder-text: @tr("Username");
+                                    text <=> root.ra-username-input;
+                                    enabled: !root.ra-busy;
+                                }
+                                LineEdit {
+                                    width: 150px;
+                                    placeholder-text: @tr("Password");
+                                    input-type: password;
+                                    text <=> root.ra-password-input;
+                                    enabled: !root.ra-busy;
+                                    accepted => { root.ra-sign-in(root.ra-username-input, root.ra-password-input); }
+                                }
+                                Button {
+                                    text: @tr("Sign in");
+                                    enabled: !root.ra-busy && !root.offline;
+                                    clicked => { root.ra-sign-in(root.ra-username-input, root.ra-password-input); }
+                                }
                             }
                         }
                     }
@@ -1868,6 +1908,14 @@ export component AppWindow inherits Window {
     callback open-settings();
     in-out property <int> settings-section;
     in property <string> settings-server;
+    in property <bool> ra-signed-in;
+    in property <string> ra-user;
+    in property <bool> ra-busy;
+    in property <string> ra-status;
+    in-out property <string> ra-username-input;
+    in-out property <string> ra-password-input;
+    callback ra-sign-in(string, string);
+    callback ra-sign-out();
     in property <[DeviceRow]> settings-devices;
     in property <[KeyHint]> settings-keys;
     in property <[StorageRow]> settings-storage;
@@ -2130,6 +2178,14 @@ export component AppWindow inherits Window {
             user: root.user-label;
             server: root.settings-server;
             offline: root.offline;
+            ra-signed-in: root.ra-signed-in;
+            ra-user: root.ra-user;
+            ra-busy: root.ra-busy;
+            ra-status: root.ra-status;
+            ra-username-input <=> root.ra-username-input;
+            ra-password-input <=> root.ra-password-input;
+            ra-sign-in(user, password) => { root.ra-sign-in(user, password); }
+            ra-sign-out => { root.ra-sign-out(); }
             devices: root.settings-devices;
             keys: root.settings-keys;
             storage: root.settings-storage;
