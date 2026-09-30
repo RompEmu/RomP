@@ -18,6 +18,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Fixed
 
+- PlayStation games drawn through Vulkan show the right colors again instead of a doubled, green picture. Newer builds of the PlayStation emulator hand over 16-bit and other image formats, which Romp now converts.
 - Games RomM hasn't hashed, such as large PS3 ISOs, no longer fail to download with "the downloaded file is corrupted". Romp checks their size instead.
 
 ## [0.6.0] - 2026-09-29

@@ -358,7 +358,9 @@ impl HwVulkanContext {
         let state = guard
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("no Vulkan device"))?;
-        let size = u64::from(width) * u64::from(height) * 4;
+        let bpp = bytes_per_pixel(image.format)
+            .ok_or_else(|| anyhow::anyhow!("unsupported scanout format {:?}", image.format))?;
+        let size = u64::from(width) * u64::from(height) * bpp;
         let mapped = self.readback_buffer(state, size)?;
         let buffer = state.readback.as_ref().expect("readback buffer").buffer;
         let device = &state.device;
@@ -456,19 +458,8 @@ impl HwVulkanContext {
             device.reset_fences(&[state.fence])?;
         }
         // SAFETY: the mapping holds at least `size` bytes and the fence says the copy finished.
-        let mut pixels = unsafe { std::slice::from_raw_parts(mapped, size as usize) }.to_vec();
-        if matches!(
-            image.format,
-            vk::Format::R8G8B8A8_UNORM
-                | vk::Format::R8G8B8A8_SRGB
-                | vk::Format::A8B8G8R8_UNORM_PACK32
-                | vk::Format::A8B8G8R8_SRGB_PACK32
-        ) {
-            for px in pixels.as_chunks_mut::<4>().0 {
-                px.swap(0, 2);
-            }
-        }
-        Ok(pixels)
+        let raw = unsafe { std::slice::from_raw_parts(mapped, size as usize) };
+        to_bgra(image.format, raw).ok_or_else(|| anyhow::anyhow!("unsupported scanout format"))
     }
 
     fn render_interface_for(&self, state: &DeviceState) -> RenderInterface {
@@ -493,6 +484,106 @@ impl HwVulkanContext {
             set_signal_semaphore,
         }
     }
+}
+
+fn bytes_per_pixel(format: vk::Format) -> Option<u64> {
+    use vk::Format as F;
+    match format {
+        F::A1R5G5B5_UNORM_PACK16 | F::R5G6B5_UNORM_PACK16 => Some(2),
+        F::R8G8B8A8_UNORM
+        | F::R8G8B8A8_SRGB
+        | F::A8B8G8R8_UNORM_PACK32
+        | F::A8B8G8R8_SRGB_PACK32
+        | F::B8G8R8A8_UNORM
+        | F::B8G8R8A8_SRGB
+        | F::A2B10G10R10_UNORM_PACK32
+        | F::A2R10G10B10_UNORM_PACK32 => Some(4),
+        F::R16G16B16A16_SFLOAT | F::R16G16B16A16_UNORM => Some(8),
+        _ => None,
+    }
+}
+
+fn half_to_f32(h: u16) -> f32 {
+    let sign = if h & 0x8000 == 0 { 1.0 } else { -1.0 };
+    let exp = i32::from((h >> 10) & 0x1f);
+    let mant = f32::from(h & 0x3ff);
+    match exp {
+        0 => sign * mant * 2f32.powi(-24),
+        31 => sign * f32::INFINITY,
+        _ => sign * (1.0 + mant / 1024.0) * 2f32.powi(exp - 15),
+    }
+}
+
+fn unit_to_byte(v: f32) -> u8 {
+    (v.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+/// Converts the pixels a core scanned out into opaque BGRA, the layout the frame buffer carries.
+fn to_bgra(format: vk::Format, raw: &[u8]) -> Option<Vec<u8>> {
+    use vk::Format as F;
+    let five = |v: u16| ((v << 3) | (v >> 2)) as u8;
+    let ten = |v: u32| (v >> 2) as u8;
+    let mut out = Vec::with_capacity(raw.len() / bytes_per_pixel(format)? as usize * 4);
+    match format {
+        F::R8G8B8A8_UNORM
+        | F::R8G8B8A8_SRGB
+        | F::A8B8G8R8_UNORM_PACK32
+        | F::A8B8G8R8_SRGB_PACK32 => {
+            for p in raw.as_chunks::<4>().0 {
+                out.extend([p[2], p[1], p[0], 255]);
+            }
+        }
+        F::B8G8R8A8_UNORM | F::B8G8R8A8_SRGB => {
+            for p in raw.as_chunks::<4>().0 {
+                out.extend([p[0], p[1], p[2], 255]);
+            }
+        }
+        F::A1R5G5B5_UNORM_PACK16 => {
+            for p in raw.as_chunks::<2>().0 {
+                let v = u16::from_le_bytes(*p);
+                out.extend([five(v & 31), five((v >> 5) & 31), five((v >> 10) & 31), 255]);
+            }
+        }
+        F::R5G6B5_UNORM_PACK16 => {
+            for p in raw.as_chunks::<2>().0 {
+                let v = u16::from_le_bytes(*p);
+                let g = (v >> 5) & 63;
+                out.extend([
+                    five(v & 31),
+                    ((g << 2) | (g >> 4)) as u8,
+                    five(v >> 11),
+                    255,
+                ]);
+            }
+        }
+        F::A2B10G10R10_UNORM_PACK32 | F::A2R10G10B10_UNORM_PACK32 => {
+            for p in raw.as_chunks::<4>().0 {
+                let v = u32::from_le_bytes(*p);
+                let (low, mid, high) =
+                    (ten(v & 1023), ten((v >> 10) & 1023), ten((v >> 20) & 1023));
+                if format == F::A2B10G10R10_UNORM_PACK32 {
+                    out.extend([high, mid, low, 255]);
+                } else {
+                    out.extend([low, mid, high, 255]);
+                }
+            }
+        }
+        F::R16G16B16A16_SFLOAT | F::R16G16B16A16_UNORM => {
+            for p in raw.as_chunks::<8>().0 {
+                let channel = |i: usize| {
+                    let v = u16::from_le_bytes([p[i * 2], p[i * 2 + 1]]);
+                    if format == F::R16G16B16A16_SFLOAT {
+                        unit_to_byte(half_to_f32(v))
+                    } else {
+                        (v >> 8) as u8
+                    }
+                };
+                out.extend([channel(2), channel(1), channel(0), 255]);
+            }
+        }
+        _ => return None,
+    }
+    Some(out)
 }
 
 /// # Safety
@@ -579,7 +670,11 @@ impl HwContextProvider for HwVulkanContext {
             return vec![0; width as usize * height as usize * 4];
         };
         self.copy_out(image, width, height).unwrap_or_else(|e| {
-            tracing::warn!("Vulkan readback: {e}");
+            static WARNED: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                tracing::warn!("Vulkan readback: {e}");
+            }
             vec![0; width as usize * height as usize * 4]
         })
     }
@@ -630,6 +725,65 @@ impl HwContextProvider for HwVulkanContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn one(format: vk::Format, raw: &[u8]) -> [u8; 4] {
+        let out = to_bgra(format, raw).expect("supported format");
+        out.try_into().expect("one pixel")
+    }
+
+    #[test]
+    fn every_scanout_format_becomes_bgra() {
+        assert_eq!(
+            one(vk::Format::R8G8B8A8_UNORM, &[10, 20, 30, 0]),
+            [30, 20, 10, 255]
+        );
+        assert_eq!(
+            one(vk::Format::B8G8R8A8_UNORM, &[30, 20, 10, 0]),
+            [30, 20, 10, 255]
+        );
+        let orange_1555: u16 = (1 << 15) | (31 << 10) | (16 << 5);
+        assert_eq!(
+            one(
+                vk::Format::A1R5G5B5_UNORM_PACK16,
+                &orange_1555.to_le_bytes()
+            ),
+            [0, 132, 255, 255]
+        );
+        let cyan_565: u16 = (63 << 5) | 31;
+        assert_eq!(
+            one(vk::Format::R5G6B5_UNORM_PACK16, &cyan_565.to_le_bytes()),
+            [255, 255, 0, 255]
+        );
+        let red_2101010: u32 = (3 << 30) | 1023;
+        assert_eq!(
+            one(
+                vk::Format::A2B10G10R10_UNORM_PACK32,
+                &red_2101010.to_le_bytes()
+            ),
+            [0, 0, 255, 255]
+        );
+        let halves: Vec<u8> = [1.0f32, 0.5, 2.0, 1.0]
+            .iter()
+            .flat_map(|v| f32_to_f16(*v).to_le_bytes())
+            .collect();
+        assert_eq!(
+            one(vk::Format::R16G16B16A16_SFLOAT, &halves),
+            [255, 128, 255, 255],
+            "values past 1.0 are clamped"
+        );
+        assert_eq!(bytes_per_pixel(vk::Format::A1R5G5B5_UNORM_PACK16), Some(2));
+        assert_eq!(bytes_per_pixel(vk::Format::R16G16B16A16_SFLOAT), Some(8));
+        assert_eq!(bytes_per_pixel(vk::Format::BC1_RGB_UNORM_BLOCK), None);
+        assert!(to_bgra(vk::Format::BC1_RGB_UNORM_BLOCK, &[0; 8]).is_none());
+    }
+
+    fn f32_to_f16(v: f32) -> u16 {
+        let bits = v.to_bits();
+        let sign = (bits >> 16) & 0x8000;
+        let exp = ((bits >> 23) & 0xff) as i32 - 127 + 15;
+        let mant = (bits >> 13) & 0x3ff;
+        (sign | ((exp as u32) << 10) | mant) as u16
+    }
 
     static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
