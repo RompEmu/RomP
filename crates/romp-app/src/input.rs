@@ -27,6 +27,7 @@ pub enum KeyAction {
     Menu,
     TogglePause,
     ToggleFullscreen,
+    Screenshot,
 }
 
 pub const SLOTS: u8 = 4;
@@ -46,6 +47,8 @@ pub fn map_key(text: &str, mappings: &Mappings) -> Option<KeyAction> {
         KeyAction::Load
     } else if is(Key::F11) {
         KeyAction::ToggleFullscreen
+    } else if is(Key::F12) {
+        KeyAction::Screenshot
     } else if is(Key::Escape) {
         KeyAction::Menu
     } else if c.eq_ignore_ascii_case(&'p') {
@@ -124,6 +127,7 @@ pub enum Command {
     Menu,
     TogglePause,
     ToggleFullscreen,
+    Screenshot,
     SlotChanged(u8),
 }
 
@@ -176,6 +180,7 @@ impl Controls {
             KeyAction::Menu => vec![Command::Menu],
             KeyAction::TogglePause => vec![Command::TogglePause],
             KeyAction::ToggleFullscreen => vec![Command::ToggleFullscreen],
+            KeyAction::Screenshot => vec![Command::Screenshot],
         };
         Some(commands)
     }
@@ -295,6 +300,7 @@ mod tests {
             map_key(&key(Key::F11), &m()),
             Some(KeyAction::ToggleFullscreen)
         );
+        assert_eq!(map_key(&key(Key::F12), &m()), Some(KeyAction::Screenshot));
         assert_eq!(map_key(&key(Key::Escape), &m()), Some(KeyAction::Menu));
         assert_eq!(map_key("P", &m()), Some(KeyAction::TogglePause));
     }

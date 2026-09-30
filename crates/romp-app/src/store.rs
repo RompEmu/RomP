@@ -210,6 +210,15 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 8 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS pending_screenshots (path TEXT PRIMARY KEY,
+                   rom_id INTEGER NOT NULL);
+                 PRAGMA user_version = 8;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -426,6 +435,32 @@ impl Store {
             .expect("count recent")
     }
 
+    pub fn add_pending_screenshot(&self, rom_id: i64, path: &str) {
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO pending_screenshots (path, rom_id) VALUES (?1, ?2)",
+                params![path, rom_id],
+            )
+            .expect("add pending screenshot");
+    }
+
+    pub fn pending_screenshots(&self) -> Vec<(i64, String)> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT rom_id, path FROM pending_screenshots ORDER BY rowid")
+            .expect("prepare");
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .expect("query")
+            .filter_map(Result::ok)
+            .collect()
+    }
+
+    pub fn remove_pending_screenshot(&self, path: &str) {
+        self.conn
+            .execute("DELETE FROM pending_screenshots WHERE path = ?1", [path])
+            .expect("remove pending screenshot");
+    }
+
     pub fn replace_recommendations(&mut self, picks: &[(i64, String)]) {
         let tx = self.conn.transaction().expect("tx");
         tx.execute("DELETE FROM recommendations", [])
@@ -640,6 +675,7 @@ impl Store {
             .execute_batch(
                 "DELETE FROM games; DELETE FROM platforms; DELETE FROM state_sync; DELETE FROM pending_saves;
                  DELETE FROM play_sessions; DELETE FROM recommendations;
+                 DELETE FROM pending_screenshots;
                  DELETE FROM collections; DELETE FROM collection_roms;
                  DELETE FROM kv WHERE key = 'last_sync_at';",
             )
@@ -1050,6 +1086,22 @@ mod tests {
         assert_eq!(s.play_sessions().len(), 1);
         s.clear_library();
         assert!(s.play_sessions().is_empty());
+    }
+
+    #[test]
+    fn screenshots_wait_to_upload() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.add_pending_screenshot(7, "/shots/b.png");
+        s.add_pending_screenshot(3, "/shots/a.png");
+        s.add_pending_screenshot(3, "/shots/a.png");
+        assert_eq!(
+            s.pending_screenshots(),
+            [(7, "/shots/b.png".into()), (3, "/shots/a.png".into())]
+        );
+        s.remove_pending_screenshot("/shots/b.png");
+        assert_eq!(s.pending_screenshots().len(), 1);
+        s.clear_library();
+        assert!(s.pending_screenshots().is_empty());
     }
 
     #[test]

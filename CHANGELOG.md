@@ -9,6 +9,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - PS3 games play through RPCS3, which Romp downloads the first time along with the PS3 system software from RomM's firmware. Games can be folders or ISOs, or a zip or 7z of one, which Romp unpacks after downloading. RPCS3 follows Romp's fullscreen, volume and controller settings, and keeps its own settings and saves apart from any RPCS3 you installed yourself.
 - RomM learns how long you play each game, and shows the game you're playing right now. Play time recorded offline uploads the next time Romp reaches the server.
 - A "For you" list in the sidebar with games RomM recommends from what you've played. A recommended game's page says why it was picked.
+- Screenshots. Press F12 or choose Take screenshot in the game menu. Romp keeps them with the game's saves, uploads them to your RomM gallery, and shows them first on the game's page.
 
 ### Changed
 

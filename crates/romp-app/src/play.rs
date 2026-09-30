@@ -22,6 +22,8 @@ use std::time::Duration;
 pub type SavePorts = Box<dyn Fn(Vec<(u8, u32)>)>;
 pub type VolumeChanged = Box<dyn Fn(u8)>;
 pub type SavePlacement = Box<dyn Fn(usize, &Observed)>;
+pub type ScreenshotTaken = Box<dyn Fn(PathBuf)>;
+type Saved = Result<PathBuf, String>;
 
 pub struct GameOptions {
     pub core: PathBuf,
@@ -46,6 +48,7 @@ pub struct GameOptions {
     pub volume_changed: VolumeChanged,
     pub placements: Vec<Option<Placement>>,
     pub save_placement: SavePlacement,
+    pub screenshot_taken: ScreenshotTaken,
 }
 
 pub struct CoreGame {
@@ -92,6 +95,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Resu
         .join(paths::local_save_dir_name(&rom));
     let game = launch(
         GameOptions {
+            screenshot_taken: Box::new(|_| {}),
             core,
             rom,
             save_dir,
@@ -156,6 +160,14 @@ struct Game {
     modifiers: Cell<u16>,
     rotation: Cell<u8>,
     aim: Cell<(i16, i16)>,
+    title: String,
+    screenshot_dir: PathBuf,
+    screenshot_wanted: Cell<bool>,
+    screenshots: (
+        std::sync::mpsc::Sender<Saved>,
+        std::sync::mpsc::Receiver<Saved>,
+    ),
+    screenshot_taken: ScreenshotTaken,
 }
 
 const MENU_RESUME: i32 = 0;
@@ -166,8 +178,9 @@ const MENU_SAVE: i32 = 4;
 const MENU_LOAD: i32 = 5;
 const MENU_VOLUME: i32 = 6;
 const MENU_FULLSCREEN: i32 = 7;
-const MENU_CONTROLLERS: i32 = 8;
-const MENU_PORTS_START: i32 = 9;
+const MENU_SCREENSHOT: i32 = 8;
+const MENU_CONTROLLERS: i32 = 9;
+const MENU_PORTS_START: i32 = 10;
 const VOLUME_STEP: i32 = 10;
 
 const MENU_ROWS: [[i32; 3]; 2] = [
@@ -234,6 +247,7 @@ impl Game {
                 Command::Menu => self.set_menu(!self.menu_open.get()),
                 Command::TogglePause => self.set_paused(!self.paused.get()),
                 Command::ToggleFullscreen => self.toggle_fullscreen(),
+                Command::Screenshot => self.screenshot_wanted.set(true),
                 Command::SlotChanged(slot) => self.show_slot(slot),
             }
         }
@@ -332,6 +346,39 @@ impl Game {
         let fullscreen = !window.is_fullscreen();
         window.set_fullscreen(fullscreen);
         self.primary().set_fullscreen(fullscreen);
+    }
+
+    /// Saves the frame on screen off the UI thread; `screenshot_saved` picks up the result.
+    fn capture(&self, rgba: &[u8], shown: Option<(u32, u32, f32)>) {
+        let Some((width, height, aspect)) = shown else {
+            return flash(self.primary(), "The game hasn't drawn anything yet".into());
+        };
+        let (pixels, width, height) =
+            crate::rotation::rotate(rgba, width, height, self.rotation.get());
+        let dir = self.screenshot_dir.clone();
+        let title = self.title.clone();
+        let done = self.screenshots.0.clone();
+        std::thread::spawn(move || {
+            let saved = crate::screenshot::image(&pixels, width, height, aspect)
+                .ok_or_else(|| "the picture was incomplete".to_string())
+                .and_then(|picture| {
+                    crate::screenshot::save(&dir, &title, std::time::SystemTime::now(), &picture)
+                        .map_err(|e| e.to_string())
+                });
+            let _ = done.send(saved);
+        });
+    }
+
+    fn screenshot_saved(&self) {
+        while let Ok(saved) = self.screenshots.1.try_recv() {
+            match saved {
+                Ok(path) => {
+                    flash(self.primary(), "Screenshot saved".into());
+                    (self.screenshot_taken)(path);
+                }
+                Err(e) => flash(self.primary(), format!("Couldn't save the screenshot: {e}")),
+            }
+        }
     }
 
     fn show_slot(&self, slot: u8) {
@@ -464,6 +511,7 @@ impl Game {
             MENU_LOAD => self.send(&AppMsg::LoadSlot(self.controls.borrow().slot())),
             MENU_VOLUME => self.step_volume(1),
             MENU_FULLSCREEN => self.toggle_fullscreen(),
+            MENU_SCREENSHOT => self.screenshot_wanted.set(true),
             MENU_CONTROLLERS => (self.open_controllers)(),
             _ => {}
         }
@@ -717,6 +765,11 @@ pub fn launch(
             modifiers: Cell::new(0),
             rotation: Cell::new(0),
             aim: Cell::new((0, 0)),
+            title: opts.title.clone(),
+            screenshot_dir: opts.save_dir.join(crate::screenshot::FOLDER),
+            screenshot_wanted: Cell::new(false),
+            screenshots: std::sync::mpsc::channel(),
+            screenshot_taken: opts.screenshot_taken,
         }
     });
     let _ = game
@@ -732,6 +785,7 @@ pub fn launch(
         let weak = Rc::downgrade(&game);
         let mut buf = Vec::new();
         let mut last_seq = 0;
+        let mut shown = None;
         let gamepads = opts.gamepads.clone();
         let players = opts.players.clone();
         let mappings = opts.mappings.clone();
@@ -789,6 +843,7 @@ pub fn launch(
                 let session = game.session.borrow();
                 if let Some(info) = session.frames.read_into(last_seq, &mut buf) {
                     last_seq = info.seq;
+                    shown = Some((info.width, info.height, info.aspect));
                     match (
                         game.windows.get(1),
                         split_frame(&buf, info.width, info.height),
@@ -808,6 +863,10 @@ pub fn launch(
                 }
                 session.poll_events()
             };
+            if game.screenshot_wanted.take() {
+                game.capture(&buf, shown);
+            }
+            game.screenshot_saved();
             for event in events {
                 if let SessionEvent::Runner(RunnerMsg::Controllers { ports }) = event {
                     game.set_ports(ports);
@@ -985,6 +1044,10 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     window.on_toggle_fullscreen({
         let with = with.clone();
         move || with(&|g| g.toggle_fullscreen())
+    });
+    window.on_take_screenshot({
+        let with = with.clone();
+        move || with(&|g| g.screenshot_wanted.set(true))
     });
     window.on_open_controllers({
         let with = with.clone();

@@ -230,6 +230,7 @@ component GameMenu inherits Rectangle {
     callback load-state();
     callback step-slot(int);
     callback toggle-fullscreen();
+    callback take-screenshot();
     callback open-controllers();
     callback quit();
 
@@ -373,15 +374,22 @@ component GameMenu inherits Rectangle {
                 clicked => { root.toggle-fullscreen(); }
             }
             MenuRow {
+                text: @tr("Take screenshot");
+                icon: @image-url("icons/camera.svg");
+                shortcut: root.keyboard ? "F12" : "";
+                focused: root.focused-item == 8;
+                clicked => { root.take-screenshot(); }
+            }
+            MenuRow {
                 text: @tr("Controllers…");
                 icon: @image-url("icons/gamepad.svg");
-                focused: root.focused-item == 8;
+                focused: root.focused-item == 9;
                 clicked => { root.open-controllers(); }
             }
             for port[i] in root.ports: Stepper {
                 label: port.label;
                 value: port.device;
-                focused: root.focused-item == 9 + i;
+                focused: root.focused-item == 10 + i;
                 step(d) => { root.cycle-port(i, d); }
             }
             MenuDivider { }
@@ -389,7 +397,7 @@ component GameMenu inherits Rectangle {
                 text: @tr("Quit game");
                 icon: @image-url("icons/quit.svg");
                 danger: true;
-                focused: root.focused-item == 9 + root.ports.length;
+                focused: root.focused-item == 10 + root.ports.length;
                 clicked => { root.quit(); }
             }
             Text {
@@ -433,6 +441,7 @@ export component GameWindow inherits Window {
     callback load-state();
     callback step-slot(int);
     callback toggle-fullscreen();
+    callback take-screenshot();
     callback open-controllers();
     callback quit();
     in property <image> frame;
@@ -567,6 +576,7 @@ export component GameWindow inherits Window {
             load-state => { root.load-state(); }
             step-slot(d) => { root.step-slot(d); }
             toggle-fullscreen => { root.toggle-fullscreen(); }
+            take-screenshot => { root.take-screenshot(); }
             open-controllers => { root.open-controllers(); }
             quit => { root.quit(); }
         }

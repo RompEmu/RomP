@@ -24,7 +24,7 @@ const SIMILAR_LIMIT: u32 = 12;
 
 pub(super) struct GameState {
     detail: GameDetail,
-    shots: Rc<VecModel<Shot>>,
+    pub(super) shots: Rc<VecModel<Shot>>,
     similar: Rc<VecModel<GameCard>>,
 }
 
@@ -93,11 +93,12 @@ impl Controller {
         let Some(detail) = self.shared.store.lock().unwrap().game(id) else {
             return;
         };
+        let local = self.local_shots(id);
+        let offset = local.len();
         let shots = Rc::new(VecModel::from(
-            detail
-                .screenshots
-                .iter()
-                .map(|url| {
+            local
+                .into_iter()
+                .chain(detail.screenshots.iter().map(|url| {
                     let image = self
                         .shared
                         .covers
@@ -107,7 +108,7 @@ impl Controller {
                         loaded: image.is_some(),
                         image: image.unwrap_or_default(),
                     }
-                })
+                }))
                 .collect::<Vec<_>>(),
         ));
         let similar = Rc::new(VecModel::default());
@@ -124,11 +125,11 @@ impl Controller {
             ui.set_screen(SCREEN_GAME);
         }
         self.load_game_cover(&detail);
-        self.load_screenshots(&detail);
+        self.load_screenshots(&detail, offset);
         self.load_similar(id);
     }
 
-    fn with_game<T>(&self, id: i64, f: impl FnOnce(&GameState) -> T) -> Option<T> {
+    pub(super) fn with_game<T>(&self, id: i64, f: impl FnOnce(&GameState) -> T) -> Option<T> {
         self.game
             .borrow()
             .as_ref()
@@ -136,7 +137,7 @@ impl Controller {
             .map(f)
     }
 
-    fn load_screenshots(&self, detail: &GameDetail) {
+    fn load_screenshots(&self, detail: &GameDetail, offset: usize) {
         let missing: Vec<(usize, String)> = detail
             .screenshots
             .iter()
@@ -155,10 +156,14 @@ impl Controller {
         };
         let covers = self.shared.covers.clone();
         let id = detail.id;
+        let total = detail.screenshots.len();
         self.shared.rt.spawn(async move {
             for (index, url) in missing {
                 if let Ok(path) = covers.ensure_screenshot(&client, id, &url).await {
-                    on_ui(move |c| c.show_screenshot(id, index, &path));
+                    on_ui(move |c| {
+                        let taken_since = c.shot_count(id).saturating_sub(offset + total);
+                        c.show_screenshot(id, offset + taken_since + index, &path);
+                    });
                 }
             }
         });
@@ -928,6 +933,12 @@ impl Controller {
                         Placement::from_json(store.get(&key).as_deref())
                     })
                     .collect()
+            },
+            screenshot_taken: {
+                let id = detail.id;
+                Box::new(move |path| {
+                    with_controller(|c| c.screenshot_taken(id, &path));
+                })
             },
             save_placement: {
                 let store = self.shared.store.clone();

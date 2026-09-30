@@ -13,13 +13,14 @@ const SECTION_PLAYERS: i32 = 2;
 const SECTION_STORAGE: i32 = 3;
 const SECTION_CONSOLES: i32 = 4;
 
-const KEY_HINTS: [(&str, &str); 6] = [
+const KEY_HINTS: [(&str, &str); 7] = [
     ("Esc", "Game menu"),
     ("P", "Pause"),
     ("F5", "Save state"),
     ("F7", "Load state"),
     ("F6", "Next save slot"),
     ("F11", "Full screen"),
+    ("F12", "Screenshot"),
 ];
 
 const KEYBOARD_HINT: &str = "Choose a button, then press the key you want for it.";

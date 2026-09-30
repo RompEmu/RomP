@@ -246,6 +246,26 @@ impl Client {
         .map(|_| ())
     }
 
+    pub async fn upload_screenshot(
+        &self,
+        rom_id: i64,
+        file_name: &str,
+        bytes: Vec<u8>,
+    ) -> Result<(), Error> {
+        let part = reqwest::multipart::Part::bytes(bytes)
+            .file_name(file_name.to_string())
+            .mime_str("image/png")
+            .map_err(|e| Error::Decode(e.to_string()))?;
+        let form = reqwest::multipart::Form::new().part("screenshotFile", part);
+        self.send(
+            self.request(reqwest::Method::POST, "/api/screenshots")
+                .query(&[("rom_id", rom_id.to_string())])
+                .multipart(form),
+        )
+        .await
+        .map(|_| ())
+    }
+
     pub async fn upload_play_sessions(
         &self,
         device: Option<&str>,
@@ -1034,6 +1054,26 @@ pub(crate) mod tests {
                 (6, "Picked for you".to_string())
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn screenshots_upload_as_a_file_for_the_game() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/screenshots"))
+            .and(query_param("rom_id", "7"))
+            .and(body_string_contains(
+                "name=\"screenshotFile\"; filename=\"Game.png\"",
+            ))
+            .and(body_string_contains("pngdata"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        authed(&server)
+            .upload_screenshot(7, "Game.png", b"pngdata".to_vec())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

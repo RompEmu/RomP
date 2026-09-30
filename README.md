@@ -121,6 +121,7 @@ Default keyboard layout:
 | F6 | Next save slot |
 | P | Pause |
 | F11 | Full screen |
+| F12 | Screenshot |
 | Esc | Game menu |
 
 Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS, `%LOCALAPPDATA%\Romp` on Windows and `~/.local/share/Romp` on Linux.

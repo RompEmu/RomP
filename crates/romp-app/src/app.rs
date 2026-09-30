@@ -3,6 +3,7 @@ mod collections;
 mod game;
 mod navigation;
 mod save_sync;
+mod screenshots;
 mod settings;
 
 use crate::cores::Cores;
@@ -1009,6 +1010,7 @@ impl Controller {
                 ui.set_sync_status("".into());
                 self.sync_pending();
                 self.upload_play_sessions();
+                self.upload_screenshots();
                 self.refresh_recommendations();
             }
             Err(Error::Cancelled) => return,

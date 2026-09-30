@@ -106,7 +106,7 @@ pub fn normalize_key(text: &str) -> String {
 }
 
 pub fn is_hotkey(text: &str) -> bool {
-    [Key::Escape, Key::F5, Key::F6, Key::F7, Key::F11]
+    [Key::Escape, Key::F5, Key::F6, Key::F7, Key::F11, Key::F12]
         .iter()
         .any(|k| key_char(*k) == text)
         || normalize_key(text) == "p"

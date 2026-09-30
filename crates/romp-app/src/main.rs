@@ -35,6 +35,7 @@ mod rotation;
 mod rpcs3;
 mod saves;
 mod scale;
+mod screenshot;
 mod session;
 mod storage;
 mod store;
