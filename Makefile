@@ -121,10 +121,10 @@ fmt-check:
 	cargo fmt --all --check
 
 clippy:
-	cargo clippy --workspace --all-targets --locked -- -D warnings
+	CARGO_INCREMENTAL=0 cargo clippy --workspace --all-targets --locked -- -D warnings
 
 test:
-	cargo test --workspace --locked
+	CARGO_INCREMENTAL=0 cargo test --workspace --locked
 
 deny:
 	cargo deny check
