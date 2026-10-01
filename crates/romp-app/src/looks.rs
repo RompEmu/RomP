@@ -134,8 +134,12 @@ pub fn is_handheld(platform: &str) -> bool {
     HANDHELDS.contains(&platform)
 }
 
-/// The looks offered for a console: a handheld screen only for handhelds.
+/// The looks offered for a console: a handheld screen only for handhelds, and only sharp or
+/// smooth scaling for the Xbox, which its own emulator draws.
 pub fn available(platform: &str) -> Vec<Look> {
+    if platform == crate::xemu::PLATFORM {
+        return vec![Look::Sharp, Look::Smooth];
+    }
     LOOKS
         .iter()
         .map(|(look, _)| *look)
@@ -248,6 +252,36 @@ pub fn row_value(choice: &Choice, row: Row) -> &'static str {
         Row::Colours => pick(&COLOURS, u8::from(choice.vivid)),
         Row::Dithering => pick(&DITHERING, u8::from(!choice.blend_dithering)),
     }
+}
+
+/// The choices a line of the look panel offers, in order.
+pub fn row_choices(row: Row, platform: &str) -> Vec<&'static str> {
+    match row {
+        Row::Style => available(platform).into_iter().map(label).collect(),
+        Row::Screen => SCREEN.to_vec(),
+        Row::Curvature => CURVATURE.to_vec(),
+        Row::Scanlines => SCANLINES.to_vec(),
+        Row::Mask => MASK.to_vec(),
+        Row::Model => MODELS.to_vec(),
+        Row::Colours => COLOURS.to_vec(),
+        Row::Dithering => DITHERING.to_vec(),
+    }
+}
+
+/// Which of `row_choices` the choice has.
+pub fn row_selected(choice: &Choice, platform: &str, row: Row) -> usize {
+    let value = row_value(choice, row);
+    row_choices(row, platform)
+        .iter()
+        .position(|c| *c == value)
+        .unwrap_or(0)
+}
+
+/// Picks one of `row_choices` for a line.
+pub fn select(choice: &mut Choice, platform: &str, row: Row, index: usize) {
+    let current = row_selected(choice, platform, row) as i32;
+    let last = row_choices(row, platform).len().saturating_sub(1);
+    step(choice, platform, row, index.min(last) as i32 - current);
 }
 
 /// Moves a line of the look panel one step left or right.
@@ -553,6 +587,23 @@ mod tests {
         step(&mut choice, "gb", Row::Model, 1);
         assert_eq!(screen(&choice).preset, shaders.join("handheld/dot.slangp"));
         assert!(!rows(&default_choice("gbc", true), "gbc").contains(&Row::Model));
+    }
+
+    #[test]
+    fn settings_pick_from_each_lines_choices() {
+        let mut choice = default_choice("snes", true);
+        assert_eq!(
+            row_choices(Row::Style, "snes"),
+            ["Sharp pixels", "Smooth", "CRT"]
+        );
+        assert_eq!(row_selected(&choice, "snes", Row::Style), 2);
+        select(&mut choice, "snes", Row::Mask, 2);
+        assert_eq!(row_value(&choice, Row::Mask), "Strong");
+        select(&mut choice, "snes", Row::Style, 0);
+        assert_eq!(choice.look, Look::Sharp);
+        select(&mut choice, "snes", Row::Dithering, 1);
+        assert_eq!(row_value(&choice, Row::Dithering), "Off");
+        assert_eq!(available("xbox"), [Look::Sharp, Look::Smooth]);
     }
 
     #[test]

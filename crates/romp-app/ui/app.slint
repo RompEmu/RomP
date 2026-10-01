@@ -11,6 +11,8 @@ export struct StorageRow { label: string, size: string }
 export struct LicenseRow { name: string, license: string, url: string }
 export struct ConsoleOption { key: string, label: string, detail: string, choices: [string], current: int }
 export struct ConsoleGroup { name: string, options: [ConsoleOption] }
+export struct LookSetting { label: string, choices: [string], current: int }
+export struct LookConsole { slug: string, name: string, settings: [LookSetting] }
 export struct KeyHint { keys: string, action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool, aspect: float }
@@ -1364,12 +1366,13 @@ component SettingsPage inherits FocusScope {
     in property <[StorageRow]> storage;
     in property <[ConsoleGroup]> consoles;
     callback console-option-changed(string, int);
+    in property <[LookConsole]> looks;
+    callback look-setting-changed(string, int, int);
     in property <string> storage-total;
     in property <bool> storage-busy;
     in-out property <bool> pause-unfocused;
     in-out property <bool> resume;
     in-out property <bool> fullscreen;
-    in-out property <bool> sharp;
     in-out property <float> volume;
     in-out property <int> ui-scale;
     callback prefs-changed();
@@ -1408,7 +1411,7 @@ component SettingsPage inherits FocusScope {
             Text { text: @tr("Settings"); font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; }
             HorizontalLayout {
                 alignment: start;
-                for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage"), @tr("Consoles")]: SettingsTab {
+                for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage"), @tr("Consoles"), @tr("Looks")]: SettingsTab {
                     label: label;
                     selected: root.section == i;
                     clicked => { root.section = i; root.section-changed(i); }
@@ -1450,12 +1453,6 @@ component SettingsPage inherits FocusScope {
                                 label: @tr("Start games in full screen");
                                 detail: @tr("Press F11 in a game to switch at any time.");
                                 Switch { checked <=> root.fullscreen; toggled => { root.prefs-changed(); } }
-                            }
-                            SettingRow {
-                                divider: true;
-                                label: @tr("Sharp pixels");
-                                detail: @tr("Keeps pixel art crisp. Turn off for smoother scaling.");
-                                Switch { checked <=> root.sharp; toggled => { root.prefs-changed(); } }
                             }
                             SettingRow {
                                 divider: true;
@@ -1638,6 +1635,30 @@ component SettingsPage inherits FocusScope {
                         }
                         if root.consoles.length == 0: Text {
                             text: @tr("None of the emulators on this computer has settings yet.");
+                            color: Theme.text-muted;
+                        }
+                    }
+                    if root.section == 5: VerticalLayout {
+                        spacing: 16px;
+                        SectionHeading { subtitle: @tr("How each console's games are drawn. In a game, Look in the game menu changes it live, so you can see the difference."); }
+                        for console in root.looks: VerticalLayout {
+                            spacing: 8px;
+                            Text { text: console.name; font-size: Theme.font-body-large; font-weight: 700; }
+                            Panel {
+                                for setting[i] in console.settings: SettingRow {
+                                    divider: i > 0;
+                                    label: setting.label;
+                                    ComboBox {
+                                        width: 150px;
+                                        model: setting.choices;
+                                        current-index: setting.current;
+                                        selected => { root.look-setting-changed(console.slug, i, self.current-index); }
+                                    }
+                                }
+                            }
+                        }
+                        if root.looks.length == 0: Text {
+                            text: @tr("Consoles appear here once your library has games for them.");
                             color: Theme.text-muted;
                         }
                     }
@@ -1993,6 +2014,8 @@ export component AppWindow inherits Window {
     in property <[StorageRow]> settings-storage;
     in property <[LicenseRow]> about-licenses;
     in property <[ConsoleGroup]> settings-consoles;
+    in property <[LookConsole]> settings-looks;
+    callback look-setting-changed(string, int, int);
     callback console-option-changed(string, int);
     in property <string> settings-storage-total;
     in property <bool> settings-storage-busy;
@@ -2003,7 +2026,6 @@ export component AppWindow inherits Window {
     in-out property <bool> pref-pause-unfocused;
     in-out property <bool> pref-resume;
     in-out property <bool> pref-fullscreen;
-    in-out property <bool> pref-sharp;
     in-out property <float> pref-volume;
     in-out property <int> pref-ui-scale;
     callback prefs-changed();
@@ -2281,10 +2303,11 @@ export component AppWindow inherits Window {
             storage-busy: root.settings-storage-busy;
             consoles: root.settings-consoles;
             console-option-changed(key, index) => { root.console-option-changed(key, index); }
+            looks: root.settings-looks;
+            look-setting-changed(platform, row, index) => { root.look-setting-changed(platform, row, index); }
             pause-unfocused <=> root.pref-pause-unfocused;
             resume <=> root.pref-resume;
             fullscreen <=> root.pref-fullscreen;
-            sharp <=> root.pref-sharp;
             volume <=> root.pref-volume;
             ui-scale <=> root.pref-ui-scale;
             prefs-changed => { root.prefs-changed(); }

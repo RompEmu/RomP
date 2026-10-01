@@ -289,6 +289,9 @@ impl Controller {
         ui.on_console_option_changed(|key, index| {
             with_controller(|c| c.console_option_changed(key.to_string(), index));
         });
+        ui.on_look_setting_changed(|platform, row, index| {
+            with_controller(|c| c.look_setting_changed(platform.to_string(), row, index));
+        });
         ui.on_assign_player(|key, player| {
             with_controller(|c| c.assign_player(key.to_string(), player));
         });

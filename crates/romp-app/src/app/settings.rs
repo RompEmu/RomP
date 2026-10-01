@@ -1,17 +1,22 @@
 use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::console_settings::{self, Chosen};
+use crate::cores::core_for_platform;
 use crate::details::human_size;
 use crate::mapping::{self, Assigned, BUTTONS, HOTKEYS};
 use crate::players::KEYBOARD;
 use crate::prefs::{Preferences, UI_SCALES};
 use crate::RemapRow;
-use crate::{paths, storage, ConsoleGroup, ConsoleOption, DeviceRow, KeyHint, StorageRow};
+use crate::{
+    paths, storage, ConsoleGroup, ConsoleOption, DeviceRow, KeyHint, LookConsole, LookSetting,
+    StorageRow,
+};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::Duration;
 
 const SECTION_PLAYERS: i32 = 2;
 const SECTION_STORAGE: i32 = 3;
 const SECTION_CONSOLES: i32 = 4;
+const SECTION_LOOKS: i32 = 5;
 
 pub(super) const SHORTCUTS: &str = "shortcuts";
 
@@ -35,7 +40,6 @@ impl Controller {
         ui.set_pref_pause_unfocused(prefs.pause_unfocused);
         ui.set_pref_resume(prefs.resume);
         ui.set_pref_fullscreen(prefs.fullscreen);
-        ui.set_pref_sharp(prefs.sharp_pixels);
         ui.set_pref_volume(f32::from(prefs.volume));
         ui.set_pref_ui_scale(
             UI_SCALES
@@ -64,7 +68,7 @@ impl Controller {
             pause_unfocused: ui.get_pref_pause_unfocused(),
             resume: ui.get_pref_resume(),
             fullscreen: ui.get_pref_fullscreen(),
-            sharp_pixels: ui.get_pref_sharp(),
+            sharp_pixels: self.prefs.get().sharp_pixels,
             volume: ui.get_pref_volume().round().clamp(0.0, 100.0) as u8,
             ui_scale: UI_SCALES
                 .get(ui.get_pref_ui_scale() as usize)
@@ -121,6 +125,9 @@ impl Controller {
         }
         if section == SECTION_CONSOLES {
             self.show_consoles();
+        }
+        if section == SECTION_LOOKS {
+            self.show_looks();
         }
     }
 
@@ -453,6 +460,52 @@ impl Controller {
             })
             .collect();
         ui.set_settings_consoles(ModelRc::new(VecModel::from(groups)));
+    }
+
+    /// The consoles in the library that Romp draws itself, with how each one's games look.
+    fn show_looks(&self) {
+        let Some(ui) = self.ui() else { return };
+        let platforms = self.shared.store.lock().unwrap().platforms(false);
+        let consoles: Vec<LookConsole> = platforms
+            .into_iter()
+            .filter(|p| core_for_platform(&p.slug).is_some() || p.slug == crate::xemu::PLATFORM)
+            .map(|p| {
+                let choice = self.look_choice(&p.slug);
+                let settings: Vec<LookSetting> = crate::looks::rows(&choice, &p.slug)
+                    .into_iter()
+                    .map(|row| LookSetting {
+                        label: crate::looks::row_label(row).into(),
+                        choices: ModelRc::new(VecModel::from(
+                            crate::looks::row_choices(row, &p.slug)
+                                .into_iter()
+                                .map(slint::SharedString::from)
+                                .collect::<Vec<_>>(),
+                        )),
+                        current: crate::looks::row_selected(&choice, &p.slug, row) as i32,
+                    })
+                    .collect();
+                LookConsole {
+                    slug: p.slug.into(),
+                    name: p.name.into(),
+                    settings: ModelRc::new(VecModel::from(settings)),
+                }
+            })
+            .collect();
+        ui.set_settings_looks(ModelRc::new(VecModel::from(consoles)));
+    }
+
+    pub(super) fn look_setting_changed(&self, platform: String, row: i32, index: i32) {
+        let mut choice = self.look_choice(&platform);
+        let rows = crate::looks::rows(&choice, &platform);
+        let (Some(row), Ok(index)) = (
+            usize::try_from(row).ok().and_then(|i| rows.get(i).copied()),
+            usize::try_from(index),
+        ) else {
+            return;
+        };
+        crate::looks::select(&mut choice, &platform, row, index);
+        self.save_look_choice(&platform, &choice);
+        self.show_looks();
     }
 
     pub(super) fn console_option_changed(&self, key: String, index: i32) {

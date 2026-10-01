@@ -689,7 +689,7 @@ impl Controller {
             dvd: rom.clone(),
             screenshots: save_dir.join("screenshots"),
             fullscreen: prefs.fullscreen,
-            sharp: prefs.sharp_pixels,
+            sharp: self.look_choice(xemu::PLATFORM).look == crate::looks::Look::Sharp,
             volume: prefs.volume,
             ui_scale: prefs.scale_factor(),
             keyboard: xemu::keyboard_map(&self.mappings.borrow()),
@@ -896,14 +896,33 @@ impl Controller {
     }
 
     /// The console's look: the player's choice, or the one it starts with.
-    fn look_options(&self, platform: &str) -> crate::play::LookOptions {
-        let key = crate::looks::store_key(platform);
-        let saved = self.shared.store.lock().unwrap().get(&key);
-        let choice = saved
+    /// How a console's games are drawn: the player's choice, or the console's default.
+    pub(super) fn look_choice(&self, platform: &str) -> crate::looks::Choice {
+        let saved = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .get(&crate::looks::store_key(platform));
+        saved
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_else(|| {
                 crate::looks::default_choice(platform, self.prefs.get().sharp_pixels)
-            });
+            })
+    }
+
+    pub(super) fn save_look_choice(&self, platform: &str, choice: &crate::looks::Choice) {
+        let json = serde_json::to_string(choice).expect("look serializes");
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .set(&crate::looks::store_key(platform), &json);
+    }
+
+    fn look_options(&self, platform: &str) -> crate::play::LookOptions {
+        let key = crate::looks::store_key(platform);
+        let choice = self.look_choice(platform);
         let store = self.shared.store.clone();
         crate::play::LookOptions {
             platform: platform.to_string(),
