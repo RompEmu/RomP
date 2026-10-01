@@ -667,6 +667,68 @@ mod tests {
         assert!(system_allowed("Snes9x", 3));
     }
 
+    static mut RAM: [u8; 0x800] = [0; 0x800];
+
+    unsafe extern "C" fn ram_data(id: c_uint) -> *mut c_void {
+        if id == 2 {
+            std::ptr::addr_of_mut!(RAM).cast()
+        } else {
+            std::ptr::null_mut()
+        }
+    }
+
+    unsafe extern "C" fn ram_size(id: c_uint) -> usize {
+        if id == 2 {
+            0x800
+        } else {
+            0
+        }
+    }
+
+    fn answer(session: &mut Session, game: &[u8]) {
+        for request in session.take_requests() {
+            let body: &[u8] = if post(&request).contains("r=achievementsets") {
+                game
+            } else {
+                br#"{"Success":true,"Unlocks":[],"HardcoreUnlocks":[],"ServerNow":1790850000}"#
+            };
+            session.respond(request.id, 200, body);
+        }
+    }
+
+    #[test]
+    fn achievements_read_the_game_memory_from_the_start() {
+        set_core_memory(ram_data, ram_size);
+        let mut session = sign_in();
+        session.load_hash("0123456789abcdef0123456789abcdef");
+        let game = br#"{"Success":true,"GameId":5,"Title":"Test","ConsoleId":7,
+            "ImageIconUrl":"https://media.retroachievements.org/Images/1.png","RichPresencePatch":"",
+            "Sets":[{"AchievementSetId":1,"GameId":5,"Title":null,"Type":"core",
+              "ImageIconUrl":"https://media.retroachievements.org/Images/1.png",
+              "Achievements":[{"ID":9,"Title":"Poke","Description":"RAM byte 0x10 becomes 1","Flags":3,
+                "Points":1,"MemAddr":"0xH0010=1","Author":"a","BadgeName":"1","Created":0,"Modified":0}],
+              "Leaderboards":[]}]}"#;
+        answer(&mut session, game);
+        answer(&mut session, game);
+        assert!(matches!(
+            &session.take_events()[..],
+            [AchievementEvent::GameLoaded {
+                achievements: 1,
+                ..
+            }]
+        ),);
+        session.do_frame();
+        unsafe { RAM[0x10] = 1 };
+        session.do_frame();
+        let events = session.take_events();
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, AchievementEvent::Unlocked { id: 9, .. })),
+            "an achievement checked while the game loaded must not be switched off: {events:?}"
+        );
+    }
+
     #[test]
     fn games_are_identified_by_the_hash_of_their_contents() {
         use md5::Digest;

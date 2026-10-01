@@ -489,6 +489,7 @@ impl Game {
     }
 
     fn achievement_list_arrived(&self, list: Vec<romp_proto::msg::AchievementInfo>) {
+        let list = crate::achievements::without_notices(list);
         let label = crate::achievements::summary(&list);
         if let Some(link) = self.achievements.borrow_mut().as_mut() {
             for a in &list {

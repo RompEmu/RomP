@@ -60,6 +60,12 @@ pub fn toast_for(event: &AchievementEvent) -> Option<Toast> {
             6,
         ),
         AchievementEvent::Unlocked {
+            id,
+            title,
+            description,
+            ..
+        } if super::is_notice(*id) => toast(title.clone(), description.clone(), 6),
+        AchievementEvent::Unlocked {
             title,
             description,
             points: p,
@@ -376,6 +382,24 @@ mod tests {
             t.badge_url.as_deref(),
             Some("https://media.retroachievements.org/Badge/1.png")
         );
+    }
+
+    #[test]
+    fn retroachievements_notices_are_not_shown_as_unlocks() {
+        let t = toast_for(&AchievementEvent::Unlocked {
+            id: 101_000_001,
+            title: "Warning: Unknown Emulator".into(),
+            description: "Hardcore unlocks cannot be earned using this emulator.".into(),
+            points: 0,
+            badge_url: "https://media.retroachievements.org/Badge/00000.png".into(),
+        })
+        .unwrap();
+        assert_eq!(t.title, "Warning: Unknown Emulator");
+        assert_eq!(
+            t.detail,
+            "Hardcore unlocks cannot be earned using this emulator."
+        );
+        assert_eq!(t.badge_url, None);
     }
 
     #[test]

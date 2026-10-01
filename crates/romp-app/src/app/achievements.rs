@@ -185,6 +185,7 @@ impl Controller {
         let cached = self.shared.store.lock().unwrap().get(&cache_key(id));
         let list: Vec<AchievementInfo> = cached
             .and_then(|json| serde_json::from_str(&json).ok())
+            .map(achievements::without_notices)
             .unwrap_or_default();
         self.show_game_achievements(id, &list, false);
         let client = self.client.borrow().clone();

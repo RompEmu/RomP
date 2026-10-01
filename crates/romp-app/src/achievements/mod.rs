@@ -57,6 +57,16 @@ const CONSOLES: &[(&[&str], u32)] = &[
 ];
 
 /// RetroAchievements' number for the platform, or 0 to let it tell from the file.
+/// RetroAchievements adds warnings, such as for an emulator it doesn't recognise yet, as achievements.
+pub fn is_notice(id: u32) -> bool {
+    id >= 101_000_000
+}
+
+/// The real achievements in a list, without RetroAchievements' notices.
+pub fn without_notices(list: Vec<AchievementInfo>) -> Vec<AchievementInfo> {
+    list.into_iter().filter(|a| !is_notice(a.id)).collect()
+}
+
 /// The badge to show: the coloured one once earned, the grey one before.
 pub fn badge_url(a: &AchievementInfo) -> &str {
     if a.unlocked || a.badge_locked_url.is_empty() {
@@ -144,7 +154,8 @@ pub async fn from_retroachievements(
     };
     let request = romp_cheevos::catalog_request(&account.username, &account.token, game_id, hash)?;
     let (status, body) = send(request).await;
-    let (game_id, mut list) = romp_cheevos::parse_catalog(status, &body)?;
+    let (game_id, list) = romp_cheevos::parse_catalog(status, &body)?;
+    let mut list = without_notices(list);
     let request = romp_cheevos::unlocks_request(&account.username, &account.token, game_id, false)?;
     let (status, body) = send(request).await;
     let earned = romp_cheevos::parse_unlocks(status, &body).unwrap_or_default();
@@ -337,6 +348,23 @@ mod tests {
         assert_eq!(row_detail(&list[1]), "10 points");
         assert_eq!(summary(&list), "1 of 2 earned");
         assert!(from_romm(&rom, None).iter().all(|a| !a.unlocked));
+    }
+
+    #[test]
+    fn notices_are_not_achievements() {
+        let entry = |id| AchievementInfo {
+            id,
+            title: String::new(),
+            description: String::new(),
+            points: 0,
+            badge_url: String::new(),
+            badge_locked_url: String::new(),
+            unlocked: true,
+            progress: String::new(),
+        };
+        let list = without_notices(vec![entry(39673), entry(101_000_001)]);
+        assert_eq!(list.len(), 1);
+        assert_eq!(summary(&list), "1 of 1 earned");
     }
 
     #[test]

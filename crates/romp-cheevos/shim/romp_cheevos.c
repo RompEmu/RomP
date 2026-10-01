@@ -34,6 +34,7 @@ static int has_map;
 static romp_get_memory_data get_data;
 static romp_get_memory_size get_size;
 static rc_libretro_memory_regions_t regions;
+static int regions_ready;
 
 static void free_map(void) {
   unsigned i;
@@ -73,8 +74,22 @@ static void core_memory_info(uint32_t id, rc_libretro_core_memory_info_t* info) 
   info->size = get_size ? get_size(id) : 0;
 }
 
+/* rc_client checks every achievement's addresses while it loads a game, before reporting the load done,
+ * so the regions are set up on the first read, for the console of the game being loaded. */
+static void prepare_regions(rc_client_t* client) {
+  const rc_client_game_t* game = rc_client_get_game_info(client);
+  struct retro_memory_map map;
+  if (regions_ready || !game || !game->console_id)
+    return;
+  map.descriptors = map_descriptors;
+  map.num_descriptors = map_count;
+  rc_libretro_memory_destroy(&regions);
+  rc_libretro_memory_init(&regions, has_map ? &map : NULL, core_memory_info, game->console_id);
+  regions_ready = 1;
+}
+
 static uint32_t read_memory(uint32_t address, uint8_t* buffer, uint32_t num_bytes, rc_client_t* client) {
-  (void)client;
+  prepare_regions(client);
   return rc_libretro_memory_read(&regions, address, buffer, num_bytes);
 }
 
@@ -118,14 +133,8 @@ static void login_done(int result, const char* error, rc_client_t* client, void*
 
 static void load_done(int result, const char* error, rc_client_t* client, void* userdata) {
   (void)userdata;
-  if (result == RC_OK) {
-    const rc_client_game_t* game = rc_client_get_game_info(client);
-    struct retro_memory_map map;
-    map.descriptors = map_descriptors;
-    map.num_descriptors = map_count;
-    rc_libretro_memory_destroy(&regions);
-    rc_libretro_memory_init(&regions, has_map ? &map : NULL, core_memory_info, game ? game->console_id : 0);
-  }
+  if (result == RC_OK)
+    prepare_regions(client);
   romp_rc_on_done(rc_client_get_userdata(client), 1, result, error);
 }
 
@@ -142,6 +151,7 @@ rc_client_t* romp_rc_create(void* host, int hardcore) {
 void romp_rc_destroy(rc_client_t* client) {
   rc_client_destroy(client);
   rc_libretro_memory_destroy(&regions);
+  regions_ready = 0;
 }
 
 void romp_rc_login(rc_client_t* client, const char* username, const char* token) {
