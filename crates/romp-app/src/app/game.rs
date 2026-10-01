@@ -893,9 +893,13 @@ impl Controller {
         let prefs = self.prefs.get();
         let reliable = core_for_platform(&detail.platform_slug)
             .is_some_and(|core| crate::cores::resumes_reliably(core.id));
-        let load_slot =
-            (reliable && prefs.resume && save_dir.join(crate::saves::AUTO_STATE).exists())
-                .then_some(0);
+        let achievements = self.achievements_launch(&detail);
+        let hardcore = achievements.as_ref().is_some_and(|a| a.hardcore);
+        let load_slot = (reliable
+            && prefs.resume
+            && !hardcore
+            && save_dir.join(crate::saves::AUTO_STATE).exists())
+        .then_some(0);
         let options = GameOptions {
             core,
             rom,
@@ -943,7 +947,7 @@ impl Controller {
                     })
                     .collect()
             },
-            achievements: self.achievements_launch(&detail),
+            achievements,
             screenshot_taken: {
                 let id = detail.id;
                 Box::new(move |path| {

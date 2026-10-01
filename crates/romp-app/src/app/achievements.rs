@@ -7,6 +7,7 @@ use romp_proto::msg::AchievementInfo;
 use slint::{ModelRc, VecModel};
 
 const USER_KEY: &str = "ra_username";
+const HARDCORE_KEY: &str = "ra_hardcore";
 
 impl Controller {
     pub(super) fn ra_account(&self) -> Option<Account> {
@@ -27,7 +28,7 @@ impl Controller {
         Some(Launch {
             username: account.username,
             token: account.token,
-            hardcore: false,
+            hardcore: self.ra_hardcore(),
             console_id: achievements::console_id(&detail.platform_slug),
             hash,
             http: self.shared.http.clone(),
@@ -57,8 +58,25 @@ impl Controller {
         });
     }
 
+    pub(super) fn ra_hardcore(&self) -> bool {
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .get(HARDCORE_KEY)
+            .as_deref()
+            == Some("1")
+    }
+
+    pub(super) fn ra_hardcore_changed(&self) {
+        let Some(ui) = self.ui() else { return };
+        let on = if ui.get_ra_hardcore() { "1" } else { "0" };
+        self.shared.store.lock().unwrap().set(HARDCORE_KEY, on);
+    }
+
     pub(super) fn show_ra_account(&self) {
         let Some(ui) = self.ui() else { return };
+        ui.set_ra_hardcore(self.ra_hardcore());
         let signed_in = self.ra_account().map(|a| a.username);
         ui.set_ra_signed_in(signed_in.is_some());
         ui.set_ra_user(signed_in.unwrap_or_default().into());

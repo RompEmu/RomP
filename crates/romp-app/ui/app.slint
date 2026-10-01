@@ -1322,8 +1322,10 @@ component SettingsPage inherits FocusScope {
     in property <string> ra-status;
     in-out property <string> ra-username-input;
     in-out property <string> ra-password-input;
+    in-out property <bool> ra-hardcore;
     callback ra-sign-in(string, string);
     callback ra-sign-out();
+    callback ra-hardcore-changed();
     in property <[DeviceRow]> devices;
     in property <[KeyHint]> keys;
     in property <[StorageRow]> storage;
@@ -1476,6 +1478,12 @@ component SettingsPage inherits FocusScope {
                                 label: @tr("Signed in as {}", root.ra-user);
                                 detail: @tr("Games with achievements show them as you play. Romp keeps a sign-in token, not your password.");
                                 Button { text: @tr("Sign out"); clicked => { root.ra-sign-out(); } }
+                            }
+                            if root.ra-signed-in: SettingRow {
+                                divider: true;
+                                label: @tr("Hardcore mode");
+                                detail: @tr("Earns hardcore achievements. Loading save states and continuing where you left off are off while it's on. Takes effect the next time you start a game.");
+                                Switch { checked <=> root.ra-hardcore; toggled => { root.ra-hardcore-changed(); } }
                             }
                             if !root.ra-signed-in: SettingRow {
                                 label: @tr("Sign in");
@@ -1943,8 +1951,10 @@ export component AppWindow inherits Window {
     in property <string> ra-status;
     in-out property <string> ra-username-input;
     in-out property <string> ra-password-input;
+    in-out property <bool> ra-hardcore;
     callback ra-sign-in(string, string);
     callback ra-sign-out();
+    callback ra-hardcore-changed();
     in property <[DeviceRow]> settings-devices;
     in property <[KeyHint]> settings-keys;
     in property <[StorageRow]> settings-storage;
@@ -2221,6 +2231,8 @@ export component AppWindow inherits Window {
             ra-status: root.ra-status;
             ra-username-input <=> root.ra-username-input;
             ra-password-input <=> root.ra-password-input;
+            ra-hardcore <=> root.ra-hardcore;
+            ra-hardcore-changed => { root.ra-hardcore-changed(); }
             ra-sign-in(user, password) => { root.ra-sign-in(user, password); }
             ra-sign-out => { root.ra-sign-out(); }
             devices: root.settings-devices;

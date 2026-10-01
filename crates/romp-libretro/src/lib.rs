@@ -722,6 +722,16 @@ fn store_core_option_defs(defs: Vec<CoreOptionDef>) {
     });
 }
 
+/// Every core option with the value the core sees now.
+pub fn core_option_values() -> Vec<(String, String)> {
+    with_core_options(|st| {
+        st.values
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_string_lossy().into_owned()))
+            .collect()
+    })
+}
+
 pub fn core_option_defs() -> Vec<CoreOptionDef> {
     with_core_options(|st| st.defs.clone())
 }

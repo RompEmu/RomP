@@ -306,3 +306,39 @@ void romp_rc_list_achievements(rc_client_t* client, void* ctx, romp_rc_achieveme
   }
   rc_client_destroy_achievement_list(list);
 }
+
+/* Hardcore and progress kept with save states. */
+
+int romp_rc_hardcore(rc_client_t* client) {
+  return rc_client_get_hardcore_enabled(client);
+}
+
+void romp_rc_set_hardcore(rc_client_t* client, int enabled) {
+  rc_client_set_hardcore_enabled(client, enabled);
+}
+
+uint32_t romp_rc_console(rc_client_t* client) {
+  const rc_client_game_t* game = rc_client_get_game_info(client);
+  return game ? game->console_id : 0;
+}
+
+size_t romp_rc_progress_size(rc_client_t* client) {
+  return rc_client_progress_size(client);
+}
+
+int romp_rc_serialize_progress(rc_client_t* client, uint8_t* buffer, size_t size) {
+  return rc_client_serialize_progress_sized(client, buffer, size);
+}
+
+int romp_rc_deserialize_progress(rc_client_t* client, const uint8_t* buffer, size_t size) {
+  return rc_client_deserialize_progress_sized(client, buffer, size);
+}
+
+int romp_rc_setting_allowed(const char* library_name, const char* key, const char* value) {
+  const rc_disallowed_setting_t* disallowed = rc_libretro_get_disallowed_settings(library_name);
+  return disallowed ? rc_libretro_is_setting_allowed(disallowed, key, value) : 1;
+}
+
+int romp_rc_system_allowed(const char* library_name, uint32_t console_id) {
+  return rc_libretro_is_system_allowed(library_name, console_id);
+}

@@ -122,6 +122,8 @@ pub enum AchievementEvent {
     Online,
     Reset,
     ServerError(String),
+    /// Hardcore was switched off for this session, and why.
+    HardcoreOff(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

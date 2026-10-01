@@ -6,7 +6,7 @@ use romp_proto::msg::{AppMsg, RunnerMsg};
 use romp_runner::achievements::Achievements;
 use romp_runner::frontend::Frontend;
 use romp_runner::ipc::Link;
-use romp_runner::state::StateManager;
+use romp_runner::state::{self, StateManager};
 use romp_runner::{archive, audio, hw_gl, hw_vulkan, perf, sandbox};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -43,6 +43,11 @@ struct Args {
     no_auto_state: bool,
     #[arg(long = "option", value_parser = parse_option)]
     options: Vec<(String, String)>,
+}
+
+/// Achievement progress is kept beside the save state it belongs to.
+fn progress_path(save_dir: &std::path::Path, slot: u8) -> PathBuf {
+    save_dir.join(format!("{}.achievements", state::slot_file_name(slot)))
 }
 
 fn parse_option(s: &str) -> Result<(String, String), String> {
@@ -232,14 +237,16 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                 }
                 AppMsg::SaveSlot(slot) => {
                     let ok = saves.save_state(slot, &mut core, frontend);
+                    if let (true, Some(a)) = (ok, &mut achievements) {
+                        a.save_progress(&progress_path(&args.save_dir, slot));
+                    }
                     link.send(&RunnerMsg::StateWritten { slot, ok });
                 }
                 AppMsg::LoadSlot(slot) => {
-                    let ok = saves.load_state(slot, &mut core, frontend);
-                    if ok {
-                        if let Some(a) = &mut achievements {
-                            a.reset();
-                        }
+                    let blocked = achievements.as_ref().is_some_and(Achievements::hardcore);
+                    let ok = !blocked && saves.load_state(slot, &mut core, frontend);
+                    if let (true, Some(a)) = (ok, &mut achievements) {
+                        a.load_progress(&progress_path(&args.save_dir, slot));
                     }
                     link.send(&RunnerMsg::StateLoaded { slot, ok });
                 }

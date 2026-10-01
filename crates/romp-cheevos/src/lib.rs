@@ -92,6 +92,18 @@ unsafe extern "C" {
         out: IdOut,
     ) -> c_int;
     fn romp_rc_list_achievements(client: *mut c_void, ctx: *mut c_void, out: AchievementOut);
+    fn romp_rc_hardcore(client: *mut c_void) -> c_int;
+    fn romp_rc_set_hardcore(client: *mut c_void, enabled: c_int);
+    fn romp_rc_console(client: *mut c_void) -> u32;
+    fn romp_rc_progress_size(client: *mut c_void) -> usize;
+    fn romp_rc_serialize_progress(client: *mut c_void, buffer: *mut u8, size: usize) -> c_int;
+    fn romp_rc_deserialize_progress(client: *mut c_void, buffer: *const u8, size: usize) -> c_int;
+    fn romp_rc_setting_allowed(
+        library_name: *const c_char,
+        key: *const c_char,
+        value: *const c_char,
+    ) -> c_int;
+    fn romp_rc_system_allowed(library_name: *const c_char, console_id: u32) -> c_int;
     fn rc_client_do_frame(client: *mut c_void);
     fn rc_client_idle(client: *mut c_void);
     fn rc_client_reset(client: *mut c_void);
@@ -384,6 +396,18 @@ pub fn parse_unlocks(status: i32, body: &[u8]) -> Option<Vec<u32>> {
     (result == 0).then_some(ids)
 }
 
+/// Whether RetroAchievements allows a core setting while playing in hardcore.
+pub fn setting_allowed(core_library: &str, key: &str, value: &str) -> bool {
+    let (core_library, key, value) = (c(core_library), c(key), c(value));
+    unsafe { romp_rc_setting_allowed(core_library.as_ptr(), key.as_ptr(), value.as_ptr()) != 0 }
+}
+
+/// Whether RetroAchievements allows this core for this console in hardcore.
+pub fn system_allowed(core_library: &str, console_id: u32) -> bool {
+    let core_library = c(core_library);
+    unsafe { romp_rc_system_allowed(core_library.as_ptr(), console_id) != 0 }
+}
+
 /// One player's achievement session for one game.
 pub struct Session {
     client: NonNull<c_void>,
@@ -421,6 +445,40 @@ impl Session {
     pub fn load_hash(&mut self, hash: &str) {
         let Ok(hash) = CString::new(hash) else { return };
         unsafe { romp_rc_load_hash(self.client.as_ptr(), hash.as_ptr()) }
+    }
+
+    pub fn hardcore(&self) -> bool {
+        unsafe { romp_rc_hardcore(self.client.as_ptr()) != 0 }
+    }
+
+    pub fn set_hardcore(&mut self, enabled: bool) {
+        unsafe { romp_rc_set_hardcore(self.client.as_ptr(), c_int::from(enabled)) }
+    }
+
+    /// RetroAchievements' number for the loaded game's console.
+    pub fn console_id(&self) -> u32 {
+        unsafe { romp_rc_console(self.client.as_ptr()) }
+    }
+
+    /// Where every achievement stands, to keep beside a save state.
+    pub fn progress(&mut self) -> Vec<u8> {
+        let size = unsafe { romp_rc_progress_size(self.client.as_ptr()) };
+        let mut buffer = vec![0u8; size];
+        let ok = size > 0
+            && unsafe {
+                romp_rc_serialize_progress(self.client.as_ptr(), buffer.as_mut_ptr(), size)
+            } == 0;
+        if ok {
+            buffer
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Puts achievements back where a save state left them; with no saved progress, they start over.
+    pub fn restore_progress(&mut self, saved: Option<&[u8]>) {
+        let (ptr, len) = saved.map_or((std::ptr::null(), 0), |s| (s.as_ptr(), s.len()));
+        unsafe { romp_rc_deserialize_progress(self.client.as_ptr(), ptr, len) };
     }
 
     /// The game's achievements with what has been earned so far.
@@ -595,6 +653,18 @@ mod tests {
             parse_unlocks(401, br#"{"Success":false,"Error":"bad token"}"#),
             None
         );
+    }
+
+    #[test]
+    fn hardcore_follows_retroachievements_rules_for_cores() {
+        let mut session = Session::new(true).unwrap();
+        assert!(session.hardcore());
+        session.set_hardcore(false);
+        assert!(!session.hardcore());
+        assert!(!setting_allowed("Snes9x", "snes9x_layer_1", "disabled"));
+        assert!(setting_allowed("Snes9x", "snes9x_region", "auto"));
+        assert!(setting_allowed("Some Core", "anything", "on"));
+        assert!(system_allowed("Snes9x", 3));
     }
 
     #[test]

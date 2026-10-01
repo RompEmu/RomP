@@ -8,6 +8,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - RetroAchievements. Sign in under Settings → Account, and games with achievements show a popup with the badge when you earn one, and tell you when a leaderboard attempt starts or is submitted. Romp keeps RetroAchievements' sign-in token in the keychain, not your password, and only the app talks to RetroAchievements, never the sandboxed emulator.
 - An Achievements list in the game menu while playing, and an Achievements section on each game's page with every badge and what you've earned, from RetroAchievements when you're signed in and from RomM otherwise. After you play, RomM refreshes your RetroAchievements progress.
+- Hardcore mode for RetroAchievements, under Settings → Account. While it's on, games start fresh and save states can't be loaded, and emulator settings RetroAchievements doesn't allow turn it off for that game with a note saying why. Leaderboard counters, challenge icons and progress toward an achievement show in the corner of the game window, and save states remember achievement progress.
 
 ## [0.7.0] - 2026-09-30
 

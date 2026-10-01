@@ -173,6 +173,7 @@ struct Game {
     achievements: RefCell<Option<crate::achievements::popups::Link>>,
     achievements_open: Cell<bool>,
     achievement_list: RefCell<Vec<romp_proto::msg::AchievementInfo>>,
+    hardcore: Cell<bool>,
 }
 
 const MENU_RESUME: i32 = 0;
@@ -250,6 +251,7 @@ impl Game {
     fn run_commands(&self, commands: Vec<Command>) {
         for command in commands {
             match command {
+                Command::Send(AppMsg::LoadSlot(slot)) => self.load_slot(slot),
                 Command::Send(msg) => self.send(&msg),
                 Command::Menu => self.toggle_menu(),
                 Command::TogglePause => self.set_paused(!self.paused.get()),
@@ -408,6 +410,31 @@ impl Game {
         if polled.new_badges && self.achievements_open.get() {
             self.show_achievement_rows();
         }
+        let overlay = self
+            .achievements
+            .borrow_mut()
+            .as_mut()
+            .and_then(|l| l.overlay(now));
+        if let Some(overlay) = overlay {
+            let ui = self.primary();
+            ui.set_trackers(ModelRc::new(VecModel::from(
+                overlay
+                    .trackers
+                    .into_iter()
+                    .map(slint::SharedString::from)
+                    .collect::<Vec<_>>(),
+            )));
+            ui.set_challenge_badges(ModelRc::new(VecModel::from(overlay.challenges)));
+            match overlay.progress {
+                Some(progress) => {
+                    ui.set_progress_title(progress.title.into());
+                    ui.set_progress_detail(progress.detail.into());
+                    ui.set_has_progress_badge(progress.badge.is_some());
+                    ui.set_progress_badge(progress.badge.unwrap_or_default());
+                }
+                None => ui.set_progress_title("".into()),
+            }
+        }
         let ui = self.primary();
         match polled.view {
             Some(view) => {
@@ -423,6 +450,17 @@ impl Game {
             None if !ui.get_toast_title().is_empty() => ui.set_toast_title("".into()),
             None => {}
         }
+    }
+
+    /// Hardcore mode never loads a state; the runner refuses too, this explains why nothing happened.
+    fn load_slot(&self, slot: u8) {
+        if self.hardcore.get() {
+            return flash(
+                self.primary(),
+                "Loading states is off in hardcore mode".into(),
+            );
+        }
+        self.send(&AppMsg::LoadSlot(slot));
     }
 
     fn open_achievements(&self) {
@@ -616,7 +654,7 @@ impl Game {
             MENU_RESTART => self.restart(),
             MENU_SLOT => self.step_slot(1),
             MENU_SAVE => self.send(&AppMsg::SaveSlot(self.controls.borrow().slot())),
-            MENU_LOAD => self.send(&AppMsg::LoadSlot(self.controls.borrow().slot())),
+            MENU_LOAD => self.load_slot(self.controls.borrow().slot()),
             MENU_VOLUME => self.step_volume(1),
             MENU_FULLSCREEN => self.toggle_fullscreen(),
             MENU_SCREENSHOT => self.screenshot_wanted.set(true),
@@ -800,6 +838,8 @@ pub fn launch(
     on_closed: impl Fn(Option<CoreIdentity>) + 'static,
     open_controllers: impl Fn() + 'static,
 ) -> anyhow::Result<RunningGame> {
+    let hardcore = opts.achievements.as_ref().is_some_and(|a| a.hardcore);
+    let tracks_achievements = opts.achievements.is_some();
     let cfg = SessionConfig {
         runner: paths::runner_exe()?,
         core: opts.core,
@@ -820,7 +860,8 @@ pub fn launch(
     ui.set_game_name(opts.title.clone().into());
     ui.set_mouse_mode(opts.mouse);
     ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());
-    ui.set_has_achievements(opts.achievements.is_some());
+    ui.set_has_achievements(tracks_achievements);
+    ui.set_hardcore(hardcore);
     ui.set_achievements_label("Not started yet".into());
     {
         let mappings = opts.mappings.borrow();
@@ -906,6 +947,7 @@ pub fn launch(
             ),
             achievements_open: Cell::new(false),
             achievement_list: RefCell::default(),
+            hardcore: Cell::new(hardcore),
         }
     });
     let _ = game
@@ -1021,6 +1063,12 @@ pub fn launch(
                 if let SessionEvent::Runner(RunnerMsg::Achievement(event)) = event {
                     if let Some(link) = game.achievements.borrow_mut().as_mut() {
                         link.event(&event);
+                    }
+                    if matches!(event, romp_proto::msg::AchievementEvent::HardcoreOff(_)) {
+                        game.hardcore.set(false);
+                        for window in &game.windows {
+                            window.set_hardcore(false);
+                        }
                     }
                     if matches!(
                         event,
@@ -1210,7 +1258,7 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     });
     window.on_load_state({
         let with = with.clone();
-        move || with(&|g| g.send(&AppMsg::LoadSlot(g.controls.borrow().slot())))
+        move || with(&|g| g.load_slot(g.controls.borrow().slot()))
     });
     window.on_step_slot({
         let with = with.clone();

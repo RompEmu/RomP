@@ -345,6 +345,7 @@ impl Controller {
             with_controller(|c| c.ra_sign_in(user.to_string(), password.to_string()));
         });
         ui.on_ra_sign_out(|| with_controller(|c| c.ra_sign_out()));
+        ui.on_ra_hardcore_changed(|| with_controller(|c| c.ra_hardcore_changed()));
         ui.on_show_all_achievements(|| with_controller(|c| c.show_all_achievements()));
         ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
     }

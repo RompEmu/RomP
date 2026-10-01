@@ -1,6 +1,6 @@
 use romp_proto::msg::{AchievementEvent, AppMsg};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
 
@@ -89,6 +89,11 @@ pub fn toast_for(event: &AchievementEvent) -> Option<Toast> {
             5,
         ),
         AchievementEvent::Online => toast("RetroAchievements is back", "Unlocks were sent.", 3),
+        AchievementEvent::HardcoreOff(reason) => toast(
+            "Hardcore is off for this game",
+            format!("Because {reason}."),
+            6,
+        ),
         AchievementEvent::ServerError(message) => {
             toast("RetroAchievements error", message.clone(), 5)
         }
@@ -130,6 +135,20 @@ pub struct Link {
     showing: Option<(Toast, Instant)>,
     badges: HashMap<String, Image>,
     fetching: HashSet<String>,
+    trackers: BTreeMap<u32, String>,
+    challenges: BTreeMap<u32, String>,
+    progress: Option<(String, String, String, Instant)>,
+    overlay_changed: bool,
+}
+
+const PROGRESS_SHOWN: Duration = Duration::from_secs(3);
+
+/// The small indicators that stay on screen while playing.
+#[derive(Default)]
+pub struct Overlay {
+    pub trackers: Vec<String>,
+    pub challenges: Vec<Image>,
+    pub progress: Option<View>,
 }
 
 impl Link {
@@ -141,6 +160,10 @@ impl Link {
             showing: None,
             badges: HashMap::new(),
             fetching: HashSet::new(),
+            trackers: BTreeMap::new(),
+            challenges: BTreeMap::new(),
+            progress: None,
+            overlay_changed: false,
         }
     }
 
@@ -199,7 +222,78 @@ impl Link {
         self.badges.get(url).cloned()
     }
 
+    fn indicate(&mut self, event: &AchievementEvent) {
+        match event {
+            AchievementEvent::Tracker { id, display } => {
+                self.trackers.insert(*id, display.clone());
+            }
+            AchievementEvent::TrackerHidden { id } => {
+                self.trackers.remove(id);
+            }
+            AchievementEvent::Challenge { id, badge_url } => {
+                self.want_badge(badge_url);
+                self.challenges.insert(*id, badge_url.clone());
+            }
+            AchievementEvent::ChallengeHidden { id } => {
+                self.challenges.remove(id);
+            }
+            AchievementEvent::Progress {
+                title,
+                badge_url,
+                progress,
+            } => {
+                self.want_badge(badge_url);
+                self.progress = Some((
+                    title.clone(),
+                    progress.clone(),
+                    badge_url.clone(),
+                    Instant::now(),
+                ));
+            }
+            AchievementEvent::ProgressHidden => self.progress = None,
+            AchievementEvent::Reset => {
+                self.trackers.clear();
+                self.challenges.clear();
+                self.progress = None;
+            }
+            _ => return,
+        }
+        self.overlay_changed = true;
+    }
+
+    /// The indicators to show, when they changed since the last call.
+    pub fn overlay(&mut self, now: Instant) -> Option<Overlay> {
+        if self
+            .progress
+            .as_ref()
+            .is_some_and(|(.., since)| now.duration_since(*since) >= PROGRESS_SHOWN)
+        {
+            self.progress = None;
+            self.overlay_changed = true;
+        }
+        if !std::mem::take(&mut self.overlay_changed) {
+            return None;
+        }
+        Some(Overlay {
+            trackers: self.trackers.values().cloned().collect(),
+            challenges: self
+                .challenges
+                .values()
+                .filter_map(|url| self.badge(url))
+                .collect(),
+            progress: self
+                .progress
+                .as_ref()
+                .map(|(title, progress, url, _)| View {
+                    title: title.clone(),
+                    detail: progress.clone(),
+                    badge: self.badge(url),
+                }),
+        })
+    }
+
     pub fn event(&mut self, event: &AchievementEvent) {
+        self.indicate(event);
         let Some(toast) = toast_for(event) else {
             return;
         };
@@ -221,6 +315,9 @@ impl Link {
                 }
                 Update::Badge { url, pixels } => {
                     self.fetching.remove(&url);
+                    let shown = self.challenges.values().any(|u| *u == url)
+                        || self.progress.as_ref().is_some_and(|(_, _, u, _)| *u == url);
+                    self.overlay_changed |= shown;
                     self.badges.insert(url, Image::from_rgba8(pixels));
                     polled.new_badges = true;
                 }
@@ -310,6 +407,34 @@ mod tests {
             rt: rt.handle().clone(),
         });
         (link, rt)
+    }
+
+    #[test]
+    fn trackers_and_progress_come_and_go() {
+        let (mut link, _rt) = link();
+        let start = Instant::now();
+        assert!(link.overlay(start).is_none(), "nothing changed yet");
+        link.event(&AchievementEvent::Tracker {
+            id: 2,
+            display: "01:23".into(),
+        });
+        link.event(&AchievementEvent::Tracker {
+            id: 1,
+            display: "500".into(),
+        });
+        link.event(&AchievementEvent::Progress {
+            title: "Collector".into(),
+            badge_url: String::new(),
+            progress: "37/50".into(),
+        });
+        let overlay = link.overlay(start).unwrap();
+        assert_eq!(overlay.trackers, ["500", "01:23"]);
+        assert_eq!(overlay.progress.unwrap().detail, "37/50");
+        assert!(link.overlay(start).is_none(), "only changes are reported");
+        link.event(&AchievementEvent::TrackerHidden { id: 1 });
+        assert_eq!(link.overlay(start).unwrap().trackers, ["01:23"]);
+        let later = Instant::now() + Duration::from_secs(4);
+        assert!(link.overlay(later).unwrap().progress.is_none());
     }
 
     #[test]
