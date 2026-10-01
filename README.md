@@ -96,6 +96,8 @@ cargo build --release
 
 `make check` runs the same checks as CI: formatting, Clippy, tests, [cargo-deny](https://github.com/EmbarkStudios/cargo-deny), [cargo-machete](https://github.com/bnjbvr/cargo-machete), [typos](https://github.com/crate-ci/typos), [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://github.com/zizmorcore/zizmor).
 
+`make update-rcheevos` replaces the bundled [rcheevos](https://github.com/RetroAchievements/rcheevos) with its latest release, or a given one with `RCHEEVOS=v12.5.0`.
+
 Enter your RomM server address (RomM 5.0 or newer). Approve Romp in RomM by scanning the code or opening the link.
 
 Open a game from your library to download and play it. Romp installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.

@@ -47,7 +47,7 @@ $(call checksum,$(MACOS_ZIP))
 endef
 
 .PHONY: build app appimage dist dist-macos dist-linux dist-windows clean
-.PHONY: check fmt-check clippy test deny machete typos workflows release-notes
+.PHONY: check fmt-check clippy test deny machete typos workflows release-notes update-rcheevos
 
 build:
 	cargo build --release --locked
@@ -148,5 +148,28 @@ release-notes:
 		index($$0, "## [") == 1 { if (found) exit; found = index($$0, heading) == 1; next } \
 		found && (printed || NF) { print; printed = 1 } \
 		END { if (!printed) { print "No changelog entry for $(VERSION)" > "/dev/stderr"; exit 1 } }' CHANGELOG.md
+
+RCHEEVOS_DIR := crates/romp-cheevos/rcheevos
+# Only RAIntegration on Windows and external clients use these, and Romp builds neither.
+RCHEEVOS_UNUSED := src/rc_client_external.c src/rc_client_raintegration.c
+
+# Replaces the bundled rcheevos with a release: the latest, or RCHEEVOS=v12.5.0.
+update-rcheevos:
+	@set -e; \
+	tag="$(RCHEEVOS)"; \
+	if [ -z "$$tag" ]; then \
+		tag=$$(curl -fsSL https://api.github.com/repos/RetroAchievements/rcheevos/releases/latest \
+			| sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p'); \
+	fi; \
+	test -n "$$tag"; \
+	tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	curl -fsSL "https://github.com/RetroAchievements/rcheevos/archive/refs/tags/$$tag.tar.gz" \
+		| tar -xz -C "$$tmp" --strip-components 1; \
+	rm -rf $(RCHEEVOS_DIR)/include $(RCHEEVOS_DIR)/src; \
+	cp -R "$$tmp/include" "$$tmp/src" "$$tmp/LICENSE" $(RCHEEVOS_DIR)/; \
+	rm -f $(addprefix $(RCHEEVOS_DIR)/,$(RCHEEVOS_UNUSED)); \
+	echo "$$tag" > $(RCHEEVOS_DIR)/VERSION; \
+	echo "rcheevos is now $$tag. Changes: https://github.com/RetroAchievements/rcheevos/releases/tag/$$tag"
 
 -include signing/signing.mk
