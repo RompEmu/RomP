@@ -3,6 +3,7 @@ import { AchievementItem, AchievementRow } from "achievements.slint";
 import { SlotCard, SlotPicture } from "slots.slint";
 import { Button, ScrollView } from "std-widgets.slint";
 export struct PortRow { label: string, device: string }
+export struct LookRow { label: string, value: string }
 
 component KeyCap inherits Rectangle {
     in property <string> text;
@@ -420,12 +421,7 @@ component SlotTile inherits Rectangle {
 
 /// Chooses how the game is drawn, while it stays visible above.
 component LookPanel inherits Rectangle {
-    in property <string> look;
-    in property <bool> tunable;
-    in property <string> screen;
-    in property <string> curvature;
-    in property <string> scanlines;
-    in property <string> mask;
+    in property <[LookRow]> rows;
     in property <int> focused-row;
     callback step(int, int);
     callback close();
@@ -444,11 +440,7 @@ component LookPanel inherits Rectangle {
             Text { text: @tr("Look"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; vertical-alignment: center; horizontal-stretch: 1; }
             Button { text: @tr("Done"); clicked => { root.close(); } }
         }
-        Stepper { label: @tr("Style"); value: root.look; focused: root.focused-row == 0; step(d) => { root.step(0, d); } }
-        if root.tunable: Stepper { label: @tr("Screen"); value: root.screen; focused: root.focused-row == 1; step(d) => { root.step(1, d); } }
-        if root.tunable: Stepper { label: @tr("Curvature"); value: root.curvature; focused: root.focused-row == 2; step(d) => { root.step(2, d); } }
-        if root.tunable: Stepper { label: @tr("Scanlines"); value: root.scanlines; focused: root.focused-row == 3; step(d) => { root.step(3, d); } }
-        if root.tunable: Stepper { label: @tr("Mask"); value: root.mask; focused: root.focused-row == 4; step(d) => { root.step(4, d); } }
+        for row[i] in root.rows: Stepper { label: row.label; value: row.value; focused: root.focused-row == i; step(d) => { root.step(i, d); } }
     }
 }
 
@@ -491,11 +483,7 @@ export component GameWindow inherits Window {
     in property <string> status;
     in property <string> look-label;
     in property <bool> look-open;
-    in property <bool> look-tunable;
-    in property <string> look-screen;
-    in property <string> look-curvature;
-    in property <string> look-scanlines;
-    in property <string> look-mask;
+    in property <[LookRow]> look-rows;
     in property <int> look-focus;
     callback open-look();
     callback close-look();
@@ -712,12 +700,7 @@ export component GameWindow inherits Window {
             width: min(parent.width - 32px, 420px);
             x: (parent.width - self.width) / 2;
             y: parent.height - self.height - 16px;
-            look: root.look-label;
-            tunable: root.look-tunable;
-            screen: root.look-screen;
-            curvature: root.look-curvature;
-            scanlines: root.look-scanlines;
-            mask: root.look-mask;
+            rows: root.look-rows;
             focused-row: root.look-focus;
             step(row, delta) => { root.step-look(row, delta); }
             close => { root.close-look(); }

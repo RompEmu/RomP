@@ -5,15 +5,26 @@ use librashader::runtime::{FilterChainParameters, Size, Viewport};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// The game's picture drawn through a RetroArch shader preset into a texture the window shows.
+/// One RetroArch shader preset the picture goes through, with its settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stage {
+    pub preset: PathBuf,
+    pub params: Vec<(String, f32)>,
+    /// Whether it draws at the size the game fills in the window, rather than the game's own size.
+    pub to_screen: bool,
+}
+
+type Target = (glow::Texture, u32, u32);
+
+/// The game's picture drawn through RetroArch shader presets, one after another, into a texture
+/// the window shows.
 #[derive(Default)]
 pub struct Shading {
-    preset: Option<PathBuf>,
-    params: Vec<(String, f32)>,
+    stages: Vec<Stage>,
     gl: Option<Arc<glow::Context>>,
     chains: std::collections::HashMap<PathBuf, Option<FilterChain>>,
-    input: Option<(glow::Texture, u32, u32)>,
-    output: Option<(glow::Texture, u32, u32)>,
+    input: Option<Target>,
+    targets: Vec<Option<Target>>,
     frame: Vec<u8>,
     frame_size: (u32, u32),
     frame_dirty: bool,
@@ -134,20 +145,21 @@ impl SavedState {
 }
 
 impl Shading {
-    /// Uses `preset`, or draws the plain picture when it's None.
-    pub fn set_preset(&mut self, preset: Option<PathBuf>, params: Vec<(String, f32)>) {
-        if self.preset != preset {
+    /// Draws the picture through `stages`, or plainly when there are none.
+    pub fn set_stages(&mut self, stages: Vec<Stage>) {
+        let presets =
+            |stages: &[Stage]| stages.iter().map(|s| s.preset.clone()).collect::<Vec<_>>();
+        if presets(&self.stages) != presets(&stages) {
             self.failed = false;
             self.shown = false;
         }
-        self.preset = preset;
-        self.params = params;
+        self.stages = stages;
         self.redraw = true;
     }
 
-    /// Whether the shader is drawing the game, so the window should not show the plain picture.
+    /// Whether the shaders are drawing the game, so the window should not show the plain picture.
     pub fn active(&self) -> bool {
-        self.preset.is_some() && !self.failed
+        !self.stages.is_empty() && !self.failed
     }
 
     pub fn set_frame(&mut self, rgba: &[u8], width: u32, height: u32, aspect: f32) {
@@ -166,7 +178,7 @@ impl Shading {
         self.frame_dirty = true;
     }
 
-    /// The last frame from the game, for showing it plainly once the shader is off.
+    /// The last frame from the game, for showing it plainly once the shaders are off.
     pub fn frame(&self) -> Option<(&[u8], u32, u32, f32)> {
         let (width, height) = self.frame_size;
         (width > 0).then_some((&self.frame, width, height, self.aspect))
@@ -181,10 +193,12 @@ impl Shading {
         self.chains.clear();
         if let Some(gl) = &self.gl {
             unsafe {
-                if let Some((t, ..)) = self.input.take() {
-                    gl.delete_texture(t);
-                }
-                if let Some((t, ..)) = self.output.take() {
+                for (t, ..) in self
+                    .input
+                    .take()
+                    .into_iter()
+                    .chain(self.targets.drain(..).flatten())
+                {
                     gl.delete_texture(t);
                 }
             }
@@ -226,34 +240,46 @@ impl Shading {
         }
     }
 
-    /// Runs the shader on the latest frame for the window about to render. Returns the texture
+    /// Keeps `slot` a texture of the given size; returns whether it had to be made anew.
+    unsafe fn ensure(
+        gl: &glow::Context,
+        slot: &mut Option<Target>,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        if slot.is_some_and(|(_, w, h)| (w, h) == (width, height)) {
+            return false;
+        }
+        unsafe {
+            if let Some((t, ..)) = slot.take() {
+                gl.delete_texture(t);
+            }
+            *slot = Some((Self::texture(gl, width, height), width, height));
+        }
+        true
+    }
+
+    /// Runs the shaders on the latest frame for the window about to render. Returns the texture
     /// when the window must be told to show it, and None when it already does or nothing changed.
     pub fn draw(&mut self, window: (u32, u32)) -> Option<Drawn> {
-        let (Some(gl), Some(preset)) = (self.gl.clone(), self.preset.clone()) else {
-            return None;
-        };
-        if self.failed || self.frame_size.0 == 0 {
+        let gl = self.gl.clone()?;
+        if self.stages.is_empty() || self.failed || self.frame_size.0 == 0 {
             return None;
         }
-        let (width, height) = game_size(window, self.aspect);
+        let screen = game_size(window, self.aspect);
         let (fw, fh) = self.frame_size;
         unsafe {
             let saved = SavedState::save(&gl);
-            if !self.load(&gl, &preset) {
+            let stages = self.stages.clone();
+            if !stages.iter().all(|stage| self.load(&gl, &stage.preset)) {
                 saved.restore(&gl);
                 self.failed = true;
                 return None;
             }
-            if self.input.is_none_or(|(_, w, h)| (w, h) != (fw, fh)) {
-                if let Some((t, ..)) = self.input.take() {
-                    gl.delete_texture(t);
-                }
-                self.input = Some((Self::texture(&gl, fw, fh), fw, fh));
-                self.frame_dirty = true;
-            }
+            let mut changed = Self::ensure(&gl, &mut self.input, fw, fh);
             let input = self.input.expect("input texture").0;
-            let uploaded = std::mem::take(&mut self.frame_dirty);
-            if uploaded {
+            if std::mem::take(&mut self.frame_dirty) || changed {
+                changed = true;
                 gl.bind_texture(glow::TEXTURE_2D, Some(input));
                 gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
                 gl.tex_sub_image_2d(
@@ -268,58 +294,69 @@ impl Shading {
                     glow::PixelUnpackData::Slice(Some(&self.frame)),
                 );
             }
-            let resized = self
-                .output
-                .is_none_or(|(_, w, h)| (w, h) != (width, height));
-            if resized {
-                if let Some((t, ..)) = self.output.take() {
-                    gl.delete_texture(t);
-                }
-                self.output = Some((Self::texture(&gl, width, height), width, height));
-                self.shown = false;
+            let keep = stages.len().min(self.targets.len());
+            for (texture, ..) in self.targets.drain(keep..).flatten() {
+                gl.delete_texture(texture);
             }
-            let output = self.output.expect("output texture").0;
-            let mut drawn = Ok(());
-            if uploaded || resized || std::mem::take(&mut self.redraw) {
-                let chain = self
-                    .chains
-                    .get_mut(&preset)
-                    .and_then(Option::as_mut)
-                    .expect("chain loaded");
-                for (name, value) in &self.params {
-                    chain.parameters().set_parameter_value(name, *value);
+            self.targets.resize(stages.len(), None);
+            let mut size = (fw, fh);
+            for (i, stage) in stages.iter().enumerate() {
+                if stage.to_screen {
+                    size = screen;
                 }
-                let source = GLImage {
-                    handle: Some(input),
-                    format: glow::RGBA8,
-                    size: Size::new(fw, fh),
-                };
-                let target = GLImage {
-                    handle: Some(output),
-                    format: glow::RGBA8,
-                    size: Size::new(width, height),
-                };
-                let viewport = Viewport {
-                    x: 0.0,
-                    y: 0.0,
-                    mvp: None,
-                    output: &target,
-                    size: Size::new(width, height),
-                };
+                if Self::ensure(&gl, &mut self.targets[i], size.0, size.1) {
+                    changed = true;
+                    if i + 1 == stages.len() {
+                        self.shown = false;
+                    }
+                }
+            }
+            let mut drawn = Ok(());
+            if changed || std::mem::take(&mut self.redraw) {
                 self.frame_count = self.frame_count.wrapping_add(1);
-                drawn = chain.frame(&source, &viewport, self.frame_count, None);
+                let mut source = (input, fw, fh);
+                for (i, stage) in stages.iter().enumerate() {
+                    let target = self.targets[i].expect("stage texture");
+                    let chain = self
+                        .chains
+                        .get_mut(&stage.preset)
+                        .and_then(Option::as_mut)
+                        .expect("chain loaded");
+                    for (name, value) in &stage.params {
+                        chain.parameters().set_parameter_value(name, *value);
+                    }
+                    let image = |(handle, w, h): Target| GLImage {
+                        handle: Some(handle),
+                        format: glow::RGBA8,
+                        size: Size::new(w, h),
+                    };
+                    let output = image(target);
+                    let viewport = Viewport {
+                        x: 0.0,
+                        y: 0.0,
+                        mvp: None,
+                        output: &output,
+                        size: output.size,
+                    };
+                    drawn = chain.frame(&image(source), &viewport, self.frame_count, None);
+                    if let Err(e) = &drawn {
+                        tracing::warn!("shader {} failed to draw: {e}", stage.preset.display());
+                        break;
+                    }
+                    source = target;
+                }
             }
             saved.restore(&gl);
-            if let Err(e) = drawn {
-                tracing::warn!("shader {} failed to draw: {e}", preset.display());
+            if drawn.is_err() {
                 self.failed = true;
                 return None;
             }
             if std::mem::replace(&mut self.shown, true) {
                 return None;
             }
+            let (texture, width, height) = self.targets.last().copied().flatten()?;
             Some(Drawn {
-                texture: output.0,
+                texture: texture.0,
                 width,
                 height,
             })

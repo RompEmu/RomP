@@ -1,5 +1,6 @@
+use crate::shading::Stage;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// How a console's picture is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,6 +23,8 @@ pub const SCREEN: [&str; 2] = ["TV", "Monitor"];
 pub const CURVATURE: [&str; 3] = ["Off", "Subtle", "Strong"];
 pub const SCANLINES: [&str; 3] = ["Light", "Medium", "Strong"];
 pub const MASK: [&str; 3] = ["Off", "Light", "Strong"];
+pub const COLOURS: [&str; 2] = ["Original", "Vivid"];
+pub const DITHERING: [&str; 2] = ["Blend", "Off"];
 
 /// The fine adjustments of a CRT look, each an index into its list of steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,6 +40,28 @@ pub struct Tuning {
 pub struct Choice {
     pub look: Look,
     pub tuning: Tuning,
+    /// Whether checkerboard dithering is blended into the transparency it stood for on a TV.
+    #[serde(default = "yes")]
+    pub blend_dithering: bool,
+    /// Whether a handheld's colours are shown as stored, instead of as its screen showed them.
+    #[serde(default)]
+    pub vivid: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// A line of the look panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Row {
+    Style,
+    Screen,
+    Curvature,
+    Scanlines,
+    Mask,
+    Colours,
+    Dithering,
 }
 
 const HANDHELDS: [&str; 11] = [
@@ -75,6 +100,9 @@ const TELEVISION: [&str; 20] = [
     "3do",
     "neogeoaes",
 ];
+
+/// Consoles whose games drew transparency as a checkerboard a TV blurred together.
+const DITHERED: [&str; 4] = ["genesis", "segacd", "sega32", "saturn"];
 
 const MONITOR: [&str; 11] = [
     "arcade",
@@ -135,6 +163,8 @@ pub fn default_choice(platform: &str, sharp_pixels: bool) -> Choice {
     Choice {
         look,
         tuning: default_tuning(platform),
+        blend_dithering: true,
+        vivid: false,
     }
 }
 
@@ -154,6 +184,80 @@ pub fn preset(look: Look, platform: &str) -> Option<&'static str> {
             "gba" => "handheld/gameboy-advance-dot-matrix.slangp",
             _ => "handheld/lcd-grid-v2.slangp",
         }),
+    }
+}
+
+/// The pass that turns a handheld's stored colours into the ones its screen showed.
+fn colours_preset(platform: &str) -> Option<&'static str> {
+    match platform {
+        "gba" => Some("handheld/color-mod/gba-color.slangp"),
+        "gbc" => Some("handheld/color-mod/gbc-color.slangp"),
+        "nds" => Some("handheld/color-mod/nds-color.slangp"),
+        "psp" => Some("handheld/color-mod/psp-color.slangp"),
+        _ => None,
+    }
+}
+
+/// The look panel's lines for this choice on this console.
+pub fn rows(choice: &Choice, platform: &str) -> Vec<Row> {
+    let mut rows = vec![Row::Style];
+    if has_tuning(choice.look) {
+        rows.extend([Row::Screen, Row::Curvature, Row::Scanlines, Row::Mask]);
+    }
+    if choice.look == Look::Handheld && colours_preset(platform).is_some() {
+        rows.push(Row::Colours);
+    }
+    if DITHERED.contains(&platform) {
+        rows.push(Row::Dithering);
+    }
+    rows
+}
+
+pub fn row_label(row: Row) -> &'static str {
+    match row {
+        Row::Style => "Style",
+        Row::Screen => "Screen",
+        Row::Curvature => "Curvature",
+        Row::Scanlines => "Scanlines",
+        Row::Mask => "Mask",
+        Row::Colours => "Colours",
+        Row::Dithering => "Dithering",
+    }
+}
+
+pub fn row_value(choice: &Choice, row: Row) -> &'static str {
+    let t = choice.tuning;
+    let pick = |steps: &[&'static str], i: u8| steps.get(usize::from(i)).copied().unwrap_or("");
+    match row {
+        Row::Style => label(choice.look),
+        Row::Screen => pick(&SCREEN, t.screen),
+        Row::Curvature => pick(&CURVATURE, t.curvature),
+        Row::Scanlines => pick(&SCANLINES, t.scanlines),
+        Row::Mask => pick(&MASK, t.mask),
+        Row::Colours => pick(&COLOURS, u8::from(choice.vivid)),
+        Row::Dithering => pick(&DITHERING, u8::from(!choice.blend_dithering)),
+    }
+}
+
+/// Moves a line of the look panel one step left or right.
+pub fn step(choice: &mut Choice, platform: &str, row: Row, delta: i32) {
+    let turn =
+        |value: u8, steps: usize| (i32::from(value) + delta).clamp(0, steps as i32 - 1) as u8;
+    let t = &mut choice.tuning;
+    match row {
+        Row::Style => {
+            let styles = available(platform);
+            let here = styles.iter().position(|l| *l == choice.look).unwrap_or(0) as i32;
+            choice.look = styles[(here + delta).rem_euclid(styles.len() as i32) as usize];
+        }
+        Row::Screen => t.screen = turn(t.screen, SCREEN.len()),
+        Row::Curvature => t.curvature = turn(t.curvature, CURVATURE.len()),
+        Row::Scanlines => t.scanlines = turn(t.scanlines, SCANLINES.len()),
+        Row::Mask => t.mask = turn(t.mask, MASK.len()),
+        Row::Colours => choice.vivid = turn(u8::from(choice.vivid), COLOURS.len()) == 1,
+        Row::Dithering => {
+            choice.blend_dithering = turn(u8::from(!choice.blend_dithering), DITHERING.len()) == 0;
+        }
     }
 }
 
@@ -242,13 +346,26 @@ pub fn params(choice: &Choice) -> Vec<(String, f32)> {
     params
 }
 
-/// The shader to draw a console with under this choice, from `shaders`, with its settings.
-pub fn shader(
-    choice: &Choice,
-    platform: &str,
-    shaders: &Path,
-) -> Option<(PathBuf, Vec<(String, f32)>)> {
-    preset(choice.look, platform).map(|p| (shaders.join(p), params(choice)))
+/// The shaders to draw a console with under this choice, from `shaders`, in order.
+pub fn stages(choice: &Choice, platform: &str, shaders: &Path) -> Vec<Stage> {
+    let before = |preset: &str| Stage {
+        preset: shaders.join(preset),
+        params: Vec::new(),
+        to_screen: false,
+    };
+    let mut stages = Vec::new();
+    if DITHERED.contains(&platform) && choice.blend_dithering {
+        stages.push(before("dithering/mdapt.slangp"));
+    }
+    if choice.look == Look::Handheld && !choice.vivid {
+        stages.extend(colours_preset(platform).map(before));
+    }
+    stages.extend(preset(choice.look, platform).map(|p| Stage {
+        preset: shaders.join(p),
+        params: params(choice),
+        to_screen: true,
+    }));
+    stages
 }
 
 pub fn store_key(platform: &str) -> String {
@@ -301,6 +418,7 @@ mod tests {
                 scanlines: 2,
                 mask: 0,
             },
+            ..default_choice("arcade", true)
         };
         let monitor = params(&flat);
         let get = |name: &str| monitor.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
@@ -312,18 +430,11 @@ mod tests {
             Some(6.0),
             "a monitor has an aperture grille"
         );
-        let tv = params(&Choice {
-            look: Look::Crt,
-            tuning: default_tuning("snes"),
-        });
+        let tv = params(&default_choice("snes", true));
         let tv_get = |name: &str| tv.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
         assert_eq!(tv_get("slotmask"), Some(0.3), "a TV has a slot mask");
         assert!(tv_get("glow").unwrap() > get("glow").unwrap());
-        assert!(params(&Choice {
-            look: Look::Sharp,
-            tuning: default_tuning("ps2")
-        })
-        .is_empty());
+        assert!(params(&default_choice("ps2", true)).is_empty());
     }
 
     #[test]
@@ -337,12 +448,68 @@ mod tests {
     #[test]
     fn every_bundled_preset_exists() {
         let shaders = Path::new(env!("CARGO_MANIFEST_DIR")).join("shaders");
-        for platform in ["snes", "arcade", "gb", "gbc", "gba", "psp"] {
+        for platform in [
+            "snes", "arcade", "genesis", "gb", "gbc", "gba", "nds", "psp",
+        ] {
             for (look, _) in LOOKS {
-                if let Some(p) = preset(look, platform) {
-                    assert!(shaders.join(p).is_file(), "{p} is not bundled");
+                let choice = Choice {
+                    look,
+                    ..default_choice(platform, true)
+                };
+                for stage in stages(&choice, platform, &shaders) {
+                    assert!(
+                        stage.preset.is_file(),
+                        "{} is not bundled",
+                        stage.preset.display()
+                    );
                 }
             }
         }
+    }
+
+    #[test]
+    fn dithering_is_blended_before_the_look_on_consoles_that_used_it() {
+        let shaders = Path::new("shaders");
+        let mut choice = default_choice("genesis", true);
+        let names = |choice: &Choice, platform| {
+            stages(choice, platform, shaders)
+                .into_iter()
+                .map(|s| (s.preset.to_string_lossy().into_owned(), s.to_screen))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            names(&choice, "genesis"),
+            [
+                ("shaders/dithering/mdapt.slangp".into(), false),
+                ("shaders/crt/crt-guest-advanced.slangp".into(), true),
+            ]
+        );
+        assert!(rows(&choice, "genesis").contains(&Row::Dithering));
+        assert!(!rows(&default_choice("snes", true), "snes").contains(&Row::Dithering));
+        step(&mut choice, "genesis", Row::Dithering, 1);
+        assert_eq!(row_value(&choice, Row::Dithering), "Off");
+        assert_eq!(names(&choice, "genesis").len(), 1);
+    }
+
+    #[test]
+    fn handhelds_show_the_colours_their_screens_did() {
+        let shaders = Path::new("shaders");
+        let mut choice = default_choice("gba", true);
+        assert_eq!(rows(&choice, "gba"), [Row::Style, Row::Colours]);
+        assert_eq!(row_value(&choice, Row::Colours), "Original");
+        assert_eq!(stages(&choice, "gba", shaders).len(), 2);
+        step(&mut choice, "gba", Row::Colours, 1);
+        assert_eq!(row_value(&choice, Row::Colours), "Vivid");
+        assert_eq!(stages(&choice, "gba", shaders).len(), 1);
+        assert_eq!(rows(&default_choice("gb", true), "gb"), [Row::Style]);
+    }
+
+    #[test]
+    fn smooth_pixels_with_no_passes_are_drawn_plainly() {
+        let choice = Choice {
+            look: Look::Smooth,
+            ..default_choice("ps2", false)
+        };
+        assert!(stages(&choice, "ps2", Path::new("shaders")).is_empty());
     }
 }

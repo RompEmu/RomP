@@ -8,7 +8,7 @@ use crate::prefs::Preferences;
 use crate::restore::{Observed, Placement};
 use crate::session::{Session, SessionConfig, SessionEvent};
 use crate::GameWindow;
-use crate::PortRow;
+use crate::{LookRow, PortRow};
 use anyhow::Context;
 use romp_proto::msg::{AppMsg, RunnerMsg};
 use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
@@ -499,18 +499,23 @@ impl Game {
         let look = self.look.borrow();
         let Some(options) = look.as_ref() else {
             for (window, shading) in self.windows.iter().zip(&self.shading) {
-                shading.borrow_mut().set_preset(None, Vec::new());
+                shading.borrow_mut().set_stages(Vec::new());
                 show_plain(window, &shading.borrow());
             }
             return;
         };
         let choice = options.choice;
-        let shader = crate::looks::shader(&choice, &options.platform, &options.shaders);
+        let stages = crate::looks::stages(&choice, &options.platform, &options.shaders);
+        let rows: Vec<LookRow> = crate::looks::rows(&choice, &options.platform)
+            .into_iter()
+            .map(|row| LookRow {
+                label: crate::looks::row_label(row).into(),
+                value: crate::looks::row_value(&choice, row).into(),
+            })
+            .collect();
+        let rows = ModelRc::new(VecModel::from(rows));
         for (window, shading) in self.windows.iter().zip(&self.shading) {
-            let (preset, params) = shader
-                .clone()
-                .map_or((None, Vec::new()), |(p, params)| (Some(p), params));
-            shading.borrow_mut().set_preset(preset, params);
+            shading.borrow_mut().set_stages(stages.clone());
             if !shading.borrow().active() {
                 show_plain(window, &shading.borrow());
             }
@@ -519,31 +524,18 @@ impl Game {
                 crate::looks::Look::Smooth => window.set_sharp(false),
                 _ => {}
             }
-            window.window().request_redraw();
-        }
-        let t = choice.tuning;
-        let step = |steps: &[&str], i: u8| steps.get(usize::from(i)).copied().unwrap_or("").into();
-        for window in &self.windows {
             window.set_look_label(crate::looks::label(choice.look).into());
-            window.set_look_tunable(crate::looks::has_tuning(choice.look));
-            window.set_look_screen(step(&crate::looks::SCREEN, t.screen));
-            window.set_look_curvature(step(&crate::looks::CURVATURE, t.curvature));
-            window.set_look_scanlines(step(&crate::looks::SCANLINES, t.scanlines));
-            window.set_look_mask(step(&crate::looks::MASK, t.mask));
+            window.set_look_rows(rows.clone());
+            window.window().request_redraw();
         }
     }
 
-    fn look_rows(&self) -> i32 {
-        let tunable = self
-            .look
+    fn look_rows(&self) -> Vec<crate::looks::Row> {
+        self.look
             .borrow()
             .as_ref()
-            .is_some_and(|l| crate::looks::has_tuning(l.choice.look));
-        if tunable {
-            5
-        } else {
-            1
-        }
+            .map(|l| crate::looks::rows(&l.choice, &l.platform))
+            .unwrap_or_default()
     }
 
     fn open_look(&self) {
@@ -566,41 +558,24 @@ impl Game {
         self.primary().set_look_focus(row);
     }
 
-    /// Steps one of the look panel's rows: the style itself, or the CRT's screen, curvature, scanlines or mask.
+    /// Steps one of the look panel's rows left or right.
     fn step_look(&self, row: i32, delta: i32) {
+        let Some(row) = usize::try_from(row)
+            .ok()
+            .and_then(|i| self.look_rows().get(i).copied())
+        else {
+            return;
+        };
         {
             let mut look = self.look.borrow_mut();
             let Some(options) = look.as_mut() else {
                 return;
             };
-            let choice = &mut options.choice;
-            let turn = |value: u8, steps: usize| {
-                (i32::from(value) + delta).clamp(0, steps as i32 - 1) as u8
-            };
-            match row {
-                0 => {
-                    let styles = crate::looks::available(&options.platform);
-                    let here = styles.iter().position(|l| *l == choice.look).unwrap_or(0) as i32;
-                    choice.look = styles[(here + delta).rem_euclid(styles.len() as i32) as usize];
-                }
-                1 => {
-                    choice.tuning.screen = turn(choice.tuning.screen, crate::looks::SCREEN.len());
-                }
-                2 => {
-                    choice.tuning.curvature =
-                        turn(choice.tuning.curvature, crate::looks::CURVATURE.len());
-                }
-                3 => {
-                    choice.tuning.scanlines =
-                        turn(choice.tuning.scanlines, crate::looks::SCANLINES.len());
-                }
-                4 => choice.tuning.mask = turn(choice.tuning.mask, crate::looks::MASK.len()),
-                _ => return,
-            }
-            (options.changed)(*choice);
+            crate::looks::step(&mut options.choice, &options.platform, row, delta);
+            (options.changed)(options.choice);
         }
         self.apply_look();
-        if self.look_focus.get() >= self.look_rows() {
+        if self.look_focus.get() >= self.look_rows().len() as i32 {
             self.focus_look(0);
         }
     }
@@ -943,7 +918,7 @@ impl Game {
 
     fn menu_button(&self, button: u32) {
         if self.look_open.get() {
-            let rows = self.look_rows();
+            let rows = self.look_rows().len() as i32;
             let focus = self.look_focus.get();
             match button {
                 input::UP => self.focus_look((focus - 1).max(0)),
@@ -1518,7 +1493,7 @@ fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
         });
     if let Err(e) = installed {
         tracing::warn!("shaders are unavailable in this window: {e}");
-        shading.borrow_mut().set_preset(None, Vec::new());
+        shading.borrow_mut().set_stages(Vec::new());
     }
     shading
 }
