@@ -1505,7 +1505,7 @@ fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
                                 (drawn.width, drawn.height).into(),
                             )
                         }
-                        .origin(slint::BorrowedOpenGLTextureOrigin::BottomLeft)
+                        .origin(slint::BorrowedOpenGLTextureOrigin::TopLeft)
                         .build();
                         window.set_frame(texture);
                     } else if !state.active() {
