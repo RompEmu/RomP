@@ -500,7 +500,7 @@ impl Game {
         let Some(options) = look.as_ref() else {
             for (window, shading) in self.windows.iter().zip(&self.shading) {
                 shading.borrow_mut().set_preset(None, Vec::new());
-                window.set_shaded(false);
+                show_plain(window, &shading.borrow());
             }
             return;
         };
@@ -511,7 +511,9 @@ impl Game {
                 .clone()
                 .map_or((None, Vec::new()), |(p, params)| (Some(p), params));
             shading.borrow_mut().set_preset(preset, params);
-            window.set_shaded(shading.borrow().active());
+            if !shading.borrow().active() {
+                show_plain(window, &shading.borrow());
+            }
             match choice.look {
                 crate::looks::Look::Sharp => window.set_sharp(true),
                 crate::looks::Look::Smooth => window.set_sharp(false),
@@ -524,6 +526,7 @@ impl Game {
         for window in &self.windows {
             window.set_look_label(crate::looks::label(choice.look).into());
             window.set_look_tunable(crate::looks::has_tuning(choice.look));
+            window.set_look_screen(step(&crate::looks::SCREEN, t.screen));
             window.set_look_curvature(step(&crate::looks::CURVATURE, t.curvature));
             window.set_look_scanlines(step(&crate::looks::SCANLINES, t.scanlines));
             window.set_look_mask(step(&crate::looks::MASK, t.mask));
@@ -537,7 +540,7 @@ impl Game {
             .as_ref()
             .is_some_and(|l| crate::looks::has_tuning(l.choice.look));
         if tunable {
-            4
+            5
         } else {
             1
         }
@@ -563,7 +566,7 @@ impl Game {
         self.primary().set_look_focus(row);
     }
 
-    /// Steps one of the look panel's rows: the style itself, or a CRT look's curvature, scanlines or mask.
+    /// Steps one of the look panel's rows: the style itself, or the CRT's screen, curvature, scanlines or mask.
     fn step_look(&self, row: i32, delta: i32) {
         {
             let mut look = self.look.borrow_mut();
@@ -578,21 +581,20 @@ impl Game {
                 0 => {
                     let styles = crate::looks::available(&options.platform);
                     let here = styles.iter().position(|l| *l == choice.look).unwrap_or(0) as i32;
-                    let next = styles[(here + delta).rem_euclid(styles.len() as i32) as usize];
-                    if crate::looks::has_tuning(next) != crate::looks::has_tuning(choice.look) {
-                        choice.tuning = crate::looks::default_tuning(next);
-                    }
-                    choice.look = next;
+                    choice.look = styles[(here + delta).rem_euclid(styles.len() as i32) as usize];
                 }
                 1 => {
+                    choice.tuning.screen = turn(choice.tuning.screen, crate::looks::SCREEN.len());
+                }
+                2 => {
                     choice.tuning.curvature =
                         turn(choice.tuning.curvature, crate::looks::CURVATURE.len());
                 }
-                2 => {
+                3 => {
                     choice.tuning.scanlines =
                         turn(choice.tuning.scanlines, crate::looks::SCANLINES.len());
                 }
-                3 => choice.tuning.mask = turn(choice.tuning.mask, crate::looks::MASK.len()),
+                4 => choice.tuning.mask = turn(choice.tuning.mask, crate::looks::MASK.len()),
                 _ => return,
             }
             (options.changed)(*choice);
@@ -1475,7 +1477,7 @@ pub fn launch(
     }))
 }
 
-/// Draws `window`'s game through the shader, from the window's own OpenGL, beneath its interface.
+/// Draws `window`'s game through the shader with the window's own OpenGL, as the picture it shows.
 fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
     let shading = Rc::new(RefCell::new(crate::shading::Shading::default()));
     let state = shading.clone();
@@ -1496,8 +1498,18 @@ fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
                         return;
                     }
                     let size = window.window().size();
-                    if !state.draw((size.width, size.height)) && !state.active() {
-                        window.set_shaded(false);
+                    if let Some(drawn) = state.draw((size.width, size.height)) {
+                        let texture = unsafe {
+                            slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(
+                                drawn.texture,
+                                (drawn.width, drawn.height).into(),
+                            )
+                        }
+                        .origin(slint::BorrowedOpenGLTextureOrigin::BottomLeft)
+                        .build();
+                        window.set_frame(texture);
+                    } else if !state.active() {
+                        show_plain(&window, &state);
                     }
                 }
                 slint::RenderingState::RenderingTeardown => state.teardown(),
@@ -1507,9 +1519,16 @@ fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
     if let Err(e) = installed {
         tracing::warn!("shaders are unavailable in this window: {e}");
         shading.borrow_mut().set_preset(None, Vec::new());
-        window.set_shaded(false);
     }
     shading
+}
+
+/// Shows the game's last frame as it is, for when the shader stops drawing it.
+fn show_plain(window: &GameWindow, shading: &crate::shading::Shading) {
+    if let Some((rgba, width, height, _)) = shading.frame() {
+        let pixels = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba, width, height);
+        window.set_frame(Image::from_rgba8(pixels));
+    }
 }
 
 fn show_frame(
@@ -1520,22 +1539,19 @@ fn show_frame(
     height: u32,
     aspect: f32,
 ) {
-    shading.borrow_mut().set_frame(rgba, width, height, aspect);
-    if shading.borrow().active() {
-        window.window().request_redraw();
-        return;
-    }
-    if window.get_shaded() {
-        window.set_shaded(false);
-    }
-    let pixels = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba, width, height);
-    window.set_frame(Image::from_rgba8(pixels));
     let aspect = if aspect > 0.0 {
         aspect
     } else {
         width as f32 / height.max(1) as f32
     };
     window.set_aspect(aspect);
+    shading.borrow_mut().set_frame(rgba, width, height, aspect);
+    if shading.borrow().active() {
+        window.window().request_redraw();
+        return;
+    }
+    let pixels = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba, width, height);
+    window.set_frame(Image::from_rgba8(pixels));
 }
 
 fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {

@@ -422,6 +422,7 @@ component SlotTile inherits Rectangle {
 component LookPanel inherits Rectangle {
     in property <string> look;
     in property <bool> tunable;
+    in property <string> screen;
     in property <string> curvature;
     in property <string> scanlines;
     in property <string> mask;
@@ -444,9 +445,10 @@ component LookPanel inherits Rectangle {
             Button { text: @tr("Done"); clicked => { root.close(); } }
         }
         Stepper { label: @tr("Style"); value: root.look; focused: root.focused-row == 0; step(d) => { root.step(0, d); } }
-        if root.tunable: Stepper { label: @tr("Curvature"); value: root.curvature; focused: root.focused-row == 1; step(d) => { root.step(1, d); } }
-        if root.tunable: Stepper { label: @tr("Scanlines"); value: root.scanlines; focused: root.focused-row == 2; step(d) => { root.step(2, d); } }
-        if root.tunable: Stepper { label: @tr("Mask"); value: root.mask; focused: root.focused-row == 3; step(d) => { root.step(3, d); } }
+        if root.tunable: Stepper { label: @tr("Screen"); value: root.screen; focused: root.focused-row == 1; step(d) => { root.step(1, d); } }
+        if root.tunable: Stepper { label: @tr("Curvature"); value: root.curvature; focused: root.focused-row == 2; step(d) => { root.step(2, d); } }
+        if root.tunable: Stepper { label: @tr("Scanlines"); value: root.scanlines; focused: root.focused-row == 3; step(d) => { root.step(3, d); } }
+        if root.tunable: Stepper { label: @tr("Mask"); value: root.mask; focused: root.focused-row == 4; step(d) => { root.step(4, d); } }
     }
 }
 
@@ -486,11 +488,11 @@ export component GameWindow inherits Window {
     callback quit();
     in property <image> frame;
     in property <float> aspect: 4 / 3;
-    in property <bool> shaded;
     in property <string> status;
     in property <string> look-label;
     in property <bool> look-open;
     in property <bool> look-tunable;
+    in property <string> look-screen;
     in property <string> look-curvature;
     in property <string> look-scanlines;
     in property <string> look-mask;
@@ -531,7 +533,7 @@ export component GameWindow inherits Window {
     icon: @image-url("icons/app-icon.png");
     preferred-width: 960px;
     preferred-height: 720px;
-    background: root.shaded ? transparent : black;
+    background: black;
     forward-focus: keys;
 
     keys := FocusScope {
@@ -554,7 +556,6 @@ export component GameWindow inherits Window {
         }
 
         frame := Image {
-            visible: !root.shaded;
             source: root.frame;
             image-fit: fill;
             image-rendering: root.sharp ? ImageRendering.pixelated : ImageRendering.smooth;
@@ -713,6 +714,7 @@ export component GameWindow inherits Window {
             y: parent.height - self.height - 16px;
             look: root.look-label;
             tunable: root.look-tunable;
+            screen: root.look-screen;
             curvature: root.look-curvature;
             scanlines: root.look-scanlines;
             mask: root.look-mask;

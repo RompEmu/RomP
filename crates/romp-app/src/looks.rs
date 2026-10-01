@@ -6,19 +6,19 @@ use std::path::{Path, PathBuf};
 pub enum Look {
     Sharp,
     Smooth,
-    CrtTv,
-    CrtMonitor,
+    #[serde(alias = "CrtTv", alias = "CrtMonitor")]
+    Crt,
     Handheld,
 }
 
-pub const LOOKS: [(Look, &str); 5] = [
+pub const LOOKS: [(Look, &str); 4] = [
     (Look::Sharp, "Sharp pixels"),
     (Look::Smooth, "Smooth"),
-    (Look::CrtTv, "CRT TV"),
-    (Look::CrtMonitor, "CRT monitor"),
+    (Look::Crt, "CRT"),
     (Look::Handheld, "Handheld screen"),
 ];
 
+pub const SCREEN: [&str; 2] = ["TV", "Monitor"];
 pub const CURVATURE: [&str; 3] = ["Off", "Subtle", "Strong"];
 pub const SCANLINES: [&str; 3] = ["Light", "Medium", "Strong"];
 pub const MASK: [&str; 3] = ["Off", "Light", "Strong"];
@@ -26,6 +26,8 @@ pub const MASK: [&str; 3] = ["Off", "Light", "Strong"];
 /// The fine adjustments of a CRT look, each an index into its list of steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tuning {
+    #[serde(default)]
+    pub screen: u8,
     pub curvature: u8,
     pub scanlines: u8,
     pub mask: u8,
@@ -108,18 +110,14 @@ pub fn available(platform: &str) -> Vec<Look> {
         .collect()
 }
 
-pub fn default_tuning(look: Look) -> Tuning {
-    match look {
-        Look::CrtMonitor => Tuning {
-            curvature: 0,
-            scanlines: 1,
-            mask: 1,
-        },
-        _ => Tuning {
-            curvature: 1,
-            scanlines: 1,
-            mask: 1,
-        },
+/// A TV for home consoles, and a flat monitor for arcade boards and computers.
+pub fn default_tuning(platform: &str) -> Tuning {
+    let monitor = MONITOR.contains(&platform);
+    Tuning {
+        screen: u8::from(monitor),
+        curvature: u8::from(!monitor),
+        scanlines: 1,
+        mask: 1,
     }
 }
 
@@ -127,10 +125,8 @@ pub fn default_tuning(look: Look) -> Tuning {
 pub fn default_choice(platform: &str, sharp_pixels: bool) -> Choice {
     let look = if is_handheld(platform) {
         Look::Handheld
-    } else if TELEVISION.contains(&platform) {
-        Look::CrtTv
-    } else if MONITOR.contains(&platform) {
-        Look::CrtMonitor
+    } else if TELEVISION.contains(&platform) || MONITOR.contains(&platform) {
+        Look::Crt
     } else if sharp_pixels {
         Look::Sharp
     } else {
@@ -138,20 +134,19 @@ pub fn default_choice(platform: &str, sharp_pixels: bool) -> Choice {
     };
     Choice {
         look,
-        tuning: default_tuning(look),
+        tuning: default_tuning(platform),
     }
 }
 
 pub fn has_tuning(look: Look) -> bool {
-    matches!(look, Look::CrtTv | Look::CrtMonitor)
+    look == Look::Crt
 }
 
 /// The shader preset for a look on a console, relative to the bundled shaders, or None for no shader.
 pub fn preset(look: Look, platform: &str) -> Option<&'static str> {
     match look {
         Look::Sharp | Look::Smooth => None,
-        Look::CrtTv => Some("crt/crt-guest-advanced-ntsc.slangp"),
-        Look::CrtMonitor => Some("crt/crt-guest-advanced.slangp"),
+        Look::Crt => Some("crt/crt-guest-advanced.slangp"),
         Look::Handheld => Some(match platform {
             "gb" => "handheld/gameboy.slangp",
             "gbc" => "handheld/gameboy-color-dot-matrix.slangp",
@@ -161,19 +156,22 @@ pub fn preset(look: Look, platform: &str) -> Option<&'static str> {
     }
 }
 
-/// What sets each CRT look apart, before the player's curvature, scanline and mask steps.
-fn character(look: Look) -> &'static [(&'static str, f32)] {
-    match look {
+/// What sets a TV apart from a monitor, before the player's curvature, scanline and mask steps.
+fn character(tv: bool) -> &'static [(&'static str, f32)] {
+    if tv {
         // A home TV over composite: soft, glowing, with a slot mask and darker edges.
-        Look::CrtTv => &[
+        &[
+            ("h_sharp", 2.0),
+            ("s_sharp", 0.2),
             ("glow", 0.12),
             ("halation", 0.15),
             ("shadowMask", 0.0),
             ("vigstr", 0.25),
             ("brightboost", 1.5),
-        ],
-        // A studio monitor over RGB: sharp, flat, with an aperture grille and no glow.
-        Look::CrtMonitor => &[
+        ]
+    } else {
+        // A studio monitor over RGB: sharp, with an aperture grille and no glow.
+        &[
             ("h_sharp", 8.0),
             ("s_sharp", 1.0),
             ("glow", 0.0),
@@ -185,17 +183,16 @@ fn character(look: Look) -> &'static [(&'static str, f32)] {
             ("gsl", 1.0),
             ("brightboost", 1.8),
             ("brightboost1", 1.2),
-        ],
-        _ => &[],
+        ]
     }
 }
 
-/// The shader's own settings for a look and its curvature, scanline and mask steps.
+/// The shader's own settings for a look's screen and its curvature, scanline and mask steps.
 pub fn params(choice: &Choice) -> Vec<(String, f32)> {
     if !has_tuning(choice.look) {
         return Vec::new();
     }
-    let tv = choice.look == Look::CrtTv;
+    let tv = choice.tuning.screen == 0;
     let t = choice.tuning;
     let (warp_x, warp_y, corner) = match t.curvature {
         0 => (0.0, 0.0, 0.0),
@@ -217,7 +214,7 @@ pub fn params(choice: &Choice) -> Vec<(String, f32)> {
         (false, 1) => 0.45,
         (false, _) => 0.7,
     };
-    let mut params: Vec<(String, f32)> = character(choice.look)
+    let mut params: Vec<(String, f32)> = character(tv)
         .iter()
         .map(|(name, value)| ((*name).to_string(), *value))
         .collect();
@@ -263,8 +260,11 @@ mod tests {
 
     #[test]
     fn consoles_start_with_the_screen_they_were_played_on() {
-        assert_eq!(default_choice("snes", true).look, Look::CrtTv);
-        assert_eq!(default_choice("arcade", true).look, Look::CrtMonitor);
+        assert_eq!(default_choice("snes", true).look, Look::Crt);
+        assert_eq!(default_choice("snes", true).tuning.screen, 0);
+        assert_eq!(default_choice("arcade", true).look, Look::Crt);
+        assert_eq!(default_choice("arcade", true).tuning.screen, 1);
+        assert_eq!(default_choice("arcade", true).tuning.curvature, 0);
         assert_eq!(default_choice("gb", true).look, Look::Handheld);
         assert_eq!(default_choice("ps2", true).look, Look::Sharp);
         assert_eq!(default_choice("ps2", false).look, Look::Smooth);
@@ -293,8 +293,9 @@ mod tests {
     #[test]
     fn crt_steps_set_the_shader_parameters() {
         let flat = Choice {
-            look: Look::CrtMonitor,
+            look: Look::Crt,
             tuning: Tuning {
+                screen: 1,
                 curvature: 0,
                 scanlines: 2,
                 mask: 0,
@@ -311,17 +312,25 @@ mod tests {
             "a monitor has an aperture grille"
         );
         let tv = params(&Choice {
-            look: Look::CrtTv,
-            tuning: default_tuning(Look::CrtTv),
+            look: Look::Crt,
+            tuning: default_tuning("snes"),
         });
         let tv_get = |name: &str| tv.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
         assert_eq!(tv_get("slotmask"), Some(0.3), "a TV has a slot mask");
         assert!(tv_get("glow").unwrap() > get("glow").unwrap());
         assert!(params(&Choice {
             look: Look::Sharp,
-            tuning: default_tuning(Look::Sharp)
+            tuning: default_tuning("ps2")
         })
         .is_empty());
+    }
+
+    #[test]
+    fn looks_saved_before_screens_were_a_setting_still_load() {
+        let saved = r#"{"look":"CrtMonitor","tuning":{"curvature":0,"scanlines":2,"mask":1}}"#;
+        let choice: Choice = serde_json::from_str(saved).unwrap();
+        assert_eq!(choice.look, Look::Crt);
+        assert_eq!(choice.tuning.scanlines, 2);
     }
 
     #[test]

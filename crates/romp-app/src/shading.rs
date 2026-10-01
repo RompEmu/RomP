@@ -5,7 +5,7 @@ use librashader::runtime::{FilterChainParameters, Size, Viewport};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// The game's picture drawn through a RetroArch shader preset, under the window's own interface.
+/// The game's picture drawn through a RetroArch shader preset into a texture the window shows.
 #[derive(Default)]
 pub struct Shading {
     preset: Option<PathBuf>,
@@ -14,26 +14,30 @@ pub struct Shading {
     chains: std::collections::HashMap<PathBuf, Option<FilterChain>>,
     input: Option<(glow::Texture, u32, u32)>,
     output: Option<(glow::Texture, u32, u32)>,
-    read_fbo: Option<glow::Framebuffer>,
     frame: Vec<u8>,
     frame_size: (u32, u32),
     frame_dirty: bool,
     frame_count: usize,
     aspect: f32,
     failed: bool,
+    redraw: bool,
+    shown: bool,
 }
 
-/// The rectangle the game fills, centred and kept at its shape, in pixels from the window's bottom left.
-pub fn game_rect(window: (u32, u32), aspect: f32) -> (i32, i32, u32, u32) {
+/// A texture the shader drew, for the window to show in place of the plain picture.
+pub struct Drawn {
+    pub texture: std::num::NonZeroU32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// The size the game fills in the window, kept at its shape, in pixels.
+pub fn game_size(window: (u32, u32), aspect: f32) -> (u32, u32) {
     let (ww, wh) = (window.0 as f32, window.1 as f32);
     let aspect = if aspect > 0.0 { aspect } else { 4.0 / 3.0 };
     let width = ww.min(wh * aspect);
     let height = width / aspect;
-    let x = ((ww - width) / 2.0).round();
-    let y = ((wh - height) / 2.0).round();
     (
-        x as i32,
-        y as i32,
         width.round().max(1.0) as u32,
         height.round().max(1.0) as u32,
     )
@@ -47,6 +51,7 @@ struct SavedState {
     active_texture: u32,
     read_framebuffer: Option<glow::Framebuffer>,
     draw_framebuffer: Option<glow::Framebuffer>,
+    unpack_alignment: i32,
     viewport: [i32; 4],
     blend: bool,
     scissor: bool,
@@ -83,6 +88,7 @@ impl SavedState {
                 },
                 read_framebuffer: framebuffer_binding(gl, glow::READ_FRAMEBUFFER_BINDING),
                 draw_framebuffer: framebuffer_binding(gl, glow::DRAW_FRAMEBUFFER_BINDING),
+                unpack_alignment: gl.get_parameter_i32(glow::UNPACK_ALIGNMENT),
                 viewport,
                 blend: gl.is_enabled(glow::BLEND),
                 scissor: gl.is_enabled(glow::SCISSOR_TEST),
@@ -100,6 +106,7 @@ impl SavedState {
             gl.active_texture(self.active_texture);
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, self.read_framebuffer);
             gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, self.draw_framebuffer);
+            gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, self.unpack_alignment);
             let [x, y, w, h] = self.viewport;
             gl.viewport(x, y, w, h);
             let toggle = |cap, on| if on { gl.enable(cap) } else { gl.disable(cap) };
@@ -114,12 +121,14 @@ impl Shading {
     pub fn set_preset(&mut self, preset: Option<PathBuf>, params: Vec<(String, f32)>) {
         if self.preset != preset {
             self.failed = false;
+            self.shown = false;
         }
         self.preset = preset;
         self.params = params;
+        self.redraw = true;
     }
 
-    /// Whether the shader is drawing the game, so the window should not draw the plain picture.
+    /// Whether the shader is drawing the game, so the window should not show the plain picture.
     pub fn active(&self) -> bool {
         self.preset.is_some() && !self.failed
     }
@@ -140,6 +149,12 @@ impl Shading {
         self.frame_dirty = true;
     }
 
+    /// The last frame from the game, for showing it plainly once the shader is off.
+    pub fn frame(&self) -> Option<(&[u8], u32, u32, f32)> {
+        let (width, height) = self.frame_size;
+        (width > 0).then_some((&self.frame, width, height, self.aspect))
+    }
+
     pub fn setup(&mut self, get_proc_address: &dyn Fn(&std::ffi::CStr) -> *const std::ffi::c_void) {
         let gl = unsafe { glow::Context::from_loader_function_cstr(|name| get_proc_address(name)) };
         self.gl = Some(Arc::new(gl));
@@ -155,12 +170,10 @@ impl Shading {
                 if let Some((t, ..)) = self.output.take() {
                     gl.delete_texture(t);
                 }
-                if let Some(f) = self.read_fbo.take() {
-                    gl.delete_framebuffer(f);
-                }
             }
         }
         self.gl = None;
+        self.shown = false;
     }
 
     /// Builds a preset once and keeps it, so switching back to a look is instant.
@@ -181,14 +194,6 @@ impl Shading {
             .is_some()
     }
 
-    unsafe fn clear_opaque(gl: &glow::Context) {
-        unsafe {
-            gl.disable(glow::SCISSOR_TEST);
-            gl.clear_color(0.0, 0.0, 0.0, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
-        }
-    }
-
     unsafe fn texture(gl: &glow::Context, width: u32, height: u32) -> glow::Texture {
         unsafe {
             let texture = gl.create_texture().expect("texture");
@@ -204,32 +209,23 @@ impl Shading {
         }
     }
 
-    /// Draws the game for the frame the window is about to render; returns false when it could not.
-    pub fn draw(&mut self, window: (u32, u32)) -> bool {
+    /// Runs the shader on the latest frame for the window about to render. Returns the texture
+    /// when the window must be told to show it, and None when it already does or nothing changed.
+    pub fn draw(&mut self, window: (u32, u32)) -> Option<Drawn> {
         let (Some(gl), Some(preset)) = (self.gl.clone(), self.preset.clone()) else {
-            return false;
+            return None;
         };
-        if self.failed {
-            return false;
+        if self.failed || self.frame_size.0 == 0 {
+            return None;
         }
         if !self.load(&gl, &preset) {
             self.failed = true;
-            return false;
+            return None;
         }
-        if self.frame_size.0 == 0 {
-            unsafe {
-                let saved = SavedState::save(&gl);
-                Self::clear_opaque(&gl);
-                saved.restore(&gl);
-            }
-            return true;
-        }
-        let (x, y, width, height) = game_rect(window, self.aspect);
+        let (width, height) = game_size(window, self.aspect);
+        let (fw, fh) = self.frame_size;
         unsafe {
             let saved = SavedState::save(&gl);
-            Self::clear_opaque(&gl);
-
-            let (fw, fh) = self.frame_size;
             if self.input.is_none_or(|(_, w, h)| (w, h) != (fw, fh)) {
                 if let Some((t, ..)) = self.input.take() {
                     gl.delete_texture(t);
@@ -238,7 +234,8 @@ impl Shading {
                 self.frame_dirty = true;
             }
             let input = self.input.expect("input texture").0;
-            if std::mem::take(&mut self.frame_dirty) {
+            let uploaded = std::mem::take(&mut self.frame_dirty);
+            if uploaded {
                 gl.bind_texture(glow::TEXTURE_2D, Some(input));
                 gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
                 gl.tex_sub_image_2d(
@@ -253,81 +250,61 @@ impl Shading {
                     glow::PixelUnpackData::Slice(Some(&self.frame)),
                 );
             }
-            if self
+            let resized = self
                 .output
-                .is_none_or(|(_, w, h)| (w, h) != (width, height))
-            {
+                .is_none_or(|(_, w, h)| (w, h) != (width, height));
+            if resized {
                 if let Some((t, ..)) = self.output.take() {
                     gl.delete_texture(t);
                 }
                 self.output = Some((Self::texture(&gl, width, height), width, height));
+                self.shown = false;
             }
             let output = self.output.expect("output texture").0;
-            let chain = self
-                .chains
-                .get_mut(&preset)
-                .and_then(Option::as_mut)
-                .expect("chain loaded");
-            for (name, value) in &self.params {
-                chain.parameters().set_parameter_value(name, *value);
+            let mut drawn = Ok(());
+            if uploaded || resized || std::mem::take(&mut self.redraw) {
+                let chain = self
+                    .chains
+                    .get_mut(&preset)
+                    .and_then(Option::as_mut)
+                    .expect("chain loaded");
+                for (name, value) in &self.params {
+                    chain.parameters().set_parameter_value(name, *value);
+                }
+                let source = GLImage {
+                    handle: Some(input),
+                    format: glow::RGBA8,
+                    size: Size::new(fw, fh),
+                };
+                let target = GLImage {
+                    handle: Some(output),
+                    format: glow::RGBA8,
+                    size: Size::new(width, height),
+                };
+                let viewport = Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    mvp: None,
+                    output: &target,
+                    size: Size::new(width, height),
+                };
+                self.frame_count = self.frame_count.wrapping_add(1);
+                drawn = chain.frame(&source, &viewport, self.frame_count, None);
             }
-            let source = GLImage {
-                handle: Some(input),
-                format: glow::RGBA8,
-                size: Size::new(fw, fh),
-            };
-            let target = GLImage {
-                handle: Some(output),
-                format: glow::RGBA8,
-                size: Size::new(width, height),
-            };
-            let viewport = Viewport {
-                x: 0.0,
-                y: 0.0,
-                mvp: None,
-                output: &target,
-                size: Size::new(width, height),
-            };
-            self.frame_count = self.frame_count.wrapping_add(1);
-            let drawn = chain.frame(&source, &viewport, self.frame_count, None);
-            if let Err(e) = &drawn {
+            saved.restore(&gl);
+            if let Err(e) = drawn {
                 tracing::warn!("shader {} failed to draw: {e}", preset.display());
                 self.failed = true;
+                return None;
             }
-            if drawn.is_ok() {
-                let read = *self
-                    .read_fbo
-                    .get_or_insert_with(|| gl.create_framebuffer().expect("framebuffer"));
-                gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(read));
-                gl.framebuffer_texture_2d(
-                    glow::READ_FRAMEBUFFER,
-                    glow::COLOR_ATTACHMENT0,
-                    glow::TEXTURE_2D,
-                    Some(output),
-                    0,
-                );
-                gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, saved.draw_framebuffer);
-                // The game's top row is the texture's first, which OpenGL counts from the bottom.
-                gl.blit_framebuffer(
-                    0,
-                    0,
-                    width as i32,
-                    height as i32,
-                    x,
-                    y + height as i32,
-                    x + width as i32,
-                    y,
-                    glow::COLOR_BUFFER_BIT,
-                    glow::NEAREST,
-                );
+            if std::mem::replace(&mut self.shown, true) {
+                return None;
             }
-            // Shaders may leave alpha at zero, which a see-through window would show the desktop through.
-            gl.color_mask(false, false, false, true);
-            gl.clear_color(0.0, 0.0, 0.0, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
-            gl.color_mask(true, true, true, true);
-            saved.restore(&gl);
-            drawn.is_ok()
+            Some(Drawn {
+                texture: output.0,
+                width,
+                height,
+            })
         }
     }
 }
@@ -337,9 +314,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_game_is_centred_at_its_shape() {
-        assert_eq!(game_rect((1600, 900), 4.0 / 3.0), (200, 0, 1200, 900));
-        assert_eq!(game_rect((800, 1200), 4.0 / 3.0), (0, 300, 800, 600));
-        assert_eq!(game_rect((640, 480), 0.0), (0, 0, 640, 480));
+    fn the_game_keeps_its_shape() {
+        assert_eq!(game_size((1600, 900), 4.0 / 3.0), (1200, 900));
+        assert_eq!(game_size((800, 1200), 4.0 / 3.0), (800, 600));
+        assert_eq!(game_size((640, 480), 0.0), (640, 480));
     }
 }
