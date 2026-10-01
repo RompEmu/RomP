@@ -84,7 +84,7 @@ impl Controller {
         self.game.borrow().as_ref().map(|g| g.detail.id)
     }
 
-    fn current_game(&self) -> Option<GameDetail> {
+    pub(super) fn current_game(&self) -> Option<GameDetail> {
         self.game.borrow().as_ref().map(|g| g.detail.clone())
     }
 
@@ -126,6 +126,7 @@ impl Controller {
         }
         self.load_game_cover(&detail);
         self.load_screenshots(&detail, offset);
+        self.load_game_achievements(&detail);
         self.load_similar(id);
     }
 
@@ -985,6 +986,9 @@ impl Controller {
         self.end_session();
         self.save_players();
         let playing = self.playing.borrow_mut().take();
+        if identity.is_some() {
+            self.refresh_romm_achievements();
+        }
         if let Some(detail) = playing {
             self.after_play(detail, identity);
         }

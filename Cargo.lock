@@ -4860,6 +4860,7 @@ dependencies = [
  "open",
  "qrcode",
  "reqwest",
+ "romp-cheevos",
  "romp-proto",
  "rusqlite",
  "serde",

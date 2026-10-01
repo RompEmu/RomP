@@ -266,6 +266,13 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                         (&sys.library_name, &sys.library_version),
                     );
                 }
+                AppMsg::ListAchievements => {
+                    let list = achievements
+                        .as_mut()
+                        .map(Achievements::list)
+                        .unwrap_or_default();
+                    link.send(&RunnerMsg::AchievementList(list));
+                }
                 AppMsg::AchievementsResponse { id, status, body } => {
                     if let Some(a) = &mut achievements {
                         a.respond(id, status, &body);

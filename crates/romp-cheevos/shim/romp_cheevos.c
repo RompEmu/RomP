@@ -1,3 +1,5 @@
+#include "rc_api_runtime.h"
+#include "rc_api_user.h"
 #include "rc_client.h"
 #include "rc_libretro.h"
 
@@ -177,4 +179,130 @@ uint32_t romp_rc_game(rc_client_t* client, const char** title, uint32_t* achieve
 
 size_t romp_rc_user_agent_clause(rc_client_t* client, char* buffer, size_t size) {
   return rc_client_get_user_agent_clause(client, buffer, size);
+}
+
+/* Achievement lists for showing outside the per-frame runtime. */
+
+typedef struct romp_rc_achievement {
+  uint32_t id;
+  uint32_t points;
+  const char* title;
+  const char* description;
+  const char* badge_url;
+  const char* badge_locked_url;
+  const char* progress;
+  uint32_t unlocked;
+} romp_rc_achievement;
+
+typedef void (*romp_rc_request_out)(void* ctx, const char* url, const char* post, const char* content_type);
+typedef void (*romp_rc_achievement_out)(void* ctx, const romp_rc_achievement* achievement);
+typedef void (*romp_rc_id_out)(void* ctx, uint32_t id);
+
+static int hand_over_request(rc_api_request_t* request, int result, void* ctx, romp_rc_request_out out) {
+  if (result == RC_OK)
+    out(ctx, request->url, request->post_data, request->content_type);
+  rc_api_destroy_request(request);
+  return result;
+}
+
+int romp_rc_catalog_request(const char* username, const char* token, uint32_t game_id, const char* hash,
+    void* ctx, romp_rc_request_out out) {
+  rc_api_fetch_game_sets_request_t params;
+  rc_api_request_t request;
+  memset(&params, 0, sizeof(params));
+  params.username = username;
+  params.api_token = token;
+  params.game_id = game_id;
+  params.game_hash = hash;
+  return hand_over_request(&request, rc_api_init_fetch_game_sets_request(&request, &params), ctx, out);
+}
+
+int romp_rc_unlocks_request(const char* username, const char* token, uint32_t game_id, int hardcore,
+    void* ctx, romp_rc_request_out out) {
+  rc_api_fetch_user_unlocks_request_t params;
+  rc_api_request_t request;
+  memset(&params, 0, sizeof(params));
+  params.username = username;
+  params.api_token = token;
+  params.game_id = game_id;
+  params.hardcore = hardcore ? 1 : 0;
+  return hand_over_request(&request, rc_api_init_fetch_user_unlocks_request(&request, &params), ctx, out);
+}
+
+static rc_api_server_response_t server_response(const char* body, size_t length, int status) {
+  rc_api_server_response_t response;
+  response.body = body;
+  response.body_length = length;
+  response.http_status_code = status;
+  return response;
+}
+
+/* Lists the game's official achievements; returns the game's id, or 0 when the answer was not usable. */
+uint32_t romp_rc_parse_catalog(const char* body, size_t length, int status, void* ctx, romp_rc_achievement_out out) {
+  rc_api_fetch_game_sets_response_t response;
+  rc_api_server_response_t server = server_response(body, length, status);
+  uint32_t game_id = 0;
+  uint32_t s, a;
+  if (rc_api_process_fetch_game_sets_server_response(&response, &server) == RC_OK && response.response.succeeded) {
+    game_id = response.id;
+    for (s = 0; s < response.num_sets; s++) {
+      for (a = 0; a < response.sets[s].num_achievements; a++) {
+        const rc_api_achievement_definition_t* def = &response.sets[s].achievements[a];
+        romp_rc_achievement out_achievement;
+        if (def->category != RC_ACHIEVEMENT_CATEGORY_CORE)
+          continue;
+        memset(&out_achievement, 0, sizeof(out_achievement));
+        out_achievement.id = def->id;
+        out_achievement.points = def->points;
+        out_achievement.title = def->title;
+        out_achievement.description = def->description;
+        out_achievement.badge_url = def->badge_url;
+        out_achievement.badge_locked_url = def->badge_locked_url;
+        out(ctx, &out_achievement);
+      }
+    }
+  }
+  rc_api_destroy_fetch_game_sets_response(&response);
+  return game_id;
+}
+
+int romp_rc_parse_unlocks(const char* body, size_t length, int status, void* ctx, romp_rc_id_out out) {
+  rc_api_fetch_user_unlocks_response_t response;
+  rc_api_server_response_t server = server_response(body, length, status);
+  uint32_t i;
+  int result = rc_api_process_fetch_user_unlocks_server_response(&response, &server);
+  if (result == RC_OK && response.response.succeeded) {
+    for (i = 0; i < response.num_achievement_ids; i++)
+      out(ctx, response.achievement_ids[i]);
+  } else if (result == RC_OK) {
+    result = RC_API_FAILURE;
+  }
+  rc_api_destroy_fetch_user_unlocks_response(&response);
+  return result;
+}
+
+/* The running game's achievements as rc_client sees them, earned ones included. */
+void romp_rc_list_achievements(rc_client_t* client, void* ctx, romp_rc_achievement_out out) {
+  rc_client_achievement_list_t* list = rc_client_create_achievement_list(client,
+      RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_LOCK_STATE);
+  uint32_t b, a;
+  if (!list)
+    return;
+  for (b = 0; b < list->num_buckets; b++) {
+    for (a = 0; a < list->buckets[b].num_achievements; a++) {
+      const rc_client_achievement_t* achievement = list->buckets[b].achievements[a];
+      romp_rc_achievement out_achievement;
+      memset(&out_achievement, 0, sizeof(out_achievement));
+      out_achievement.id = achievement->id;
+      out_achievement.points = achievement->points;
+      out_achievement.title = achievement->title;
+      out_achievement.description = achievement->description;
+      out_achievement.badge_url = achievement->badge_url;
+      out_achievement.badge_locked_url = achievement->badge_locked_url;
+      out_achievement.progress = achievement->measured_progress;
+      out_achievement.unlocked = achievement->unlocked != 0;
+      out(ctx, &out_achievement);
+    }
+  }
+  rc_client_destroy_achievement_list(list);
 }

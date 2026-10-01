@@ -1,0 +1,42 @@
+import { Theme } from "theme.slint";
+
+export struct AchievementRow { title: string, detail: string, badge: image, has-badge: bool, unlocked: bool }
+
+/// One achievement: its badge, name, what earns it, and its points.
+export component AchievementItem inherits HorizontalLayout {
+    in property <AchievementRow> entry;
+    spacing: 12px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    Rectangle {
+        width: 40px;
+        height: 40px;
+        border-radius: 6px;
+        background: Theme.surface-muted;
+        clip: true;
+        if root.entry.has-badge: Image {
+            width: parent.width;
+            height: parent.height;
+            source: root.entry.badge;
+            image-fit: cover;
+            opacity: root.entry.unlocked ? 1.0 : 0.55;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        spacing: 2px;
+        Text {
+            text: root.entry.title;
+            font-weight: 600;
+            font-size: Theme.font-body;
+            color: root.entry.unlocked ? Theme.text-strong : Theme.text-secondary;
+            wrap: word-wrap;
+        }
+        Text {
+            text: root.entry.detail;
+            font-size: Theme.font-small;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+}

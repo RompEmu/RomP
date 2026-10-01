@@ -345,6 +345,7 @@ impl Controller {
             with_controller(|c| c.ra_sign_in(user.to_string(), password.to_string()));
         });
         ui.on_ra_sign_out(|| with_controller(|c| c.ra_sign_out()));
+        ui.on_show_all_achievements(|| with_controller(|c| c.show_all_achievements()));
         ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
     }
 
@@ -572,6 +573,13 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         match me {
             Ok(user) => {
+                if let Some(user_id) = user.id {
+                    self.shared
+                        .store
+                        .lock()
+                        .unwrap()
+                        .set("romm_user_id", &user_id.to_string());
+                }
                 if let Some(ra) = user.ra_username.as_deref().filter(|n| !n.is_empty()) {
                     self.shared
                         .store

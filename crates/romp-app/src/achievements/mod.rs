@@ -1,5 +1,7 @@
 pub mod popups;
 
+use crate::romm::types::{RaEarned, RomDetail, User};
+use romp_proto::msg::AchievementInfo;
 use serde::Deserialize;
 
 const HOST: &str = "retroachievements.org";
@@ -55,6 +57,103 @@ const CONSOLES: &[(&[&str], u32)] = &[
 ];
 
 /// RetroAchievements' number for the platform, or 0 to let it tell from the file.
+/// The badge to show: the coloured one once earned, the grey one before.
+pub fn badge_url(a: &AchievementInfo) -> &str {
+    if a.unlocked || a.badge_locked_url.is_empty() {
+        &a.badge_url
+    } else {
+        &a.badge_locked_url
+    }
+}
+
+pub fn row_detail(a: &AchievementInfo) -> String {
+    let points = if a.points == 1 {
+        "1 point".to_string()
+    } else {
+        format!("{} points", a.points)
+    };
+    let mut parts = vec![a.description.clone(), points];
+    if !a.unlocked && !a.progress.is_empty() {
+        parts.push(a.progress.clone());
+    }
+    parts.retain(|p| !p.is_empty());
+    parts.join(" · ")
+}
+
+pub fn summary(list: &[AchievementInfo]) -> String {
+    if list.is_empty() {
+        return "No achievements for this game".into();
+    }
+    let earned = list.iter().filter(|a| a.unlocked).count();
+    format!("{earned} of {} earned", list.len())
+}
+
+/// A game's achievements as RomM stores them, marked with what RomM knows the player earned.
+pub fn from_romm(rom: &RomDetail, user: Option<&User>) -> Vec<AchievementInfo> {
+    let earned: Vec<u32> = user
+        .and_then(|u| u.ra_progression.as_ref())
+        .and_then(|p| {
+            p.results
+                .iter()
+                .find(|g| g.rom_ra_id.is_some() && g.rom_ra_id == rom.ra_id)
+        })
+        .map(|g| {
+            g.earned_achievements
+                .iter()
+                .filter_map(RaEarned::achievement_id)
+                .collect()
+        })
+        .unwrap_or_default();
+    rom.merged_ra_metadata
+        .as_ref()
+        .map(|m| m.achievements.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|a| {
+            let id = u32::try_from(a.ra_id?).ok()?;
+            Some(AchievementInfo {
+                id,
+                title: a.title.clone().unwrap_or_default(),
+                description: a.description.clone().unwrap_or_default(),
+                points: a.points.and_then(|p| u32::try_from(p).ok()).unwrap_or(0),
+                badge_url: a.badge_url.clone().unwrap_or_default(),
+                badge_locked_url: a.badge_url_lock.clone().unwrap_or_default(),
+                unlocked: earned.contains(&id),
+                progress: String::new(),
+            })
+        })
+        .collect()
+}
+
+/// A game's achievements and the player's unlocks, straight from RetroAchievements.
+pub async fn from_retroachievements(
+    http: &reqwest::Client,
+    account: &Account,
+    game_id: u32,
+    hash: Option<&str>,
+) -> Option<Vec<AchievementInfo>> {
+    let send = |request: romp_cheevos::Request| async move {
+        forward(
+            http,
+            &request.url,
+            request.post.as_deref(),
+            request.content_type.as_deref(),
+            "",
+        )
+        .await
+    };
+    let request = romp_cheevos::catalog_request(&account.username, &account.token, game_id, hash)?;
+    let (status, body) = send(request).await;
+    let (game_id, mut list) = romp_cheevos::parse_catalog(status, &body)?;
+    let request = romp_cheevos::unlocks_request(&account.username, &account.token, game_id, false)?;
+    let (status, body) = send(request).await;
+    let earned = romp_cheevos::parse_unlocks(status, &body).unwrap_or_default();
+    for a in &mut list {
+        a.unlocked = earned.contains(&a.id);
+    }
+    Some(list)
+}
+
 pub fn console_id(platform_slug: &str) -> u32 {
     CONSOLES
         .iter()
@@ -206,6 +305,39 @@ mod tests {
     use super::*;
     use wiremock::matchers::{body_string_contains, header_regex, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn romm_lists_achievements_with_what_the_player_earned() {
+        let rom: RomDetail = serde_json::from_value(serde_json::json!({
+            "id": 1, "platform_slug": "snes", "fs_name": "g", "fs_path": "roms/snes",
+            "has_multiple_files": false, "files": [], "ra_id": 228,
+            "merged_ra_metadata": {"achievements": [
+                {"ra_id": 7, "title": "Missile", "description": "Find one", "points": 5,
+                 "badge_url": "https://media.retroachievements.org/Badge/1.png",
+                 "badge_url_lock": "https://media.retroachievements.org/Badge/1_lock.png"},
+                {"ra_id": 8, "title": "Bombs", "points": 10}
+            ]}
+        }))
+        .unwrap();
+        let user: User = serde_json::from_value(serde_json::json!({
+            "username": "p", "current_device_id": null,
+            "ra_progression": {"total": 1, "results": [
+                {"rom_ra_id": 228, "earned_achievements": [{"id": "7", "date": "x"}]},
+                {"rom_ra_id": 999, "earned_achievements": [{"id": 8}]}
+            ]}
+        }))
+        .unwrap();
+        let list = from_romm(&rom, Some(&user));
+        assert_eq!(list.len(), 2);
+        assert!(list[0].unlocked && !list[1].unlocked);
+        assert_eq!(
+            badge_url(&list[0]),
+            "https://media.retroachievements.org/Badge/1.png"
+        );
+        assert_eq!(row_detail(&list[1]), "10 points");
+        assert_eq!(summary(&list), "1 of 2 earned");
+        assert!(from_romm(&rom, None).iter().all(|a| !a.unlocked));
+    }
 
     #[test]
     fn platforms_map_to_retroachievements_consoles() {

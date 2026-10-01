@@ -2,6 +2,9 @@ use super::{on_ui, Controller};
 use crate::achievements::{self, popups::Launch, Account};
 use crate::credentials::{Keychain, TokenStore};
 use crate::store::GameDetail;
+use crate::AchievementRow;
+use romp_proto::msg::AchievementInfo;
+use slint::{ModelRc, VecModel};
 
 const USER_KEY: &str = "ra_username";
 
@@ -30,6 +33,28 @@ impl Controller {
             http: self.shared.http.clone(),
             rt: self.shared.rt.handle().clone(),
         })
+    }
+
+    /// After playing, RomM fetches the player's new RetroAchievements progress.
+    pub(super) fn refresh_romm_achievements(&self) {
+        if self.ra_account().is_none() || !self.has_scope("me.write") || self.offline.get() {
+            return;
+        }
+        let user_id = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .get("romm_user_id")
+            .and_then(|id| id.parse::<i64>().ok());
+        let (Some(client), Some(user_id)) = (self.client.borrow().clone(), user_id) else {
+            return;
+        };
+        self.shared.rt.spawn(async move {
+            if let Err(e) = client.refresh_retro_achievements(user_id).await {
+                tracing::debug!("RomM RetroAchievements refresh: {e}");
+            }
+        });
     }
 
     pub(super) fn show_ra_account(&self) {
@@ -82,6 +107,7 @@ impl Controller {
             Err(e) => ui.set_ra_status(e.into()),
         }
         self.show_ra_account();
+        self.update_pairing_prompt();
     }
 
     pub(super) fn ra_sign_out(&self) {
@@ -93,5 +119,128 @@ impl Controller {
             ui.set_ra_status("".into());
         }
         self.show_ra_account();
+        self.update_pairing_prompt();
+    }
+}
+
+const SHOWN_AT_FIRST: usize = 8;
+
+fn cache_key(rom_id: i64) -> String {
+    format!("achievements:{rom_id}")
+}
+
+fn badge_file(url: &str) -> Option<std::path::PathBuf> {
+    let name = url.rsplit('/').next()?;
+    let safe = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+        && !name.starts_with('.');
+    safe.then(|| crate::paths::data_dir().join("badges").join(name))
+}
+
+async fn save_badges(http: &reqwest::Client, list: &[AchievementInfo]) {
+    for a in list {
+        let url = achievements::badge_url(a);
+        let Some(path) = badge_file(url).filter(|p| !p.exists()) else {
+            continue;
+        };
+        if !achievements::allowed(url) {
+            continue;
+        }
+        let Ok(response) = http.get(url).send().await else {
+            return;
+        };
+        if let Ok(bytes) = response.bytes().await {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(&path, &bytes);
+        }
+    }
+}
+
+impl Controller {
+    /// Shows the game's achievements from the cache, then from RetroAchievements or RomM.
+    pub(super) fn load_game_achievements(&self, detail: &GameDetail) {
+        let id = detail.id;
+        let cached = self.shared.store.lock().unwrap().get(&cache_key(id));
+        let list: Vec<AchievementInfo> = cached
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        self.show_game_achievements(id, &list, false);
+        let client = self.client.borrow().clone();
+        let Some(client) = client.filter(|_| !self.offline.get()) else {
+            return;
+        };
+        let account = self.ra_account();
+        let http = self.shared.http.clone();
+        self.shared.rt.spawn(async move {
+            let Ok(rom) = client.rom_detail(id).await else {
+                return;
+            };
+            let game_id = rom.ra_id.and_then(|g| u32::try_from(g).ok()).unwrap_or(0);
+            let hash = rom.ra_hash.clone().filter(|h| !h.is_empty());
+            let from_ra = match &account {
+                Some(account) if game_id != 0 || hash.is_some() => {
+                    achievements::from_retroachievements(&http, account, game_id, hash.as_deref())
+                        .await
+                }
+                _ => None,
+            };
+            let list = match from_ra {
+                Some(list) => list,
+                None => {
+                    let me = client.me().await.ok();
+                    achievements::from_romm(&rom, me.as_ref())
+                }
+            };
+            save_badges(&http, &list).await;
+            on_ui(move |c| {
+                let json = serde_json::to_string(&list).expect("achievements serialize");
+                c.shared.store.lock().unwrap().set(&cache_key(id), &json);
+                c.show_game_achievements(id, &list, false);
+            });
+        });
+    }
+
+    pub(super) fn show_all_achievements(&self) {
+        let Some(id) = self.current_game().map(|g| g.id) else {
+            return;
+        };
+        let cached = self.shared.store.lock().unwrap().get(&cache_key(id));
+        let list: Vec<AchievementInfo> = cached
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        self.show_game_achievements(id, &list, true);
+    }
+
+    fn show_game_achievements(&self, id: i64, list: &[AchievementInfo], all: bool) {
+        if self.current_game().map(|g| g.id) != Some(id) {
+            return;
+        }
+        let Some(ui) = self.ui() else { return };
+        let shown = if all {
+            list.len()
+        } else {
+            list.len().min(SHOWN_AT_FIRST)
+        };
+        let rows: Vec<AchievementRow> = list[..shown]
+            .iter()
+            .map(|a| {
+                let badge = badge_file(achievements::badge_url(a))
+                    .and_then(|p| slint::Image::load_from_path(&p).ok());
+                AchievementRow {
+                    title: a.title.clone().into(),
+                    detail: achievements::row_detail(a).into(),
+                    has_badge: badge.is_some(),
+                    badge: badge.unwrap_or_default(),
+                    unlocked: a.unlocked,
+                }
+            })
+            .collect();
+        ui.set_game_achievements(ModelRc::new(VecModel::from(rows)));
+        ui.set_game_achievements_summary(achievements::summary(list).into());
+        ui.set_game_achievements_hidden((list.len() - shown) as i32);
     }
 }

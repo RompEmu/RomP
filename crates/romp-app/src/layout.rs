@@ -139,6 +139,8 @@ mod tests {
             has_multiple_files: multi,
             files,
             ra_hash: None,
+            ra_id: None,
+            merged_ra_metadata: None,
         }
     }
 

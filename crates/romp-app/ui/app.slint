@@ -1,5 +1,6 @@
 import { Theme } from "theme.slint";
 import { FocusRing, KeyActivator } from "focus.slint";
+import { AchievementItem, AchievementRow } from "achievements.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
@@ -894,6 +895,10 @@ component GamePage inherits FocusScope {
     in property <string> reason;
     in property <string> summary;
     in property <[Fact]> facts;
+    in property <[AchievementRow]> achievements;
+    in property <string> achievements-summary;
+    in property <int> achievements-hidden;
+    callback show-all-achievements();
     in property <[Shot]> shots;
     in property <[GameCard]> similar;
     in property <float> similar-shelf: 230;
@@ -1146,6 +1151,30 @@ component GamePage inherits FocusScope {
                                 if shot-touch.has-hover: Rectangle { background: Theme.hover; }
                                 if shot-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
                             }
+                        }
+                    }
+                }
+                if root.achievements.length > 0: VerticalLayout {
+                    spacing: 6px;
+                    HorizontalLayout {
+                        spacing: 10px;
+                        SectionTitle { text: @tr("Achievements"); }
+                        Text {
+                            text: root.achievements-summary;
+                            font-size: Theme.font-body;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                    }
+                    VerticalLayout {
+                        max-width: 720px;
+                        for item in root.achievements: AchievementItem { entry: item; }
+                    }
+                    if root.achievements-hidden > 0: HorizontalLayout {
+                        alignment: start;
+                        Button {
+                            text: @tr("Show all {} more", root.achievements-hidden);
+                            clicked => { root.show-all-achievements(); }
                         }
                     }
                 }
@@ -1970,6 +1999,10 @@ export component AppWindow inherits Window {
     in property <string> game-category;
     in property <string> game-subtitle;
     in property <string> game-reason;
+    in property <[AchievementRow]> game-achievements;
+    in property <string> game-achievements-summary;
+    in property <int> game-achievements-hidden;
+    callback show-all-achievements();
     in property <string> game-summary;
     in property <[Fact]> game-facts;
     in property <[Shot]> game-shots;
@@ -2141,6 +2174,10 @@ export component AppWindow inherits Window {
             reason: root.game-reason;
             summary: root.game-summary;
             facts: root.game-facts;
+            achievements: root.game-achievements;
+            achievements-summary: root.game-achievements-summary;
+            achievements-hidden: root.game-achievements-hidden;
+            show-all-achievements => { root.show-all-achievements(); }
             shots: root.game-shots;
             similar: root.game-similar;
             similar-shelf: root.game-similar-shelf;

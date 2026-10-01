@@ -40,6 +40,36 @@ pub struct User {
     pub avatar_path: Option<String>,
     #[serde(default)]
     pub ra_username: Option<String>,
+    #[serde(default)]
+    pub ra_progression: Option<RaProgression>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RaProgression {
+    #[serde(default)]
+    pub results: Vec<RaGameProgress>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RaGameProgress {
+    pub rom_ra_id: Option<i64>,
+    #[serde(default)]
+    pub earned_achievements: Vec<RaEarned>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RaEarned {
+    pub id: serde_json::Value,
+}
+
+impl RaEarned {
+    pub fn achievement_id(&self) -> Option<u32> {
+        match &self.id {
+            serde_json::Value::Number(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()),
+            serde_json::Value::String(s) => s.parse().ok(),
+            _ => None,
+        }
+    }
 }
 
 impl User {
@@ -178,6 +208,31 @@ pub struct RomDetail {
     pub files: Vec<RomFile>,
     #[serde(default)]
     pub ra_hash: Option<String>,
+    #[serde(default)]
+    pub ra_id: Option<i64>,
+    #[serde(default)]
+    pub merged_ra_metadata: Option<RaMetadata>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RaMetadata {
+    #[serde(default)]
+    pub achievements: Vec<RaAchievement>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RaAchievement {
+    pub ra_id: Option<i64>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub points: Option<i64>,
+    #[serde(default)]
+    pub badge_url: Option<String>,
+    #[serde(default)]
+    pub badge_url_lock: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

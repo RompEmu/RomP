@@ -356,6 +356,19 @@ impl Client {
             .collect())
     }
 
+    /// Asks RomM to fetch the player's latest RetroAchievements progress.
+    pub async fn refresh_retro_achievements(&self, user_id: i64) -> Result<(), Error> {
+        self.send(
+            self.request(
+                reqwest::Method::POST,
+                &format!("/api/users/{user_id}/ra/refresh"),
+            )
+            .json(&serde_json::json!({"incremental": true})),
+        )
+        .await
+        .map(|_| ())
+    }
+
     pub async fn similar(&self, id: i64, limit: u32) -> Result<Vec<i64>, Error> {
         #[derive(serde::Deserialize)]
         struct Similar {
@@ -1074,6 +1087,19 @@ pub(crate) mod tests {
             .upload_screenshot(7, "Game.png", b"pngdata".to_vec())
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn retro_achievements_refresh_is_incremental() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/users/3/ra/refresh"))
+            .and(body_json(serde_json::json!({"incremental": true})))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&server)
+            .await;
+        authed(&server).refresh_retro_achievements(3).await.unwrap();
     }
 
     #[tokio::test]

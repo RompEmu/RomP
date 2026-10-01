@@ -1,6 +1,6 @@
 use romp_proto::msg::{AchievementEvent, AppMsg};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
 
@@ -129,6 +129,7 @@ pub struct Link {
     queue: VecDeque<Toast>,
     showing: Option<(Toast, Instant)>,
     badges: HashMap<String, Image>,
+    fetching: HashSet<String>,
 }
 
 impl Link {
@@ -139,6 +140,7 @@ impl Link {
             queue: VecDeque::new(),
             showing: None,
             badges: HashMap::new(),
+            fetching: HashSet::new(),
         }
     }
 
@@ -175,48 +177,52 @@ impl Link {
         });
     }
 
+    /// Starts fetching a badge image unless it is already here or on its way.
+    pub fn want_badge(&mut self, url: &str) {
+        if url.is_empty() || !super::allowed(url) || self.badges.contains_key(url) {
+            return;
+        }
+        if !self.fetching.insert(url.to_string()) {
+            return;
+        }
+        let http = self.launch.http.clone();
+        let done = self.updates.0.clone();
+        let url = url.to_string();
+        self.launch.rt.spawn(async move {
+            if let Some(pixels) = fetch_badge(&http, &url).await {
+                let _ = done.send(Update::Badge { url, pixels });
+            }
+        });
+    }
+
+    pub fn badge(&self, url: &str) -> Option<Image> {
+        self.badges.get(url).cloned()
+    }
+
     pub fn event(&mut self, event: &AchievementEvent) {
         let Some(toast) = toast_for(event) else {
             return;
         };
-        if let Some(url) = &toast.badge_url {
-            if super::allowed(url) && !self.badges.contains_key(url) {
-                let http = self.launch.http.clone();
-                let done = self.updates.0.clone();
-                let url = url.clone();
-                self.launch.rt.spawn(async move {
-                    let Ok(response) = http.get(&url).send().await else {
-                        return;
-                    };
-                    let Ok(bytes) = response.bytes().await else {
-                        return;
-                    };
-                    let Ok(picture) = image::load_from_memory(&bytes) else {
-                        return;
-                    };
-                    let rgba = picture.to_rgba8();
-                    let pixels = SharedPixelBuffer::clone_from_slice(
-                        rgba.as_raw(),
-                        rgba.width(),
-                        rgba.height(),
-                    );
-                    let _ = done.send(Update::Badge { url, pixels });
-                });
-            }
+        if let Some(url) = toast.badge_url.clone() {
+            self.want_badge(&url);
         }
         self.queue.push_back(toast);
     }
 
-    /// Replies for the runner, and the popup to show now, or None to hide it.
-    pub fn poll(&mut self, now: Instant) -> (Vec<AppMsg>, Option<View>) {
-        let mut replies = Vec::new();
+    /// Replies for the runner, the popup to show now, and whether new badges arrived.
+    pub fn poll(&mut self, now: Instant) -> Polled {
+        let mut polled = Polled::default();
         while let Ok(update) = self.updates.1.try_recv() {
             match update {
                 Update::Reply { id, status, body } => {
-                    replies.push(AppMsg::AchievementsResponse { id, status, body });
+                    polled
+                        .replies
+                        .push(AppMsg::AchievementsResponse { id, status, body });
                 }
                 Update::Badge { url, pixels } => {
+                    self.fetching.remove(&url);
                     self.badges.insert(url, Image::from_rgba8(pixels));
+                    polled.new_badges = true;
                 }
             }
         }
@@ -227,16 +233,30 @@ impl Link {
         if expired || self.showing.is_none() {
             self.showing = self.queue.pop_front().map(|t| (t, now));
         }
-        let view = self.showing.as_ref().map(|(t, _)| View {
+        polled.view = self.showing.as_ref().map(|(t, _)| View {
             title: t.title.clone(),
             detail: t.detail.clone(),
-            badge: t
-                .badge_url
-                .as_ref()
-                .and_then(|url| self.badges.get(url).cloned()),
+            badge: t.badge_url.as_ref().and_then(|url| self.badge(url)),
         });
-        (replies, view)
+        polled
     }
+}
+
+#[derive(Default)]
+pub struct Polled {
+    pub replies: Vec<AppMsg>,
+    pub view: Option<View>,
+    pub new_badges: bool,
+}
+
+async fn fetch_badge(http: &reqwest::Client, url: &str) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
+    let bytes = http.get(url).send().await.ok()?.bytes().await.ok()?;
+    let rgba = image::load_from_memory(&bytes).ok()?.to_rgba8();
+    Some(SharedPixelBuffer::clone_from_slice(
+        rgba.as_raw(),
+        rgba.width(),
+        rgba.height(),
+    ))
 }
 
 #[cfg(test)]
@@ -298,13 +318,16 @@ mod tests {
         let start = Instant::now();
         link.event(&AchievementEvent::Mastered);
         link.event(&AchievementEvent::Online);
-        let (_, first) = link.poll(start);
-        assert_eq!(first.unwrap().title, "Game mastered");
-        let (_, still) = link.poll(start + Duration::from_secs(5));
-        assert_eq!(still.unwrap().title, "Game mastered");
-        let (_, second) = link.poll(start + Duration::from_secs(6));
-        assert_eq!(second.unwrap().title, "RetroAchievements is back");
-        let (_, gone) = link.poll(start + Duration::from_secs(10));
-        assert!(gone.is_none());
+        let title = |p: Polled| p.view.map(|v| v.title);
+        assert_eq!(title(link.poll(start)).as_deref(), Some("Game mastered"));
+        assert_eq!(
+            title(link.poll(start + Duration::from_secs(5))).as_deref(),
+            Some("Game mastered")
+        );
+        assert_eq!(
+            title(link.poll(start + Duration::from_secs(6))).as_deref(),
+            Some("RetroAchievements is back")
+        );
+        assert!(title(link.poll(start + Duration::from_secs(10))).is_none());
     }
 }

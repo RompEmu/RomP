@@ -171,6 +171,8 @@ struct Game {
     ),
     screenshot_taken: ScreenshotTaken,
     achievements: RefCell<Option<crate::achievements::popups::Link>>,
+    achievements_open: Cell<bool>,
+    achievement_list: RefCell<Vec<romp_proto::msg::AchievementInfo>>,
 }
 
 const MENU_RESUME: i32 = 0;
@@ -182,8 +184,10 @@ const MENU_LOAD: i32 = 5;
 const MENU_VOLUME: i32 = 6;
 const MENU_FULLSCREEN: i32 = 7;
 const MENU_SCREENSHOT: i32 = 8;
-const MENU_CONTROLLERS: i32 = 9;
-const MENU_PORTS_START: i32 = 10;
+const MENU_ACHIEVEMENTS: i32 = 9;
+const MENU_CONTROLLERS: i32 = 10;
+const MENU_PORTS_START: i32 = 11;
+const ACHIEVEMENT_ROW: f32 = 52.0;
 const VOLUME_STEP: i32 = 10;
 
 const MENU_ROWS: [[i32; 3]; 2] = [
@@ -247,7 +251,7 @@ impl Game {
         for command in commands {
             match command {
                 Command::Send(msg) => self.send(&msg),
-                Command::Menu => self.set_menu(!self.menu_open.get()),
+                Command::Menu => self.toggle_menu(),
                 Command::TogglePause => self.set_paused(!self.paused.get()),
                 Command::ToggleFullscreen => self.toggle_fullscreen(),
                 Command::Screenshot => self.screenshot_wanted.set(true),
@@ -336,6 +340,15 @@ impl Game {
         }
     }
 
+    /// The menu key closes the achievements list first, then the menu.
+    fn toggle_menu(&self) {
+        if self.achievements_open.get() {
+            self.close_achievements();
+        } else {
+            self.set_menu(!self.menu_open.get());
+        }
+    }
+
     fn set_menu(&self, open: bool) {
         self.menu_open.set(open);
         self.set_menu_focus(-1);
@@ -386,14 +399,17 @@ impl Game {
 
     fn show_achievements(&self, now: std::time::Instant) {
         let polled = self.achievements.borrow_mut().as_mut().map(|l| l.poll(now));
-        let Some((replies, view)) = polled else {
+        let Some(polled) = polled else {
             return;
         };
-        for reply in &replies {
+        for reply in &polled.replies {
             self.send(reply);
         }
+        if polled.new_badges && self.achievements_open.get() {
+            self.show_achievement_rows();
+        }
         let ui = self.primary();
-        match view {
+        match polled.view {
             Some(view) => {
                 let changed = ui.get_toast_title() != view.title.as_str()
                     || ui.get_toast_detail() != view.detail.as_str();
@@ -407,6 +423,70 @@ impl Game {
             None if !ui.get_toast_title().is_empty() => ui.set_toast_title("".into()),
             None => {}
         }
+    }
+
+    fn open_achievements(&self) {
+        if self.achievements.borrow().is_none() {
+            return;
+        }
+        self.achievements_open.set(true);
+        self.send(&AppMsg::ListAchievements);
+        let ui = self.primary();
+        ui.set_achievements_scroll(0.0);
+        ui.set_achievements_open(true);
+        self.show_achievement_rows();
+    }
+
+    fn close_achievements(&self) {
+        self.achievements_open.set(false);
+        self.primary().set_achievements_open(false);
+    }
+
+    fn scroll_achievements(&self, rows: f32) {
+        let ui = self.primary();
+        let max = -(self.achievement_list.borrow().len() as f32 * ACHIEVEMENT_ROW);
+        let scroll =
+            (ui.get_achievements_scroll() - rows * ACHIEVEMENT_ROW).clamp(max.min(0.0), 0.0);
+        ui.set_achievements_scroll(scroll);
+    }
+
+    fn achievement_list_arrived(&self, list: Vec<romp_proto::msg::AchievementInfo>) {
+        let label = crate::achievements::summary(&list);
+        if let Some(link) = self.achievements.borrow_mut().as_mut() {
+            for a in &list {
+                link.want_badge(crate::achievements::badge_url(a));
+            }
+        }
+        *self.achievement_list.borrow_mut() = list;
+        for window in &self.windows {
+            window.set_achievements_label(label.clone().into());
+        }
+        if self.achievements_open.get() {
+            self.show_achievement_rows();
+        }
+    }
+
+    fn show_achievement_rows(&self) {
+        let link = self.achievements.borrow();
+        let rows: Vec<crate::AchievementRow> = self
+            .achievement_list
+            .borrow()
+            .iter()
+            .map(|a| {
+                let badge = link
+                    .as_ref()
+                    .and_then(|l| l.badge(crate::achievements::badge_url(a)));
+                crate::AchievementRow {
+                    title: a.title.clone().into(),
+                    detail: crate::achievements::row_detail(a).into(),
+                    has_badge: badge.is_some(),
+                    badge: badge.unwrap_or_default(),
+                    unlocked: a.unlocked,
+                }
+            })
+            .collect();
+        self.primary()
+            .set_achievement_rows(ModelRc::new(VecModel::from(rows)));
     }
 
     fn show_slot(&self, slot: u8) {
@@ -540,6 +620,7 @@ impl Game {
             MENU_VOLUME => self.step_volume(1),
             MENU_FULLSCREEN => self.toggle_fullscreen(),
             MENU_SCREENSHOT => self.screenshot_wanted.set(true),
+            MENU_ACHIEVEMENTS => self.open_achievements(),
             MENU_CONTROLLERS => (self.open_controllers)(),
             _ => {}
         }
@@ -561,6 +642,15 @@ impl Game {
     }
 
     fn menu_button(&self, button: u32) {
+        if self.achievements_open.get() {
+            match button {
+                input::UP => self.scroll_achievements(-1.0),
+                input::DOWN => self.scroll_achievements(1.0),
+                input::B | input::A | input::START => self.close_achievements(),
+                _ => {}
+            }
+            return;
+        }
         let focus = self.menu_focus.get();
         if let Some(next) = menu_move(focus, button, self.menu_items()) {
             return self.set_menu_focus(next);
@@ -586,7 +676,7 @@ impl Game {
             p.guide || (held(input::SELECT) && held(input::START))
         });
         if combo && !self.menu_combo.get() {
-            self.set_menu(!self.menu_open.get());
+            self.toggle_menu();
         }
         self.menu_combo.set(combo);
         let buttons = inputs.iter().fold(0u16, |b, p| b | p.state.buttons);
@@ -649,7 +739,7 @@ impl Game {
             let menu_key = text.chars().eq([char::from(slint::platform::Key::F12)]);
             if menu_key {
                 if pressed && !repeat {
-                    self.set_menu(!self.menu_open.get());
+                    self.toggle_menu();
                 }
                 return true;
             }
@@ -730,6 +820,8 @@ pub fn launch(
     ui.set_game_name(opts.title.clone().into());
     ui.set_mouse_mode(opts.mouse);
     ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());
+    ui.set_has_achievements(opts.achievements.is_some());
+    ui.set_achievements_label("Not started yet".into());
     {
         let mappings = opts.mappings.borrow();
         let label = |hotkey| crate::mapping::combo_label(&mappings.hotkey_key(hotkey)).into();
@@ -812,6 +904,8 @@ pub fn launch(
                 opts.achievements
                     .map(crate::achievements::popups::Link::new),
             ),
+            achievements_open: Cell::new(false),
+            achievement_list: RefCell::default(),
         }
     });
     let _ = game
@@ -928,6 +1022,17 @@ pub fn launch(
                     if let Some(link) = game.achievements.borrow_mut().as_mut() {
                         link.event(&event);
                     }
+                    if matches!(
+                        event,
+                        romp_proto::msg::AchievementEvent::GameLoaded { .. }
+                            | romp_proto::msg::AchievementEvent::Unlocked { .. }
+                    ) {
+                        game.send(&AppMsg::ListAchievements);
+                    }
+                    continue;
+                }
+                if let SessionEvent::Runner(RunnerMsg::AchievementList(list)) = event {
+                    game.achievement_list_arrived(list);
                     continue;
                 }
                 if let SessionEvent::Runner(RunnerMsg::Controllers { ports }) = event {
@@ -1126,6 +1231,14 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     window.on_take_screenshot({
         let with = with.clone();
         move || with(&|g| g.screenshot_wanted.set(true))
+    });
+    window.on_open_achievements({
+        let with = with.clone();
+        move || with(&|g| g.open_achievements())
+    });
+    window.on_close_achievements({
+        let with = with.clone();
+        move || with(&|g| g.close_achievements())
     });
     window.on_open_controllers({
         let with = with.clone();

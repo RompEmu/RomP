@@ -14,6 +14,7 @@ path = "src/main.rs"
 ignored = ["md-5"]
 
 [dependencies]
+romp-cheevos = { workspace = true }
 romp-proto = { workspace = true }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

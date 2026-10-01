@@ -1,6 +1,6 @@
 use crate::archive::LoadedRom;
 use romp_cheevos::Session;
-use romp_proto::msg::{AchievementEvent, RunnerMsg};
+use romp_proto::msg::{AchievementEvent, AchievementInfo, RunnerMsg};
 
 /// The runner's side of RetroAchievements: rcheevos watches the game while the app does the talking.
 pub struct Achievements {
@@ -57,6 +57,10 @@ impl Achievements {
 
     pub fn reset(&mut self) {
         self.session.reset();
+    }
+
+    pub fn list(&mut self) -> Vec<AchievementInfo> {
+        self.session.achievements()
     }
 
     /// Runs after each emulated frame, or while paused, and collects what the app should hear.

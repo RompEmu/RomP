@@ -47,12 +47,26 @@ pub enum AppMsg {
         /// RomM's RetroAchievements hash for the game, which spares hashing disc images.
         hash: Option<String>,
     },
+    ListAchievements,
     /// The answer to an `AchievementsRequest`, fetched by the app.
     AchievementsResponse {
         id: u64,
         status: i32,
         body: Vec<u8>,
     },
+}
+
+/// One achievement as a list shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AchievementInfo {
+    pub id: u32,
+    pub title: String,
+    pub description: String,
+    pub points: u32,
+    pub badge_url: String,
+    pub badge_locked_url: String,
+    pub unlocked: bool,
+    pub progress: String,
 }
 
 /// Something that happened while tracking achievements.
@@ -143,4 +157,5 @@ pub enum RunnerMsg {
         agent: String,
     },
     Achievement(AchievementEvent),
+    AchievementList(Vec<AchievementInfo>),
 }

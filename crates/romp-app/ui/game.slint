@@ -1,4 +1,6 @@
 import { Theme } from "theme.slint";
+import { AchievementItem, AchievementRow } from "achievements.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 export struct PortRow { label: string, device: string }
 
 component KeyCap inherits Rectangle {
@@ -239,6 +241,9 @@ component GameMenu inherits Rectangle {
     callback take-screenshot();
     callback open-controllers();
     callback quit();
+    in property <bool> has-achievements;
+    in property <string> achievements-label;
+    callback open-achievements();
 
     property <bool> keyboard: root.menu-key == "Esc";
 
@@ -387,15 +392,21 @@ component GameMenu inherits Rectangle {
                 clicked => { root.take-screenshot(); }
             }
             MenuRow {
+                text: root.has-achievements ? @tr("Achievements  ·  {}", root.achievements-label) : @tr("Achievements  ·  sign in under Settings");
+                icon: @image-url("icons/trophy.svg");
+                focused: root.focused-item == 9;
+                clicked => { root.open-achievements(); }
+            }
+            MenuRow {
                 text: @tr("Controllers…");
                 icon: @image-url("icons/gamepad.svg");
-                focused: root.focused-item == 9;
+                focused: root.focused-item == 10;
                 clicked => { root.open-controllers(); }
             }
             for port[i] in root.ports: Stepper {
                 label: port.label;
                 value: port.device;
-                focused: root.focused-item == 10 + i;
+                focused: root.focused-item == 11 + i;
                 step(d) => { root.cycle-port(i, d); }
             }
             MenuDivider { }
@@ -403,7 +414,7 @@ component GameMenu inherits Rectangle {
                 text: @tr("Quit game");
                 icon: @image-url("icons/quit.svg");
                 danger: true;
-                focused: root.focused-item == 10 + root.ports.length;
+                focused: root.focused-item == 11 + root.ports.length;
                 clicked => { root.quit(); }
             }
             Text {
@@ -459,6 +470,13 @@ export component GameWindow inherits Window {
     in property <image> frame;
     in property <float> aspect: 4 / 3;
     in property <string> status;
+    in property <bool> has-achievements;
+    in property <string> achievements-label;
+    in property <bool> achievements-open;
+    in property <[AchievementRow]> achievement-rows;
+    in-out property <length> achievements-scroll;
+    callback open-achievements();
+    callback close-achievements();
     in property <string> toast-title;
     in property <string> toast-detail;
     in property <image> toast-badge;
@@ -589,6 +607,9 @@ export component GameWindow inherits Window {
             slot-key: root.slot-key;
             fullscreen-key: root.fullscreen-key;
             screenshot-key: root.screenshot-key;
+            has-achievements: root.has-achievements;
+            achievements-label: root.achievements-label;
+            open-achievements => { root.open-achievements(); }
             cycle-port(i, step) => { root.cycle-port(i, step); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
@@ -601,6 +622,40 @@ export component GameWindow inherits Window {
             take-screenshot => { root.take-screenshot(); }
             open-controllers => { root.open-controllers(); }
             quit => { root.quit(); }
+        }
+
+        if root.achievements-open: Rectangle {
+            background: Theme.scrim;
+            TouchArea { }
+            Rectangle {
+                width: min(parent.width - 32px, 520px);
+                height: parent.height - 48px;
+                background: Theme.surface-raised;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+                clip: true;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            Text { text: @tr("Achievements"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
+                            Text { text: root.achievements-label; font-size: Theme.font-small; color: Theme.text-muted; }
+                        }
+                        Button { text: @tr("Close"); clicked => { root.close-achievements(); } }
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        content-y <=> root.achievements-scroll;
+                        VerticalLayout {
+                            for item in root.achievement-rows: AchievementItem { entry: item; }
+                        }
+                    }
+                }
+            }
         }
 
         if root.toast-title != "": Rectangle {

@@ -1,6 +1,6 @@
 //! RetroAchievements through rcheevos' rc_client, with its network requests handed to the caller.
 
-use romp_proto::msg::AchievementEvent;
+use romp_proto::msg::{AchievementEvent, AchievementInfo};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
 use std::path::Path;
@@ -18,6 +18,22 @@ struct RawEvent {
     tracker: *const c_char,
     error: *const c_char,
 }
+
+#[repr(C)]
+struct RawAchievement {
+    id: u32,
+    points: u32,
+    title: *const c_char,
+    description: *const c_char,
+    badge_url: *const c_char,
+    badge_locked_url: *const c_char,
+    progress: *const c_char,
+    unlocked: u32,
+}
+
+type RequestOut = extern "C" fn(*mut c_void, *const c_char, *const c_char, *const c_char);
+type AchievementOut = extern "C" fn(*mut c_void, *const RawAchievement);
+type IdOut = extern "C" fn(*mut c_void, u32);
 
 pub type MemoryData = unsafe extern "C" fn(c_uint) -> *mut c_void;
 pub type MemorySize = unsafe extern "C" fn(c_uint) -> usize;
@@ -45,6 +61,37 @@ unsafe extern "C" {
     fn romp_rc_user_agent_clause(client: *mut c_void, buffer: *mut c_char, size: usize) -> usize;
     fn romp_rc_set_memory_map(map: *const c_void);
     fn romp_rc_set_core_memory(data: Option<MemoryData>, size: Option<MemorySize>);
+    fn romp_rc_catalog_request(
+        username: *const c_char,
+        token: *const c_char,
+        game_id: u32,
+        hash: *const c_char,
+        ctx: *mut c_void,
+        out: RequestOut,
+    ) -> c_int;
+    fn romp_rc_unlocks_request(
+        username: *const c_char,
+        token: *const c_char,
+        game_id: u32,
+        hardcore: c_int,
+        ctx: *mut c_void,
+        out: RequestOut,
+    ) -> c_int;
+    fn romp_rc_parse_catalog(
+        body: *const c_char,
+        length: usize,
+        status: c_int,
+        ctx: *mut c_void,
+        out: AchievementOut,
+    ) -> u32;
+    fn romp_rc_parse_unlocks(
+        body: *const c_char,
+        length: usize,
+        status: c_int,
+        ctx: *mut c_void,
+        out: IdOut,
+    ) -> c_int;
+    fn romp_rc_list_achievements(client: *mut c_void, ctx: *mut c_void, out: AchievementOut);
     fn rc_client_do_frame(client: *mut c_void);
     fn rc_client_idle(client: *mut c_void);
     fn rc_client_reset(client: *mut c_void);
@@ -222,6 +269,121 @@ extern "C" fn romp_rc_on_done(
     host.events.push(event);
 }
 
+extern "C" fn collect_request(
+    ctx: *mut c_void,
+    url: *const c_char,
+    post: *const c_char,
+    content_type: *const c_char,
+) {
+    // SAFETY: ctx is the Option<Request> the caller passed for this call only.
+    let slot = unsafe { &mut *(ctx as *mut Option<Request>) };
+    let optional = |p: *const c_char| (!p.is_null()).then(|| text(p));
+    *slot = Some(Request {
+        id: 0,
+        url: text(url),
+        post: optional(post),
+        content_type: optional(content_type),
+    });
+}
+
+extern "C" fn collect_achievement(ctx: *mut c_void, raw: *const RawAchievement) {
+    // SAFETY: ctx is the Vec the caller passed for this call only, and raw lives through it.
+    let list = unsafe { &mut *(ctx as *mut Vec<AchievementInfo>) };
+    let a = unsafe { &*raw };
+    list.push(AchievementInfo {
+        id: a.id,
+        title: text(a.title),
+        description: text(a.description),
+        points: a.points,
+        badge_url: text(a.badge_url),
+        badge_locked_url: text(a.badge_locked_url),
+        unlocked: a.unlocked != 0,
+        progress: text(a.progress),
+    });
+}
+
+extern "C" fn collect_id(ctx: *mut c_void, id: u32) {
+    // SAFETY: ctx is the Vec the caller passed for this call only.
+    unsafe { &mut *(ctx as *mut Vec<u32>) }.push(id);
+}
+
+fn c(text: &str) -> CString {
+    CString::new(text).unwrap_or_default()
+}
+
+/// The request for a game's achievement list, by RetroAchievements' game id or else by hash.
+pub fn catalog_request(
+    username: &str,
+    token: &str,
+    game_id: u32,
+    hash: Option<&str>,
+) -> Option<Request> {
+    let mut out: Option<Request> = None;
+    let (username, token, hash) = (c(username), c(token), hash.map(c));
+    unsafe {
+        romp_rc_catalog_request(
+            username.as_ptr(),
+            token.as_ptr(),
+            game_id,
+            hash.as_ref().map_or(std::ptr::null(), |h| h.as_ptr()),
+            std::ptr::from_mut(&mut out).cast(),
+            collect_request,
+        );
+    }
+    out
+}
+
+/// The game's id and its official achievements, or None when the answer is not usable.
+pub fn parse_catalog(status: i32, body: &[u8]) -> Option<(u32, Vec<AchievementInfo>)> {
+    let mut list = Vec::new();
+    let game_id = unsafe {
+        romp_rc_parse_catalog(
+            body.as_ptr().cast(),
+            body.len(),
+            status,
+            std::ptr::from_mut(&mut list).cast(),
+            collect_achievement,
+        )
+    };
+    (game_id != 0).then_some((game_id, list))
+}
+
+/// The request for the achievements a player has earned in a game.
+pub fn unlocks_request(
+    username: &str,
+    token: &str,
+    game_id: u32,
+    hardcore: bool,
+) -> Option<Request> {
+    let mut out: Option<Request> = None;
+    let (username, token) = (c(username), c(token));
+    unsafe {
+        romp_rc_unlocks_request(
+            username.as_ptr(),
+            token.as_ptr(),
+            game_id,
+            c_int::from(hardcore),
+            std::ptr::from_mut(&mut out).cast(),
+            collect_request,
+        );
+    }
+    out
+}
+
+pub fn parse_unlocks(status: i32, body: &[u8]) -> Option<Vec<u32>> {
+    let mut ids = Vec::new();
+    let result = unsafe {
+        romp_rc_parse_unlocks(
+            body.as_ptr().cast(),
+            body.len(),
+            status,
+            std::ptr::from_mut(&mut ids).cast(),
+            collect_id,
+        )
+    };
+    (result == 0).then_some(ids)
+}
+
 /// One player's achievement session for one game.
 pub struct Session {
     client: NonNull<c_void>,
@@ -259,6 +421,19 @@ impl Session {
     pub fn load_hash(&mut self, hash: &str) {
         let Ok(hash) = CString::new(hash) else { return };
         unsafe { romp_rc_load_hash(self.client.as_ptr(), hash.as_ptr()) }
+    }
+
+    /// The game's achievements with what has been earned so far.
+    pub fn achievements(&mut self) -> Vec<AchievementInfo> {
+        let mut list = Vec::new();
+        unsafe {
+            romp_rc_list_achievements(
+                self.client.as_ptr(),
+                std::ptr::from_mut(&mut list).cast(),
+                collect_achievement,
+            );
+        }
+        list
     }
 
     pub fn do_frame(&mut self) {
@@ -371,6 +546,54 @@ mod tests {
         assert!(
             matches!(&events[..], [AchievementEvent::SignInFailed(m)] if m.contains("Invalid token")),
             "{events:?}"
+        );
+    }
+
+    #[test]
+    fn achievement_lists_come_from_rcheevos_own_parser() {
+        let request = catalog_request("player", "tok", 228, None).unwrap();
+        assert!(
+            post(&request).contains("r=achievementsets"),
+            "{}",
+            post(&request)
+        );
+        assert!(post(&request).contains("g=228"));
+        let body = br#"{"Success":true,"GameId":228,"Title":"Super Metroid","ConsoleId":3,
+            "ImageIconUrl":"https://media.retroachievements.org/Images/1.png","RichPresencePatch":"",
+            "Sets":[{"AchievementSetId":1,"GameId":228,"Title":null,"Type":"core",
+              "ImageIconUrl":"https://media.retroachievements.org/Images/1.png",
+              "Achievements":[
+                {"ID":7,"Title":"Missile","Description":"Find a missile","Flags":3,"Points":5,
+                 "MemAddr":"0xH0000=1","Author":"a","BadgeName":"00001","Created":0,"Modified":0,
+                 "Type":"","Rarity":50.0,"RarityHardcore":25.0,
+                 "BadgeURL":"https://media.retroachievements.org/Badge/00001.png",
+                 "BadgeLockedURL":"https://media.retroachievements.org/Badge/00001_lock.png"},
+                {"ID":8,"Title":"Draft","Description":"Unofficial","Flags":5,"Points":1,
+                 "MemAddr":"0xH0000=2","Author":"a","BadgeName":"00002","Created":0,"Modified":0}],
+              "Leaderboards":[]}]}"#;
+        let (game_id, list) = parse_catalog(200, body).unwrap();
+        assert_eq!(game_id, 228);
+        assert_eq!(list.len(), 1, "only official achievements are listed");
+        assert_eq!(list[0].title, "Missile");
+        assert_eq!(list[0].points, 5);
+        assert_eq!(
+            list[0].badge_url,
+            "https://media.retroachievements.org/Badge/00001.png"
+        );
+        assert!(parse_catalog(200, br#"{"Success":false,"Error":"Unknown game"}"#).is_none());
+
+        let request = unlocks_request("player", "tok", 228, false).unwrap();
+        assert!(post(&request).contains("r=unlocks"));
+        assert_eq!(
+            parse_unlocks(
+                200,
+                br#"{"Success":true,"UserUnlocks":[7,9],"GameID":228,"HardcoreMode":false}"#
+            ),
+            Some(vec![7, 9])
+        );
+        assert_eq!(
+            parse_unlocks(401, br#"{"Success":false,"Error":"bad token"}"#),
+            None
         );
     }
 
