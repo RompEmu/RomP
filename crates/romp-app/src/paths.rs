@@ -60,6 +60,23 @@ pub fn runner_exe() -> std::io::Result<PathBuf> {
         .with_file_name(format!("romp-runner{}", std::env::consts::EXE_SUFFIX)))
 }
 
+/// The bundled shader presets: beside the program, in a macOS app's Resources, or in the source tree.
+pub fn shaders_dir() -> PathBuf {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf));
+    let candidates = exe_dir
+        .iter()
+        .flat_map(|dir| [dir.join("shaders"), dir.join("../Resources/shaders")])
+        .chain(std::iter::once(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("shaders"),
+        ));
+    candidates
+        .into_iter()
+        .find(|dir| dir.is_dir())
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("shaders"))
+}
+
 pub fn local_save_dir_name(rom: &std::path::Path) -> String {
     let stem = rom
         .file_stem()

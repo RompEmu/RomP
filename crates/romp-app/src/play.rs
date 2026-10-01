@@ -23,6 +23,14 @@ pub type SavePorts = Box<dyn Fn(Vec<(u8, u32)>)>;
 pub type VolumeChanged = Box<dyn Fn(u8)>;
 pub type SavePlacement = Box<dyn Fn(usize, &Observed)>;
 pub type ScreenshotTaken = Box<dyn Fn(PathBuf)>;
+
+/// How a console is drawn, and where the player's changes to it are kept.
+pub struct LookOptions {
+    pub platform: String,
+    pub choice: crate::looks::Choice,
+    pub shaders: PathBuf,
+    pub changed: Box<dyn Fn(crate::looks::Choice)>,
+}
 type Saved = Result<PathBuf, String>;
 
 pub struct GameOptions {
@@ -50,6 +58,7 @@ pub struct GameOptions {
     pub save_placement: SavePlacement,
     pub screenshot_taken: ScreenshotTaken,
     pub achievements: Option<crate::achievements::popups::Launch>,
+    pub look: Option<LookOptions>,
 }
 
 pub struct CoreGame {
@@ -98,6 +107,14 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Resu
         GameOptions {
             screenshot_taken: Box::new(|_| {}),
             achievements: None,
+            look: std::env::var("ROMP_PLATFORM")
+                .ok()
+                .map(|platform| LookOptions {
+                    choice: crate::looks::default_choice(&platform, true),
+                    platform,
+                    shaders: paths::shaders_dir(),
+                    changed: Box::new(|_| {}),
+                }),
             core,
             rom,
             save_dir,
@@ -136,6 +153,10 @@ const RESUME_GRACE: Duration = Duration::from_secs(20);
 struct Game {
     session: RefCell<Session>,
     windows: Vec<GameWindow>,
+    shading: Vec<Rc<RefCell<crate::shading::Shading>>>,
+    look: RefCell<Option<LookOptions>>,
+    look_open: Cell<bool>,
+    look_focus: Cell<i32>,
     controls: RefCell<Controls>,
     paused: Cell<bool>,
     menu_open: Cell<bool>,
@@ -186,12 +207,13 @@ const MENU_RESUME: i32 = 0;
 const MENU_PAUSE: i32 = 1;
 const MENU_RESTART: i32 = 2;
 const MENU_SAVE_STATES: i32 = 3;
-const MENU_VOLUME: i32 = 4;
-const MENU_FULLSCREEN: i32 = 5;
-const MENU_SCREENSHOT: i32 = 6;
-const MENU_ACHIEVEMENTS: i32 = 7;
-const MENU_CONTROLLERS: i32 = 8;
-const MENU_PORTS_START: i32 = 9;
+const MENU_LOOK: i32 = 4;
+const MENU_VOLUME: i32 = 5;
+const MENU_FULLSCREEN: i32 = 6;
+const MENU_SCREENSHOT: i32 = 7;
+const MENU_ACHIEVEMENTS: i32 = 8;
+const MENU_CONTROLLERS: i32 = 9;
+const MENU_PORTS_START: i32 = 10;
 const ACHIEVEMENT_ROW: f32 = 52.0;
 const VOLUME_STEP: i32 = 10;
 /// How often, in frames, the small picture kept for the automatic save is refreshed.
@@ -364,6 +386,8 @@ impl Game {
             self.close_achievements();
         } else if self.slots_open.get() {
             self.close_slots();
+        } else if self.look_open.get() {
+            self.close_look();
         } else {
             self.set_menu(!self.menu_open.get());
         }
@@ -467,6 +491,115 @@ impl Game {
             }
             None if !ui.get_toast_title().is_empty() => ui.set_toast_title("".into()),
             None => {}
+        }
+    }
+
+    /// Draws every window with the console's look, and shows it in the menu.
+    fn apply_look(&self) {
+        let look = self.look.borrow();
+        let Some(options) = look.as_ref() else {
+            for (window, shading) in self.windows.iter().zip(&self.shading) {
+                shading.borrow_mut().set_preset(None, Vec::new());
+                window.set_shaded(false);
+            }
+            return;
+        };
+        let choice = options.choice;
+        let shader = crate::looks::shader(&choice, &options.platform, &options.shaders);
+        for (window, shading) in self.windows.iter().zip(&self.shading) {
+            let (preset, params) = shader
+                .clone()
+                .map_or((None, Vec::new()), |(p, params)| (Some(p), params));
+            shading.borrow_mut().set_preset(preset, params);
+            window.set_shaded(shading.borrow().active());
+            match choice.look {
+                crate::looks::Look::Sharp => window.set_sharp(true),
+                crate::looks::Look::Smooth => window.set_sharp(false),
+                _ => {}
+            }
+            window.window().request_redraw();
+        }
+        let t = choice.tuning;
+        let step = |steps: &[&str], i: u8| steps.get(usize::from(i)).copied().unwrap_or("").into();
+        for window in &self.windows {
+            window.set_look_label(crate::looks::label(choice.look).into());
+            window.set_look_tunable(crate::looks::has_tuning(choice.look));
+            window.set_look_curvature(step(&crate::looks::CURVATURE, t.curvature));
+            window.set_look_scanlines(step(&crate::looks::SCANLINES, t.scanlines));
+            window.set_look_mask(step(&crate::looks::MASK, t.mask));
+        }
+    }
+
+    fn look_rows(&self) -> i32 {
+        let tunable = self
+            .look
+            .borrow()
+            .as_ref()
+            .is_some_and(|l| crate::looks::has_tuning(l.choice.look));
+        if tunable {
+            4
+        } else {
+            1
+        }
+    }
+
+    fn open_look(&self) {
+        if self.look.borrow().is_none() {
+            return;
+        }
+        self.look_open.set(true);
+        self.focus_look(0);
+        self.primary().set_look_open(true);
+        self.primary().window().request_redraw();
+    }
+
+    fn close_look(&self) {
+        self.look_open.set(false);
+        self.primary().set_look_open(false);
+    }
+
+    fn focus_look(&self, row: i32) {
+        self.look_focus.set(row);
+        self.primary().set_look_focus(row);
+    }
+
+    /// Steps one of the look panel's rows: the style itself, or a CRT look's curvature, scanlines or mask.
+    fn step_look(&self, row: i32, delta: i32) {
+        {
+            let mut look = self.look.borrow_mut();
+            let Some(options) = look.as_mut() else {
+                return;
+            };
+            let choice = &mut options.choice;
+            let turn = |value: u8, steps: usize| {
+                (i32::from(value) + delta).clamp(0, steps as i32 - 1) as u8
+            };
+            match row {
+                0 => {
+                    let styles = crate::looks::available(&options.platform);
+                    let here = styles.iter().position(|l| *l == choice.look).unwrap_or(0) as i32;
+                    let next = styles[(here + delta).rem_euclid(styles.len() as i32) as usize];
+                    if crate::looks::has_tuning(next) != crate::looks::has_tuning(choice.look) {
+                        choice.tuning = crate::looks::default_tuning(next);
+                    }
+                    choice.look = next;
+                }
+                1 => {
+                    choice.tuning.curvature =
+                        turn(choice.tuning.curvature, crate::looks::CURVATURE.len());
+                }
+                2 => {
+                    choice.tuning.scanlines =
+                        turn(choice.tuning.scanlines, crate::looks::SCANLINES.len());
+                }
+                3 => choice.tuning.mask = turn(choice.tuning.mask, crate::looks::MASK.len()),
+                _ => return,
+            }
+            (options.changed)(*choice);
+        }
+        self.apply_look();
+        if self.look_focus.get() >= self.look_rows() {
+            self.focus_look(0);
         }
     }
 
@@ -781,6 +914,7 @@ impl Game {
             MENU_PAUSE => self.set_paused(!self.paused.get()),
             MENU_RESTART => self.restart(),
             MENU_SAVE_STATES => self.open_slots(),
+            MENU_LOOK => self.open_look(),
             MENU_VOLUME => self.step_volume(1),
             MENU_FULLSCREEN => self.toggle_fullscreen(),
             MENU_SCREENSHOT => self.screenshot_wanted.set(true),
@@ -806,6 +940,19 @@ impl Game {
     }
 
     fn menu_button(&self, button: u32) {
+        if self.look_open.get() {
+            let rows = self.look_rows();
+            let focus = self.look_focus.get();
+            match button {
+                input::UP => self.focus_look((focus - 1).max(0)),
+                input::DOWN => self.focus_look((focus + 1).min(rows - 1)),
+                input::LEFT => self.step_look(focus, -1),
+                input::RIGHT => self.step_look(focus, 1),
+                input::A | input::B | input::START => self.close_look(),
+                _ => {}
+            }
+            return;
+        }
         if self.slots_open.get() {
             let focus = self.slots_focus.get();
             match button {
@@ -964,8 +1111,11 @@ impl Game {
     fn apply_prefs(&self, prefs: &Preferences) {
         self.pause_unfocused.set(prefs.pause_unfocused);
         self.volume.set(prefs.volume);
+        let has_look = self.look.borrow().is_some();
         for window in &self.windows {
-            window.set_sharp(prefs.sharp_pixels);
+            if !has_look {
+                window.set_sharp(prefs.sharp_pixels);
+            }
             window.set_volume(i32::from(prefs.volume));
         }
         self.send(&AppMsg::Volume(prefs.volume));
@@ -1049,6 +1199,10 @@ pub fn launch(
         });
         Game {
             session: RefCell::new(session),
+            shading: windows.iter().map(shade).collect(),
+            look: RefCell::new(opts.look),
+            look_open: Cell::new(false),
+            look_focus: Cell::new(0),
             windows,
             controls: RefCell::new(Controls::default()),
             paused: Cell::new(false),
@@ -1103,6 +1257,7 @@ pub fn launch(
     for (i, window) in game.windows.iter().enumerate() {
         wire(window, &game, i == 1);
     }
+    game.apply_look();
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_millis(4), {
@@ -1174,16 +1329,16 @@ pub fn launch(
                         split_frame(&buf, info.width, info.height),
                     ) {
                         (Some(bottom), Some((top_half, bottom_half, half))) => {
-                            show_frame(ui, top_half, info.width, half, 0.0);
-                            show_frame(bottom, bottom_half, info.width, half, 0.0);
+                            show_frame(ui, &game.shading[0], top_half, info.width, half, 0.0);
+                            show_frame(bottom, &game.shading[1], bottom_half, info.width, half, 0.0);
                         }
                         _ if game.rotation.get() % 4 != 0 => {
                             let turns = game.rotation.get();
                             let (rotated, w, h) =
                                 crate::rotation::rotate(&buf, info.width, info.height, turns);
-                            show_frame(ui, &rotated, w, h, info.aspect);
+                            show_frame(ui, &game.shading[0], &rotated, w, h, info.aspect);
                         }
-                        _ => show_frame(ui, &buf, info.width, info.height, info.aspect),
+                        _ => show_frame(ui, &game.shading[0], &buf, info.width, info.height, info.aspect),
                     }
                 }
                 session.poll_events()
@@ -1320,7 +1475,59 @@ pub fn launch(
     }))
 }
 
-fn show_frame(window: &GameWindow, rgba: &[u8], width: u32, height: u32, aspect: f32) {
+/// Draws `window`'s game through the shader, from the window's own OpenGL, beneath its interface.
+fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
+    let shading = Rc::new(RefCell::new(crate::shading::Shading::default()));
+    let state = shading.clone();
+    let weak = window.as_weak();
+    let installed = window
+        .window()
+        .set_rendering_notifier(move |rendering, api| {
+            let mut state = state.borrow_mut();
+            match rendering {
+                slint::RenderingState::RenderingSetup => {
+                    if let slint::GraphicsAPI::NativeOpenGL { get_proc_address } = api {
+                        state.setup(get_proc_address);
+                    }
+                }
+                slint::RenderingState::BeforeRendering => {
+                    let Some(window) = weak.upgrade() else { return };
+                    if !state.active() {
+                        return;
+                    }
+                    let size = window.window().size();
+                    if !state.draw((size.width, size.height)) && !state.active() {
+                        window.set_shaded(false);
+                    }
+                }
+                slint::RenderingState::RenderingTeardown => state.teardown(),
+                _ => {}
+            }
+        });
+    if let Err(e) = installed {
+        tracing::warn!("shaders are unavailable in this window: {e}");
+        shading.borrow_mut().set_preset(None, Vec::new());
+        window.set_shaded(false);
+    }
+    shading
+}
+
+fn show_frame(
+    window: &GameWindow,
+    shading: &RefCell<crate::shading::Shading>,
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    aspect: f32,
+) {
+    if shading.borrow().active() {
+        shading.borrow_mut().set_frame(rgba, width, height, aspect);
+        window.window().request_redraw();
+        return;
+    }
+    if window.get_shaded() {
+        window.set_shaded(false);
+    }
     let pixels = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba, width, height);
     window.set_frame(Image::from_rgba8(pixels));
     let aspect = if aspect > 0.0 {
@@ -1422,6 +1629,18 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     window.on_take_screenshot({
         let with = with.clone();
         move || with(&|g| g.screenshot_wanted.set(true))
+    });
+    window.on_open_look({
+        let with = with.clone();
+        move || with(&|g| g.open_look())
+    });
+    window.on_close_look({
+        let with = with.clone();
+        move || with(&|g| g.close_look())
+    });
+    window.on_step_look({
+        let with = with.clone();
+        move |row, delta| with(&|g| g.step_look(row, delta))
     });
     window.on_open_slots({
         let with = with.clone();
@@ -1571,10 +1790,11 @@ mod tests {
         );
         assert_eq!(
             menu_move(MENU_SAVE_STATES, input::DOWN, items),
-            Some(MENU_VOLUME)
+            Some(MENU_LOOK)
         );
+        assert_eq!(menu_move(MENU_VOLUME, input::UP, items), Some(MENU_LOOK));
         assert_eq!(
-            menu_move(MENU_VOLUME, input::UP, items),
+            menu_move(MENU_LOOK, input::UP, items),
             Some(MENU_SAVE_STATES)
         );
         assert_eq!(menu_move(items - 1, input::DOWN, items), Some(items - 1));

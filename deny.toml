@@ -2,6 +2,8 @@
 ignore = [
     { id = "RUSTSEC-2023-0089", reason = "atomic-polyfill comes in through postcard's heapless and has no replacement there yet" },
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes in through Slint's font handling and has no replacement there yet" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode comes in through librashader's shader cache and has no replacement there yet" },
+    { id = "RUSTSEC-2026-0249", reason = "smartstring comes in through librashader's glslang bindings and has no replacement there yet" },
 ]
 
 [licenses]

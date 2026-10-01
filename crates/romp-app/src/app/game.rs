@@ -895,6 +895,27 @@ impl Controller {
         self.start_game(detail, rom, jit, core);
     }
 
+    /// The console's look: the player's choice, or the one it starts with.
+    fn look_options(&self, platform: &str) -> crate::play::LookOptions {
+        let key = crate::looks::store_key(platform);
+        let saved = self.shared.store.lock().unwrap().get(&key);
+        let choice = saved
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_else(|| {
+                crate::looks::default_choice(platform, self.prefs.get().sharp_pixels)
+            });
+        let store = self.shared.store.clone();
+        crate::play::LookOptions {
+            platform: platform.to_string(),
+            choice,
+            shaders: paths::shaders_dir(),
+            changed: Box::new(move |choice| {
+                let json = serde_json::to_string(&choice).expect("look serializes");
+                store.lock().unwrap().set(&key, &json);
+            }),
+        }
+    }
+
     pub(super) fn start_game(&self, detail: GameDetail, rom: PathBuf, jit: bool, core: PathBuf) {
         self.preparing.set(false);
         let save_dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
@@ -959,6 +980,7 @@ impl Controller {
                     .collect()
             },
             achievements,
+            look: Some(self.look_options(&detail.platform_slug)),
             screenshot_taken: {
                 let id = detail.id;
                 Box::new(move |path| {

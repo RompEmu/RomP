@@ -8,6 +8,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - Save states with pictures. Save states in the game menu shows your four slots with a picture of the moment you saved and when that was, and the game's page lists your save states with a Play from here button. Pictures sync with RomM along with the states.
 - Play time on each game's page: how long you've played across every device, how many sessions, and when you last played. Romp asks you once to pair again with RomM for the permission this needs.
+- Looks for every console: a CRT TV, a CRT monitor, the screen of each handheld, or sharp or smooth pixels, drawn with the best shaders from RetroArch's collection. Each console starts with the screen it was played on, and Look in the game menu changes it live, with curvature, scanline and mask strength for the CRT looks.
 
 ## [0.8.0] - 2026-10-01
 

@@ -65,6 +65,7 @@ app: build $(MOLTENVK_TAR)
 	tar -xOf $(MOLTENVK_TAR) MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib > $(APP)/Contents/Frameworks/libMoltenVK.dylib
 	lipo -thin arm64 -output $(APP)/Contents/Frameworks/libMoltenVK.dylib $(APP)/Contents/Frameworks/libMoltenVK.dylib
 	cp LICENSE $(APP)/Contents/Resources/
+	cp -R crates/romp-app/shaders $(APP)/Contents/Resources/
 	tar -xOf $(MOLTENVK_TAR) MoltenVK/LICENSE > $(APP)/Contents/Resources/MoltenVK-LICENSE
 	sed -e 's/@VERSION@/$(CARGO_VERSION)/g' -e 's/@BUNDLE_ID@/$(BUNDLE_ID)/g' \
 		packaging/macos/Info.plist > $(APP)/Contents/Info.plist
@@ -87,6 +88,7 @@ appimage: build
 	rm -rf $(APPDIR) $(APPIMAGE)
 	mkdir -p $(APPDIR)/usr/bin $(APPDIR)/usr/share/applications $(APPDIR)/usr/share/icons/hicolor/256x256/apps
 	cp $(BIN)/romp $(BIN)/romp-runner $(APPDIR)/usr/bin/
+	cp -R crates/romp-app/shaders $(APPDIR)/usr/bin/
 	cp packaging/linux/romp.desktop $(APPDIR)/
 	cp packaging/linux/romp.desktop $(APPDIR)/usr/share/applications/
 	cp packaging/linux/romp.png $(APPDIR)/
@@ -100,6 +102,7 @@ dist-linux: appimage
 	rm -rf $(DIST)/$(LINUX_NAME) $(LINUX_TAR)
 	mkdir -p $(DIST)/$(LINUX_NAME)
 	cp $(BIN)/romp $(BIN)/romp-runner README.md LICENSE $(DIST)/$(LINUX_NAME)/
+	cp -R crates/romp-app/shaders $(DIST)/$(LINUX_NAME)/
 	tar -czf $(LINUX_TAR) -C $(DIST) $(LINUX_NAME)
 	rm -rf $(DIST)/$(LINUX_NAME)
 	$(call checksum,$(LINUX_TAR))
@@ -108,6 +111,7 @@ dist-windows: build
 	rm -rf $(DIST)/$(WINDOWS_NAME) $(WINDOWS_ZIP)
 	mkdir -p $(DIST)/$(WINDOWS_NAME)
 	cp $(BIN)/romp.exe $(BIN)/romp-runner.exe README.md LICENSE $(DIST)/$(WINDOWS_NAME)/
+	cp -R crates/romp-app/shaders $(DIST)/$(WINDOWS_NAME)/
 	cd $(DIST) && 7z a -bso0 $(WINDOWS_NAME).zip $(WINDOWS_NAME)
 	rm -rf $(DIST)/$(WINDOWS_NAME)
 	$(call checksum,$(WINDOWS_ZIP))

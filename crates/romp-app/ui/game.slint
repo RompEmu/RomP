@@ -202,6 +202,8 @@ component GameMenu inherits Rectangle {
     in property <bool> hardcore;
     callback open-achievements();
     callback open-slots();
+    in property <string> look-label;
+    callback open-look();
 
     property <bool> keyboard: root.menu-key == "Esc";
 
@@ -310,6 +312,12 @@ component GameMenu inherits Rectangle {
                 focused: root.focused-item == 3;
                 clicked => { root.open-slots(); }
             }
+            MenuRow {
+                text: @tr("Look  ·  {}", root.look-label);
+                icon: @image-url("icons/fullscreen.svg");
+                focused: root.focused-item == 4;
+                clicked => { root.open-look(); }
+            }
             if root.hardcore: Text {
                 text: @tr("Hardcore mode: loading states is off.");
                 color: Theme.text-subtle;
@@ -319,39 +327,39 @@ component GameMenu inherits Rectangle {
             Stepper {
                 label: @tr("Volume");
                 value: root.volume + "%";
-                focused: root.focused-item == 4;
+                focused: root.focused-item == 5;
                 step(d) => { root.step-volume(d); }
             }
             MenuRow {
                 text: root.fullscreen ? @tr("Exit full screen") : @tr("Full screen");
                 icon: root.fullscreen ? @image-url("icons/exit-fullscreen.svg") : @image-url("icons/fullscreen.svg");
                 shortcut: root.keyboard ? root.fullscreen-key : "";
-                focused: root.focused-item == 5;
+                focused: root.focused-item == 6;
                 clicked => { root.toggle-fullscreen(); }
             }
             MenuRow {
                 text: @tr("Take screenshot");
                 icon: @image-url("icons/camera.svg");
                 shortcut: root.keyboard ? root.screenshot-key : "";
-                focused: root.focused-item == 6;
+                focused: root.focused-item == 7;
                 clicked => { root.take-screenshot(); }
             }
             MenuRow {
                 text: root.has-achievements ? @tr("Achievements  ·  {}", root.achievements-label) : @tr("Achievements  ·  sign in under Settings");
                 icon: @image-url("icons/trophy.svg");
-                focused: root.focused-item == 7;
+                focused: root.focused-item == 8;
                 clicked => { root.open-achievements(); }
             }
             MenuRow {
                 text: @tr("Controllers…");
                 icon: @image-url("icons/gamepad.svg");
-                focused: root.focused-item == 8;
+                focused: root.focused-item == 9;
                 clicked => { root.open-controllers(); }
             }
             for port[i] in root.ports: Stepper {
                 label: port.label;
                 value: port.device;
-                focused: root.focused-item == 9 + i;
+                focused: root.focused-item == 10 + i;
                 step(d) => { root.cycle-port(i, d); }
             }
             MenuDivider { }
@@ -359,7 +367,7 @@ component GameMenu inherits Rectangle {
                 text: @tr("Quit game");
                 icon: @image-url("icons/quit.svg");
                 danger: true;
-                focused: root.focused-item == 9 + root.ports.length;
+                focused: root.focused-item == 10 + root.ports.length;
                 clicked => { root.quit(); }
             }
             Text {
@@ -410,6 +418,38 @@ component SlotTile inherits Rectangle {
     }
 }
 
+/// Chooses how the game is drawn, while it stays visible above.
+component LookPanel inherits Rectangle {
+    in property <string> look;
+    in property <bool> tunable;
+    in property <string> curvature;
+    in property <string> scanlines;
+    in property <string> mask;
+    in property <int> focused-row;
+    callback step(int, int);
+    callback close();
+    height: look-box.preferred-height;
+    background: Theme.surface-raised.with-alpha(0.94);
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Theme.border-subtle;
+    TouchArea { }
+    look-box := VerticalLayout {
+        padding: 12px;
+        spacing: 4px;
+        HorizontalLayout {
+            padding-left: 6px;
+            padding-bottom: 4px;
+            Text { text: @tr("Look"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; vertical-alignment: center; horizontal-stretch: 1; }
+            Button { text: @tr("Done"); clicked => { root.close(); } }
+        }
+        Stepper { label: @tr("Style"); value: root.look; focused: root.focused-row == 0; step(d) => { root.step(0, d); } }
+        if root.tunable: Stepper { label: @tr("Curvature"); value: root.curvature; focused: root.focused-row == 1; step(d) => { root.step(1, d); } }
+        if root.tunable: Stepper { label: @tr("Scanlines"); value: root.scanlines; focused: root.focused-row == 2; step(d) => { root.step(2, d); } }
+        if root.tunable: Stepper { label: @tr("Mask"); value: root.mask; focused: root.focused-row == 3; step(d) => { root.step(3, d); } }
+    }
+}
+
 export component GameWindow inherits Window {
     in property <string> game-title: "Romp";
     in property <string> game-name;
@@ -446,7 +486,18 @@ export component GameWindow inherits Window {
     callback quit();
     in property <image> frame;
     in property <float> aspect: 4 / 3;
+    in property <bool> shaded;
     in property <string> status;
+    in property <string> look-label;
+    in property <bool> look-open;
+    in property <bool> look-tunable;
+    in property <string> look-curvature;
+    in property <string> look-scanlines;
+    in property <string> look-mask;
+    in property <int> look-focus;
+    callback open-look();
+    callback close-look();
+    callback step-look(int, int);
     in property <bool> slots-open;
     in property <[SlotCard]> slot-cards;
     in property <int> slots-focus;
@@ -480,7 +531,7 @@ export component GameWindow inherits Window {
     icon: @image-url("icons/app-icon.png");
     preferred-width: 960px;
     preferred-height: 720px;
-    background: black;
+    background: root.shaded ? transparent : black;
     forward-focus: keys;
 
     keys := FocusScope {
@@ -503,6 +554,7 @@ export component GameWindow inherits Window {
         }
 
         frame := Image {
+            visible: !root.shaded;
             source: root.frame;
             image-fit: fill;
             image-rendering: root.sharp ? ImageRendering.pixelated : ImageRendering.smooth;
@@ -581,7 +633,7 @@ export component GameWindow inherits Window {
             }
         }
 
-        if root.has-menu && root.menu-open: GameMenu {
+        if root.has-menu && root.menu-open && !root.look-open: GameMenu {
             width: parent.width;
             height: parent.height;
             name: root.game-name;
@@ -603,6 +655,8 @@ export component GameWindow inherits Window {
             hardcore: root.hardcore;
             open-achievements => { root.open-achievements(); }
             open-slots => { root.open-slots(); }
+            look-label: root.look-label;
+            open-look => { root.open-look(); }
             cycle-port(i, step) => { root.cycle-port(i, step); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
@@ -651,6 +705,20 @@ export component GameWindow inherits Window {
                     tracker-text := Text { text: tracker; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
                 }
             }
+        }
+
+        if root.look-open: LookPanel {
+            width: min(parent.width - 32px, 420px);
+            x: (parent.width - self.width) / 2;
+            y: parent.height - self.height - 16px;
+            look: root.look-label;
+            tunable: root.look-tunable;
+            curvature: root.look-curvature;
+            scanlines: root.look-scanlines;
+            mask: root.look-mask;
+            focused-row: root.look-focus;
+            step(row, delta) => { root.step-look(row, delta); }
+            close => { root.close-look(); }
         }
 
         if root.slots-open: Rectangle {
