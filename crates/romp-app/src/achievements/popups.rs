@@ -13,6 +13,7 @@ pub struct Launch {
     pub hash: Option<String>,
     pub http: reqwest::Client,
     pub rt: tokio::runtime::Handle,
+    pub store: std::sync::Arc<std::sync::Mutex<crate::store::Store>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -193,7 +194,10 @@ impl Link {
     ) {
         let http = self.launch.http.clone();
         let done = self.updates.0.clone();
+        let store = self.launch.store.clone();
+        let username = self.launch.username.clone();
         self.launch.rt.spawn(async move {
+            let unlock = post.as_deref().and_then(romp_cheevos::Unlock::from_request);
             let (status, body) = super::forward(
                 &http,
                 &url,
@@ -202,6 +206,9 @@ impl Link {
                 &agent,
             )
             .await;
+            if let Some(unlock) = unlock {
+                super::note_unlock(&store, &username, &unlock, status, &body);
+            }
             let _ = done.send(Update::Reply { id, status, body });
         });
     }
@@ -429,6 +436,9 @@ mod tests {
             hash: None,
             http: reqwest::Client::new(),
             rt: rt.handle().clone(),
+            store: std::sync::Arc::new(std::sync::Mutex::new(
+                crate::store::Store::open_in_memory().unwrap(),
+            )),
         });
         (link, rt)
     }

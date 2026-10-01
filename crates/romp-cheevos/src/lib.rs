@@ -104,6 +104,17 @@ unsafe extern "C" {
         value: *const c_char,
     ) -> c_int;
     fn romp_rc_system_allowed(library_name: *const c_char, console_id: u32) -> c_int;
+    fn romp_rc_award_request(
+        username: *const c_char,
+        token: *const c_char,
+        achievement_id: u32,
+        hardcore: c_int,
+        hash: *const c_char,
+        seconds_since_unlock: u32,
+        ctx: *mut c_void,
+        out: RequestOut,
+    ) -> c_int;
+    fn romp_rc_award_accepted(body: *const c_char, length: usize, status: c_int) -> c_int;
     fn rc_client_do_frame(client: *mut c_void);
     fn rc_client_idle(client: *mut c_void);
     fn rc_client_reset(client: *mut c_void);
@@ -394,6 +405,78 @@ pub fn parse_unlocks(status: i32, body: &[u8]) -> Option<Vec<u32>> {
         )
     };
     (result == 0).then_some(ids)
+}
+
+/// An achievement earned in play, as sent to RetroAchievements.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unlock {
+    pub achievement_id: u32,
+    pub hardcore: bool,
+    pub hash: String,
+}
+
+impl Unlock {
+    /// The unlock an `awardachievement` request is sending, read from its form fields.
+    pub fn from_request(post: &str) -> Option<Unlock> {
+        let field = |name: &str| {
+            post.split('&')
+                .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
+        };
+        if field("r")? != "awardachievement" {
+            return None;
+        }
+        Some(Unlock {
+            achievement_id: field("a")?.parse().ok()?,
+            hardcore: field("h") == Some("1"),
+            hash: field("m").unwrap_or_default().to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Award {
+    Accepted,
+    /// RetroAchievements answered and turned it down; sending it again won't help.
+    Refused,
+    /// RetroAchievements could not be reached, or had trouble; worth sending again later.
+    Retry,
+}
+
+/// What became of an unlock, from the server's answer to its request.
+pub fn award_outcome(status: i32, body: &[u8]) -> Award {
+    if status <= 0 || status >= 500 || status == 429 {
+        return Award::Retry;
+    }
+    let accepted = unsafe { romp_rc_award_accepted(body.as_ptr().cast(), body.len(), status) != 0 };
+    if accepted {
+        Award::Accepted
+    } else {
+        Award::Refused
+    }
+}
+
+/// The request that sends an unlock earned `seconds_since_unlock` seconds ago.
+pub fn award_request(
+    username: &str,
+    token: &str,
+    unlock: &Unlock,
+    seconds_since_unlock: u32,
+) -> Option<Request> {
+    let mut out: Option<Request> = None;
+    let (username, token, hash) = (c(username), c(token), c(&unlock.hash));
+    unsafe {
+        romp_rc_award_request(
+            username.as_ptr(),
+            token.as_ptr(),
+            unlock.achievement_id,
+            c_int::from(unlock.hardcore),
+            hash.as_ptr(),
+            seconds_since_unlock,
+            std::ptr::from_mut(&mut out).cast(),
+            collect_request,
+        );
+    }
+    out
 }
 
 /// Whether RetroAchievements allows a core setting while playing in hardcore.
@@ -726,6 +809,36 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, AchievementEvent::Unlocked { id: 9, .. })),
             "an achievement checked while the game loaded must not be switched off: {events:?}"
+        );
+    }
+
+    #[test]
+    fn late_unlocks_are_sent_with_how_long_ago_they_happened() {
+        let unlock = Unlock {
+            achievement_id: 39673,
+            hardcore: false,
+            hash: "811b027eaf99c2def7b933c5208636de".into(),
+        };
+        let request = award_request("player", "tok", &unlock, 3600).unwrap();
+        let body = post(&request);
+        assert!(body.contains("r=awardachievement"), "{body}");
+        assert!(body.contains("a=39673") && body.contains("h=0") && body.contains("o=3600"));
+        assert_eq!(Unlock::from_request(body), Some(unlock));
+        assert_eq!(Unlock::from_request("r=ping&u=player"), None);
+
+        assert_eq!(award_outcome(-2, b""), Award::Retry);
+        assert_eq!(award_outcome(503, b"busy"), Award::Retry);
+        assert_eq!(
+            award_outcome(200, br#"{"Success":true,"Score":10,"SoftcoreScore":10,"AchievementID":39673,"AchievementsRemaining":3}"#),
+            Award::Accepted
+        );
+        assert_eq!(
+            award_outcome(200, br#"{"Success":false,"Error":"User already has this achievement awarded.","Score":10,"SoftcoreScore":10,"AchievementID":39673,"AchievementsRemaining":3}"#),
+            Award::Accepted
+        );
+        assert_eq!(
+            award_outcome(200, br#"{"Success":false,"Error":"Achievement not found"}"#),
+            Award::Refused
         );
     }
 

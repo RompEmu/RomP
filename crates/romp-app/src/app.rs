@@ -351,6 +351,7 @@ impl Controller {
     }
 
     fn start(&self) {
+        self.send_pending_unlocks();
         let server = self.shared.store.lock().unwrap().get("server");
         let token = server.as_deref().and_then(|s| self.shared.tokens.load(s));
         match (server.as_deref().map(url::Url::parse), token) {
@@ -1042,6 +1043,7 @@ impl Controller {
                 self.sync_pending();
                 self.upload_play_sessions();
                 self.upload_screenshots();
+                self.send_pending_unlocks();
                 self.refresh_recommendations();
             }
             Err(Error::Cancelled) => return,

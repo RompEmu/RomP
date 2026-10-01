@@ -352,3 +352,29 @@ int romp_rc_setting_allowed(const char* library_name, const char* key, const cha
 int romp_rc_system_allowed(const char* library_name, uint32_t console_id) {
   return rc_libretro_is_system_allowed(library_name, console_id);
 }
+
+/* Unlocks sent again after RetroAchievements could not be reached. */
+
+int romp_rc_award_request(const char* username, const char* token, uint32_t achievement_id, int hardcore,
+    const char* hash, uint32_t seconds_since_unlock, void* ctx, romp_rc_request_out out) {
+  rc_api_award_achievement_request_t params;
+  rc_api_request_t request;
+  memset(&params, 0, sizeof(params));
+  params.username = username;
+  params.api_token = token;
+  params.achievement_id = achievement_id;
+  params.hardcore = hardcore ? 1 : 0;
+  params.game_hash = hash;
+  params.seconds_since_unlock = seconds_since_unlock;
+  return hand_over_request(&request, rc_api_init_award_achievement_request(&request, &params), ctx, out);
+}
+
+/* 1 when RetroAchievements recorded the unlock, or already had it. */
+int romp_rc_award_accepted(const char* body, size_t length, int status) {
+  rc_api_award_achievement_response_t response;
+  rc_api_server_response_t server = server_response(body, length, status);
+  int accepted = rc_api_process_award_achievement_server_response(&response, &server) == RC_OK
+      && response.response.succeeded;
+  rc_api_destroy_award_achievement_response(&response);
+  return accepted;
+}

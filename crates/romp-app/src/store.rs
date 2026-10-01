@@ -219,6 +219,16 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 9 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS pending_unlocks (username TEXT NOT NULL,
+                   achievement_id INTEGER NOT NULL, hardcore INTEGER NOT NULL, hash TEXT NOT NULL,
+                   unlocked_at INTEGER NOT NULL, PRIMARY KEY (username, achievement_id, hardcore));
+                 PRAGMA user_version = 9;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -459,6 +469,60 @@ impl Store {
         self.conn
             .execute("DELETE FROM pending_screenshots WHERE path = ?1", [path])
             .expect("remove pending screenshot");
+    }
+
+    /// Keeps an unlock RetroAchievements has not recorded yet; the first time it was earned stays.
+    pub fn add_pending_unlock(
+        &self,
+        username: &str,
+        unlock: &romp_cheevos::Unlock,
+        unlocked_at: i64,
+    ) {
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO pending_unlocks (username, achievement_id, hardcore, hash, unlocked_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    username,
+                    unlock.achievement_id,
+                    unlock.hardcore,
+                    unlock.hash,
+                    unlocked_at
+                ],
+            )
+            .expect("add pending unlock");
+    }
+
+    pub fn pending_unlocks(&self, username: &str) -> Vec<(romp_cheevos::Unlock, i64)> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT achievement_id, hardcore, hash, unlocked_at FROM pending_unlocks
+                 WHERE username = ?1 ORDER BY unlocked_at",
+            )
+            .expect("prepare");
+        stmt.query_map([username], |r| {
+            Ok((
+                romp_cheevos::Unlock {
+                    achievement_id: r.get(0)?,
+                    hardcore: r.get(1)?,
+                    hash: r.get(2)?,
+                },
+                r.get(3)?,
+            ))
+        })
+        .expect("query")
+        .filter_map(Result::ok)
+        .collect()
+    }
+
+    pub fn remove_pending_unlock(&self, username: &str, unlock: &romp_cheevos::Unlock) {
+        self.conn
+            .execute(
+                "DELETE FROM pending_unlocks WHERE username = ?1 AND achievement_id = ?2 AND hardcore = ?3",
+                params![username, unlock.achievement_id, unlock.hardcore],
+            )
+            .expect("remove pending unlock");
     }
 
     pub fn replace_recommendations(&mut self, picks: &[(i64, String)]) {
@@ -1102,6 +1166,27 @@ mod tests {
         assert_eq!(s.pending_screenshots().len(), 1);
         s.clear_library();
         assert!(s.pending_screenshots().is_empty());
+    }
+
+    #[test]
+    fn unlocks_wait_for_retroachievements_and_keep_their_first_time() {
+        let mut s = Store::open_in_memory().unwrap();
+        let unlock = |id| romp_cheevos::Unlock {
+            achievement_id: id,
+            hardcore: false,
+            hash: "abc".into(),
+        };
+        s.add_pending_unlock("player", &unlock(7), 2_000);
+        s.add_pending_unlock("player", &unlock(7), 9_000);
+        s.add_pending_unlock("player", &unlock(3), 1_000);
+        s.add_pending_unlock("someone", &unlock(5), 1_000);
+        assert_eq!(
+            s.pending_unlocks("player"),
+            [(unlock(3), 1_000), (unlock(7), 2_000)]
+        );
+        s.remove_pending_unlock("player", &unlock(3));
+        s.clear_library();
+        assert_eq!(s.pending_unlocks("player"), [(unlock(7), 2_000)]);
     }
 
     #[test]

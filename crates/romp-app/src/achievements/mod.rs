@@ -57,6 +57,86 @@ const CONSOLES: &[(&[&str], u32)] = &[
 ];
 
 /// RetroAchievements' number for the platform, or 0 to let it tell from the file.
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
+}
+
+/// Keeps an unlock that didn't reach RetroAchievements, and forgets it once one attempt gets through.
+pub fn note_unlock(
+    store: &std::sync::Mutex<crate::store::Store>,
+    username: &str,
+    unlock: &romp_cheevos::Unlock,
+    status: i32,
+    body: &[u8],
+) {
+    let store = store.lock().unwrap();
+    match romp_cheevos::award_outcome(status, body) {
+        romp_cheevos::Award::Retry => store.add_pending_unlock(username, unlock, now_millis()),
+        romp_cheevos::Award::Accepted | romp_cheevos::Award::Refused => {
+            store.remove_pending_unlock(username, unlock);
+        }
+    }
+}
+
+/// Sends unlocks earned while RetroAchievements was out of reach, oldest first, until one fails again.
+pub async fn send_pending_unlocks(
+    http: &reqwest::Client,
+    store: &std::sync::Mutex<crate::store::Store>,
+    account: &Account,
+) -> usize {
+    send_pending_unlocks_with(store, account, |request| async move {
+        forward(
+            http,
+            &request.url,
+            request.post.as_deref(),
+            request.content_type.as_deref(),
+            "",
+        )
+        .await
+    })
+    .await
+}
+
+async fn send_pending_unlocks_with<F, Fut>(
+    store: &std::sync::Mutex<crate::store::Store>,
+    account: &Account,
+    send: F,
+) -> usize
+where
+    F: Fn(romp_cheevos::Request) -> Fut,
+    Fut: std::future::Future<Output = (i32, Vec<u8>)>,
+{
+    let pending = store.lock().unwrap().pending_unlocks(&account.username);
+    let mut sent = 0;
+    for (unlock, unlocked_at) in pending {
+        let seconds = u32::try_from((now_millis() - unlocked_at).max(0) / 1000).unwrap_or(u32::MAX);
+        let Some(request) =
+            romp_cheevos::award_request(&account.username, &account.token, &unlock, seconds)
+        else {
+            store
+                .lock()
+                .unwrap()
+                .remove_pending_unlock(&account.username, &unlock);
+            continue;
+        };
+        let (status, body) = send(request).await;
+        let outcome = romp_cheevos::award_outcome(status, &body);
+        if outcome == romp_cheevos::Award::Retry {
+            break;
+        }
+        store
+            .lock()
+            .unwrap()
+            .remove_pending_unlock(&account.username, &unlock);
+        if outcome == romp_cheevos::Award::Accepted {
+            sent += 1;
+        }
+    }
+    sent
+}
+
 /// RetroAchievements adds warnings, such as for an emulator it doesn't recognise yet, as achievements.
 pub fn is_notice(id: u32) -> bool {
     id >= 101_000_000
@@ -348,6 +428,66 @@ mod tests {
         assert_eq!(row_detail(&list[1]), "10 points");
         assert_eq!(summary(&list), "1 of 2 earned");
         assert!(from_romm(&rom, None).iter().all(|a| !a.unlocked));
+    }
+
+    #[tokio::test]
+    async fn unlocks_made_offline_are_sent_later_with_their_age() {
+        use wiremock::matchers::{body_string_contains, method};
+        let store = std::sync::Mutex::new(crate::store::Store::open_in_memory().unwrap());
+        let unlock = romp_cheevos::Unlock {
+            achievement_id: 39673,
+            hardcore: false,
+            hash: "abc".into(),
+        };
+        note_unlock(&store, "player", &unlock, -2, b"");
+        assert_eq!(store.lock().unwrap().pending_unlocks("player").len(), 1);
+        let an_hour_ago = now_millis() - 3_600_000;
+        store
+            .lock()
+            .unwrap()
+            .remove_pending_unlock("player", &unlock);
+        store
+            .lock()
+            .unwrap()
+            .add_pending_unlock("player", &unlock, an_hour_ago);
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(body_string_contains("r=awardachievement"))
+            .and(body_string_contains("a=39673"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "Success": true, "Score": 10, "SoftcoreScore": 10,
+                "AchievementID": 39673, "AchievementsRemaining": 2
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let account = Account {
+            username: "player".into(),
+            token: "tok".into(),
+        };
+        let endpoint = format!("{}/dorequest.php", server.uri());
+        let http = reqwest::Client::new();
+        let sent = send_pending_unlocks_with(&store, &account, |request| {
+            let (http, endpoint) = (&http, &endpoint);
+            async move {
+                assert!(
+                    request.post.as_deref().unwrap_or_default().contains("o="),
+                    "the unlock's age is sent"
+                );
+                let response = http
+                    .post(endpoint)
+                    .body(request.post.unwrap_or_default())
+                    .send()
+                    .await
+                    .unwrap();
+                let status = i32::from(response.status().as_u16());
+                (status, response.bytes().await.unwrap().to_vec())
+            }
+        })
+        .await;
+        assert_eq!(sent, 1);
+        assert!(store.lock().unwrap().pending_unlocks("player").is_empty());
     }
 
     #[test]

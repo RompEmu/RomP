@@ -33,7 +33,33 @@ impl Controller {
             hash,
             http: self.shared.http.clone(),
             rt: self.shared.rt.handle().clone(),
+            store: self.shared.store.clone(),
         })
+    }
+
+    /// Sends unlocks that didn't reach RetroAchievements while playing.
+    pub(super) fn send_pending_unlocks(&self) {
+        let Some(account) = self.ra_account() else {
+            return;
+        };
+        if self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .pending_unlocks(&account.username)
+            .is_empty()
+        {
+            return;
+        }
+        let http = self.shared.http.clone();
+        let store = self.shared.store.clone();
+        self.shared.rt.spawn(async move {
+            let sent = achievements::send_pending_unlocks(&http, &store, &account).await;
+            if sent > 0 {
+                tracing::info!("sent {sent} achievement unlocks earned while offline");
+            }
+        });
     }
 
     /// After playing, RomM fetches the player's new RetroAchievements progress.
@@ -112,6 +138,7 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         ui.set_ra_busy(false);
         ui.set_ra_password_input("".into());
+        let signed_in = result.is_ok();
         match result.and_then(|account| {
             Keychain::retro_achievements().save(&account.username, &account.token)?;
             self.shared
@@ -126,6 +153,9 @@ impl Controller {
         }
         self.show_ra_account();
         self.update_pairing_prompt();
+        if signed_in {
+            self.send_pending_unlocks();
+        }
     }
 
     pub(super) fn ra_sign_out(&self) {

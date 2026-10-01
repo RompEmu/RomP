@@ -991,6 +991,7 @@ impl Controller {
         self.save_players();
         let playing = self.playing.borrow_mut().take();
         if identity.is_some() {
+            self.send_pending_unlocks();
             self.refresh_romm_achievements();
         }
         if let Some(detail) = playing {
