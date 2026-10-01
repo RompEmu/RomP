@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- Save states with pictures. Save states in the game menu shows your four slots with a picture of the moment you saved and when that was, and the game's page lists your save states with a Play from here button. Pictures sync with RomM along with the states.
+
 ## [0.8.0] - 2026-10-01
 
 ### Added

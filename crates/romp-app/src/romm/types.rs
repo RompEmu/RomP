@@ -287,6 +287,13 @@ pub struct RemoteState {
     pub rom_id: i64,
     pub file_name: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub screenshot: Option<RemoteScreenshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RemoteScreenshot {
+    pub id: i64,
 }
 
 #[cfg(test)]

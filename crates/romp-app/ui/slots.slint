@@ -1,0 +1,23 @@
+import { Theme } from "theme.slint";
+
+export struct SlotCard { slot: int, label: string, detail: string, thumbnail: image, has-thumbnail: bool, empty: bool, current: bool }
+
+/// A save slot's picture, or a quiet placeholder when nothing is saved there.
+export component SlotPicture inherits Rectangle {
+    in property <SlotCard> card;
+    border-radius: 6px;
+    background: Theme.surface-muted;
+    clip: true;
+    if root.card.has-thumbnail: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.card.thumbnail;
+        image-fit: cover;
+        image-rendering: pixelated;
+    }
+    if !root.card.has-thumbnail: Text {
+        text: root.card.empty ? @tr("Empty") : @tr("No picture");
+        color: Theme.text-subtle;
+        font-size: Theme.font-small;
+    }
+}

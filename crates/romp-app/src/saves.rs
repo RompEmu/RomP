@@ -431,8 +431,12 @@ pub async fn sync_states(
             }
             let bytes = local.expect("local state to upload");
             let md5 = md5_hex(&bytes);
+            let picture_name = format!("{slot}.png");
+            let picture = std::fs::read(game.dir.join(&picture_name))
+                .ok()
+                .map(|png| (picture_name, png));
             let saved = client
-                .upload_state(game.rom_id, &game.emulator, &name, bytes)
+                .upload_state(game.rom_id, &game.emulator, &name, bytes, picture)
                 .await?;
             report.uploaded += 1;
             crate::store::StateRecord {
@@ -445,6 +449,17 @@ pub async fn sync_states(
             let bytes = client.download_state(srv.id).await?;
             backup(&game.dir, &file).map_err(io_err)?;
             replace_file(&path, &bytes).map_err(io_err)?;
+            let picture_path = game.dir.join(format!("{slot}.png"));
+            let picture = match &srv.screenshot {
+                Some(shot) => client.download_screenshot(shot.id).await.ok(),
+                None => None,
+            };
+            match picture {
+                Some(png) => replace_file(&picture_path, &png).map_err(io_err)?,
+                None => {
+                    let _ = std::fs::remove_file(&picture_path);
+                }
+            }
             report.downloaded += 1;
             crate::store::StateRecord {
                 local_md5: md5_hex(&bytes),
@@ -1059,6 +1074,75 @@ mod tests {
             assert_eq!(
                 std::fs::read(dir.path().join("slot-2.state")).unwrap(),
                 b"REMOTE"
+            );
+        }
+
+        #[tokio::test]
+        async fn a_state_travels_with_its_picture() {
+            use wiremock::matchers::body_string_contains;
+            let server = MockServer::start().await;
+            remote(&server, json!([])).await;
+            Mock::given(method("POST"))
+                .and(path("/api/states"))
+                .and(body_string_contains(
+                    "name=\"screenshotFile\"; filename=\"slot-1.png\"",
+                ))
+                .and(body_string_contains("PICTURE"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(state_json(
+                    3,
+                    "slot-1.snes9x.1-63.state",
+                    "t1",
+                )))
+                .expect(1)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("slot-1.state"), b"S1").unwrap();
+            std::fs::write(dir.path().join("slot-1.png"), b"PICTURE").unwrap();
+            sync_states(&client(&server), &store(), &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+        }
+
+        #[tokio::test]
+        async fn a_downloaded_state_brings_its_picture_or_drops_a_stale_one() {
+            let server = MockServer::start().await;
+            let mut with_picture = state_json(4, "slot-2.snes9x.1-63.state", "t2");
+            with_picture["screenshot"] = json!({"id": 9});
+            remote(
+                &server,
+                json!([
+                    with_picture,
+                    state_json(6, "slot-3.snes9x.1-63.state", "t3")
+                ]),
+            )
+            .await;
+            for (id, body) in [(4, "REMOTE2"), (6, "REMOTE3")] {
+                Mock::given(method("GET"))
+                    .and(path(format!("/api/states/{id}/content")))
+                    .respond_with(
+                        ResponseTemplate::new(200).set_body_bytes(body.as_bytes().to_vec()),
+                    )
+                    .mount(&server)
+                    .await;
+            }
+            Mock::given(method("GET"))
+                .and(path("/api/screenshots/9/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"PNG".to_vec()))
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("slot-3.png"), b"OLD").unwrap();
+            sync_states(&client(&server), &store(), &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert_eq!(
+                std::fs::read(dir.path().join("slot-2.png")).unwrap(),
+                b"PNG"
+            );
+            assert!(
+                !dir.path().join("slot-3.png").exists(),
+                "a picture of an older state would show the wrong moment"
             );
         }
 

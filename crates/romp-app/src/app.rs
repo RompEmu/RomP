@@ -6,6 +6,7 @@ mod navigation;
 mod save_sync;
 mod screenshots;
 mod settings;
+mod slots;
 
 use crate::cores::Cores;
 use crate::covers::Covers;
@@ -110,6 +111,7 @@ struct Controller {
     running: RefCell<Option<crate::play::RunningGame>>,
     session: RefCell<Option<activity::Session>>,
     ra_hash: RefCell<Option<(i64, String)>>,
+    requested_slot: Cell<Option<u8>>,
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
     selected: RefCell<String>,
@@ -198,6 +200,7 @@ pub fn run() -> anyhow::Result<()> {
         running: RefCell::new(None),
         session: RefCell::new(None),
         ra_hash: RefCell::new(None),
+        requested_slot: Cell::new(None),
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
         selected: RefCell::new("all".into()),
@@ -347,6 +350,7 @@ impl Controller {
         ui.on_ra_sign_out(|| with_controller(|c| c.ra_sign_out()));
         ui.on_ra_hardcore_changed(|| with_controller(|c| c.ra_hardcore_changed()));
         ui.on_show_all_achievements(|| with_controller(|c| c.show_all_achievements()));
+        ui.on_play_slot(|slot| with_controller(|c| c.play_slot(slot)));
         ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
     }
 

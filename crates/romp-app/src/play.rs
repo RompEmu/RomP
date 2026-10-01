@@ -174,49 +174,64 @@ struct Game {
     achievements_open: Cell<bool>,
     achievement_list: RefCell<Vec<romp_proto::msg::AchievementInfo>>,
     hardcore: Cell<bool>,
+    save_dir: PathBuf,
+    slots_open: Cell<bool>,
+    slots_focus: Cell<u8>,
+    thumbnail_wanted: Cell<Option<u8>>,
+    recent_thumbnail: RefCell<Option<image::RgbaImage>>,
+    thumbnails: (std::sync::mpsc::Sender<u8>, std::sync::mpsc::Receiver<u8>),
 }
 
 const MENU_RESUME: i32 = 0;
 const MENU_PAUSE: i32 = 1;
 const MENU_RESTART: i32 = 2;
-const MENU_SLOT: i32 = 3;
-const MENU_SAVE: i32 = 4;
-const MENU_LOAD: i32 = 5;
-const MENU_VOLUME: i32 = 6;
-const MENU_FULLSCREEN: i32 = 7;
-const MENU_SCREENSHOT: i32 = 8;
-const MENU_ACHIEVEMENTS: i32 = 9;
-const MENU_CONTROLLERS: i32 = 10;
-const MENU_PORTS_START: i32 = 11;
+const MENU_SAVE_STATES: i32 = 3;
+const MENU_VOLUME: i32 = 4;
+const MENU_FULLSCREEN: i32 = 5;
+const MENU_SCREENSHOT: i32 = 6;
+const MENU_ACHIEVEMENTS: i32 = 7;
+const MENU_CONTROLLERS: i32 = 8;
+const MENU_PORTS_START: i32 = 9;
 const ACHIEVEMENT_ROW: f32 = 52.0;
 const VOLUME_STEP: i32 = 10;
+/// How often, in frames, the small picture kept for the automatic save is refreshed.
+const THUMBNAIL_EVERY: u32 = 120;
 
-const MENU_ROWS: [[i32; 3]; 2] = [
-    [MENU_RESUME, MENU_PAUSE, MENU_RESTART],
-    [MENU_SLOT, MENU_SAVE, MENU_LOAD],
-];
+const MENU_ROW: [i32; 3] = [MENU_RESUME, MENU_PAUSE, MENU_RESTART];
 
 fn menu_move(focus: i32, button: u32, items: i32) -> Option<i32> {
     let directional = matches!(button, input::UP | input::DOWN | input::LEFT | input::RIGHT);
     if focus < 0 {
         return directional.then_some(MENU_RESUME);
     }
-    let cell = MENU_ROWS
-        .iter()
-        .enumerate()
-        .find_map(|(r, row)| row.iter().position(|&i| i == focus).map(|c| (r, c)));
-    match (button, cell) {
-        (input::LEFT, Some((r, c))) => Some(MENU_ROWS[r][c.saturating_sub(1)]),
-        (input::RIGHT, Some((r, c))) => Some(MENU_ROWS[r][(c + 1).min(2)]),
-        (input::UP, Some((0, _))) => Some(focus),
-        (input::UP, Some((r, c))) => Some(MENU_ROWS[r - 1][c]),
-        (input::DOWN, Some((0, c))) => Some(MENU_ROWS[1][c]),
-        (input::DOWN, Some(_)) => Some(MENU_VOLUME),
-        (input::UP, None) if focus == MENU_VOLUME => Some(MENU_SLOT),
-        (input::UP, None) => Some((focus - 1).max(0)),
-        (input::DOWN, None) => Some((focus + 1).min(items - 1)),
+    if let Some(c) = MENU_ROW.iter().position(|&i| i == focus) {
+        return match button {
+            input::LEFT => Some(MENU_ROW[c.saturating_sub(1)]),
+            input::RIGHT => Some(MENU_ROW[(c + 1).min(2)]),
+            input::UP => Some(focus),
+            input::DOWN => Some(MENU_SAVE_STATES),
+            _ => None,
+        };
+    }
+    match button {
+        input::UP if focus == MENU_SAVE_STATES => Some(MENU_RESUME),
+        input::UP => Some((focus - 1).max(0)),
+        input::DOWN => Some((focus + 1).min(items - 1)),
         _ => None,
     }
+}
+
+/// Moves around the 2×2 grid of save slots, stopping at its edges.
+fn slot_grid_move(slot: u8, button: u32) -> u8 {
+    let (row, col) = ((slot.max(1) - 1) / 2, (slot.max(1) - 1) % 2);
+    let (row, col) = match button {
+        input::LEFT => (row, col.saturating_sub(1)),
+        input::RIGHT => (row, (col + 1).min(1)),
+        input::UP => (row.saturating_sub(1), col),
+        input::DOWN => ((row + 1).min(1), col),
+        _ => (row, col),
+    };
+    row * 2 + col + 1
 }
 
 fn stepped_volume(volume: u8, delta: i32) -> u8 {
@@ -252,6 +267,7 @@ impl Game {
         for command in commands {
             match command {
                 Command::Send(AppMsg::LoadSlot(slot)) => self.load_slot(slot),
+                Command::Send(AppMsg::SaveSlot(slot)) => self.save_slot(slot),
                 Command::Send(msg) => self.send(&msg),
                 Command::Menu => self.toggle_menu(),
                 Command::TogglePause => self.set_paused(!self.paused.get()),
@@ -342,10 +358,12 @@ impl Game {
         }
     }
 
-    /// The menu key closes the achievements list first, then the menu.
+    /// The menu key closes an open list first, then the menu.
     fn toggle_menu(&self) {
         if self.achievements_open.get() {
             self.close_achievements();
+        } else if self.slots_open.get() {
+            self.close_slots();
         } else {
             self.set_menu(!self.menu_open.get());
         }
@@ -452,6 +470,123 @@ impl Game {
         }
     }
 
+    fn open_slots(&self) {
+        self.slots_open.set(true);
+        self.slots_focus.set(self.controls.borrow().slot());
+        self.show_slots();
+        self.primary().set_slots_open(true);
+    }
+
+    fn close_slots(&self) {
+        self.slots_open.set(false);
+        self.primary().set_slots_open(false);
+    }
+
+    fn focus_slot(&self, slot: u8) {
+        self.slots_focus.set(slot.clamp(1, input::SLOTS));
+        self.primary()
+            .set_slots_focus(i32::from(self.slots_focus.get()));
+    }
+
+    fn show_slots(&self) {
+        let now = std::time::SystemTime::now();
+        let current = self.controls.borrow().slot();
+        let cards: Vec<crate::SlotCard> = crate::slots::read(&self.save_dir, 1..=input::SLOTS)
+            .into_iter()
+            .map(|info| {
+                let thumbnail = info
+                    .thumbnail
+                    .as_ref()
+                    .and_then(|p| Image::load_from_path(p).ok());
+                crate::SlotCard {
+                    slot: i32::from(info.slot),
+                    label: info.label().into(),
+                    detail: info
+                        .saved_at
+                        .map_or_else(|| "Empty".to_string(), |t| crate::slots::when(t, now))
+                        .into(),
+                    has_thumbnail: thumbnail.is_some(),
+                    thumbnail: thumbnail.unwrap_or_default(),
+                    empty: info.is_empty(),
+                    current: info.slot == current,
+                }
+            })
+            .collect();
+        let ui = self.primary();
+        ui.set_slot_cards(ModelRc::new(VecModel::from(cards)));
+        ui.set_slots_focus(i32::from(self.slots_focus.get()));
+    }
+
+    /// Saves to `slot`, which becomes the current one, with a picture of the game as it is now.
+    fn save_slot(&self, slot: u8) {
+        self.controls.borrow_mut().set_slot(slot);
+        self.primary().set_slot(i32::from(slot));
+        self.thumbnail_wanted.set(Some(slot));
+        self.send(&AppMsg::SaveSlot(slot));
+    }
+
+    fn load_from(&self, slot: u8) {
+        let saved = crate::slots::read(&self.save_dir, [slot]);
+        if saved.first().is_none_or(crate::slots::SlotInfo::is_empty) {
+            return;
+        }
+        self.controls.borrow_mut().set_slot(slot);
+        self.primary().set_slot(i32::from(slot));
+        self.load_slot(slot);
+        if !self.hardcore.get() {
+            self.close_slots();
+            self.set_menu(false);
+        }
+    }
+
+    /// Writes a slot's picture off the UI thread; `thumbnail_written` hears when it's there.
+    fn write_thumbnail(&self, slot: u8, picture: image::RgbaImage) {
+        let path = crate::slots::thumbnail_path(&self.save_dir, slot);
+        let done = self.thumbnails.0.clone();
+        std::thread::spawn(move || {
+            if let Err(e) = picture.save_with_format(&path, image::ImageFormat::Png) {
+                tracing::warn!("saving the picture for slot {slot}: {e}");
+            }
+            let _ = done.send(slot);
+        });
+    }
+
+    fn take_thumbnails(&self, rgba: &[u8], shown: Option<(u32, u32, f32)>, frame: u32) {
+        let wanted = self.thumbnail_wanted.take();
+        if wanted.is_none() && !frame.is_multiple_of(THUMBNAIL_EVERY) {
+            return;
+        }
+        let Some((width, height, aspect)) = shown else {
+            return;
+        };
+        let (pixels, width, height) =
+            crate::rotation::rotate(rgba, width, height, self.rotation.get());
+        let Some(picture) = crate::slots::thumbnail(&pixels, width, height, aspect) else {
+            return;
+        };
+        if let Some(slot) = wanted {
+            self.write_thumbnail(slot, picture.clone());
+        }
+        *self.recent_thumbnail.borrow_mut() = Some(picture);
+    }
+
+    fn thumbnail_written(&self) {
+        let mut any = false;
+        while self.thumbnails.1.try_recv().is_ok() {
+            any = true;
+        }
+        if any && self.slots_open.get() {
+            self.show_slots();
+        }
+    }
+
+    /// The automatic save made on quitting gets the most recent picture of the game.
+    fn write_auto_thumbnail(&self) {
+        if let Some(picture) = self.recent_thumbnail.borrow_mut().take() {
+            self.write_thumbnail(crate::slots::AUTO, picture);
+        }
+    }
+
     /// Hardcore mode never loads a state; the runner refuses too, this explains why nothing happened.
     fn load_slot(&self, slot: u8) {
         if self.hardcore.get() {
@@ -531,14 +666,6 @@ impl Game {
     fn show_slot(&self, slot: u8) {
         self.primary().set_slot(i32::from(slot));
         flash(self.primary(), format!("Save slot {slot}"));
-    }
-
-    fn step_slot(&self, delta: i32) {
-        let slots = i32::from(input::SLOTS);
-        let current = i32::from(self.controls.borrow().slot());
-        let slot = (current - 1 + delta).rem_euclid(slots) + 1;
-        self.controls.borrow_mut().set_slot(slot as u8);
-        self.primary().set_slot(slot);
     }
 
     fn set_menu_focus(&self, focus: i32) {
@@ -653,9 +780,7 @@ impl Game {
             MENU_RESUME => self.set_menu(false),
             MENU_PAUSE => self.set_paused(!self.paused.get()),
             MENU_RESTART => self.restart(),
-            MENU_SLOT => self.step_slot(1),
-            MENU_SAVE => self.send(&AppMsg::SaveSlot(self.controls.borrow().slot())),
-            MENU_LOAD => self.load_slot(self.controls.borrow().slot()),
+            MENU_SAVE_STATES => self.open_slots(),
             MENU_VOLUME => self.step_volume(1),
             MENU_FULLSCREEN => self.toggle_fullscreen(),
             MENU_SCREENSHOT => self.screenshot_wanted.set(true),
@@ -681,6 +806,19 @@ impl Game {
     }
 
     fn menu_button(&self, button: u32) {
+        if self.slots_open.get() {
+            let focus = self.slots_focus.get();
+            match button {
+                input::LEFT | input::RIGHT | input::UP | input::DOWN => {
+                    self.focus_slot(slot_grid_move(focus, button));
+                }
+                input::A | input::START => self.load_from(focus),
+                input::X => self.save_slot(focus),
+                input::B => self.close_slots(),
+                _ => {}
+            }
+            return;
+        }
         if self.achievements_open.get() {
             match button {
                 input::UP => self.scroll_achievements(-1.0),
@@ -898,6 +1036,7 @@ pub fn launch(
                     return;
                 }
                 if let Some(game) = weak.upgrade() {
+                    game.write_auto_thumbnail();
                     game.save_placements();
                     game.capture_mouse(false);
                     game.session.borrow_mut().request_stop();
@@ -949,6 +1088,12 @@ pub fn launch(
             achievements_open: Cell::new(false),
             achievement_list: RefCell::default(),
             hardcore: Cell::new(hardcore),
+            save_dir: opts.save_dir.clone(),
+            slots_open: Cell::new(false),
+            slots_focus: Cell::new(1),
+            thumbnail_wanted: Cell::new(None),
+            recent_thumbnail: RefCell::new(None),
+            thumbnails: std::sync::mpsc::channel(),
         }
     });
     let _ = game
@@ -965,6 +1110,7 @@ pub fn launch(
         let mut buf = Vec::new();
         let mut last_seq = 0;
         let mut shown = None;
+        let mut frame_count: u32 = 0;
         let gamepads = opts.gamepads.clone();
         let players = opts.players.clone();
         let mappings = opts.mappings.clone();
@@ -1045,6 +1191,9 @@ pub fn launch(
             if game.screenshot_wanted.take() {
                 game.capture(&buf, shown);
             }
+            frame_count = frame_count.wrapping_add(1);
+            game.take_thumbnails(&buf, shown, frame_count);
+            game.thumbnail_written();
             game.screenshot_saved();
             game.show_achievements(std::time::Instant::now());
             for event in events {
@@ -1079,6 +1228,11 @@ pub fn launch(
                         game.send(&AppMsg::ListAchievements);
                     }
                     continue;
+                }
+                if let SessionEvent::Runner(RunnerMsg::StateWritten { ok: true, .. }) = &event {
+                    if game.slots_open.get() {
+                        game.show_slots();
+                    }
                 }
                 if let SessionEvent::Runner(RunnerMsg::AchievementList(list)) = event {
                     game.achievement_list_arrived(list);
@@ -1253,18 +1407,6 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
         let with = with.clone();
         move || with(&|g| g.set_paused(!g.paused.get()))
     });
-    window.on_save_state({
-        let with = with.clone();
-        move || with(&|g| g.send(&AppMsg::SaveSlot(g.controls.borrow().slot())))
-    });
-    window.on_load_state({
-        let with = with.clone();
-        move || with(&|g| g.load_slot(g.controls.borrow().slot()))
-    });
-    window.on_step_slot({
-        let with = with.clone();
-        move |delta| with(&|g| g.step_slot(delta))
-    });
     window.on_restart({
         let with = with.clone();
         move || with(&|g| g.restart())
@@ -1280,6 +1422,22 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     window.on_take_screenshot({
         let with = with.clone();
         move || with(&|g| g.screenshot_wanted.set(true))
+    });
+    window.on_open_slots({
+        let with = with.clone();
+        move || with(&|g| g.open_slots())
+    });
+    window.on_close_slots({
+        let with = with.clone();
+        move || with(&|g| g.close_slots())
+    });
+    window.on_save_slot({
+        let with = with.clone();
+        move |slot| with(&|g| g.save_slot(u8::try_from(slot).unwrap_or(1)))
+    });
+    window.on_load_slot({
+        let with = with.clone();
+        move |slot| with(&|g| g.load_from(u8::try_from(slot).unwrap_or(1)))
     });
     window.on_open_achievements({
         let with = with.clone();
@@ -1379,7 +1537,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn menu_focus_moves_across_the_two_button_rows_and_down_the_list() {
+    fn menu_focus_moves_across_the_button_row_and_down_the_list() {
         let items = MENU_PORTS_START + 1;
         assert_eq!(menu_move(-1, input::DOWN, items), Some(MENU_RESUME));
         assert_eq!(
@@ -1402,17 +1560,37 @@ mod tests {
             menu_move(MENU_RESUME, input::LEFT, items),
             Some(MENU_RESUME)
         );
-        assert_eq!(menu_move(MENU_RESUME, input::DOWN, items), Some(MENU_SLOT));
-        assert_eq!(menu_move(MENU_RESTART, input::DOWN, items), Some(MENU_LOAD));
-        assert_eq!(menu_move(MENU_SLOT, input::RIGHT, items), Some(MENU_SAVE));
-        assert_eq!(menu_move(MENU_SAVE, input::RIGHT, items), Some(MENU_LOAD));
-        assert_eq!(menu_move(MENU_SAVE, input::LEFT, items), Some(MENU_SLOT));
-        assert_eq!(menu_move(MENU_SAVE, input::UP, items), Some(MENU_PAUSE));
-        assert_eq!(menu_move(MENU_LOAD, input::DOWN, items), Some(MENU_VOLUME));
-        assert_eq!(menu_move(MENU_VOLUME, input::UP, items), Some(MENU_SLOT));
         assert_eq!(menu_move(MENU_RESUME, input::UP, items), Some(MENU_RESUME));
+        assert_eq!(
+            menu_move(MENU_RESTART, input::DOWN, items),
+            Some(MENU_SAVE_STATES)
+        );
+        assert_eq!(
+            menu_move(MENU_SAVE_STATES, input::UP, items),
+            Some(MENU_RESUME)
+        );
+        assert_eq!(
+            menu_move(MENU_SAVE_STATES, input::DOWN, items),
+            Some(MENU_VOLUME)
+        );
+        assert_eq!(
+            menu_move(MENU_VOLUME, input::UP, items),
+            Some(MENU_SAVE_STATES)
+        );
         assert_eq!(menu_move(items - 1, input::DOWN, items), Some(items - 1));
         assert_eq!(menu_move(MENU_VOLUME, input::LEFT, items), None);
+    }
+
+    #[test]
+    fn slot_focus_moves_around_the_grid_and_stops_at_its_edges() {
+        assert_eq!(slot_grid_move(1, input::RIGHT), 2);
+        assert_eq!(slot_grid_move(2, input::RIGHT), 2);
+        assert_eq!(slot_grid_move(2, input::DOWN), 4);
+        assert_eq!(slot_grid_move(4, input::LEFT), 3);
+        assert_eq!(slot_grid_move(3, input::LEFT), 3);
+        assert_eq!(slot_grid_move(3, input::UP), 1);
+        assert_eq!(slot_grid_move(2, input::UP), 2);
+        assert_eq!(slot_grid_move(4, input::DOWN), 4);
     }
 
     #[test]

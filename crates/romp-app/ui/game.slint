@@ -1,5 +1,6 @@
 import { Theme } from "theme.slint";
 import { AchievementItem, AchievementRow } from "achievements.slint";
+import { SlotCard, SlotPicture } from "slots.slint";
 import { Button, ScrollView } from "std-widgets.slint";
 export struct PortRow { label: string, device: string }
 
@@ -167,51 +168,6 @@ component ChipButton inherits Rectangle {
     }
 }
 
-component SlotChip inherits Rectangle {
-    in property <int> slot;
-    in property <bool> focused;
-    callback step(int);
-    height: 34px;
-    width: slot-row.preferred-width;
-    border-radius: Theme.radius;
-    background: root.focused ? Theme.accent-soft : Theme.surface-muted;
-    border-width: root.focused ? 1px : 0px;
-    border-color: Theme.accent;
-    accessible-role: spinbox;
-    accessible-label: @tr("Save slot");
-    accessible-value: root.slot;
-    accessible-action-increment => { root.step(1); }
-    accessible-action-decrement => { root.step(-1); }
-    slot-row := HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 2px;
-        spacing: 0px;
-        Text {
-            text: @tr("Slot");
-            vertical-alignment: center;
-            font-size: Theme.font-body;
-            color: Theme.text-secondary;
-        }
-        VerticalLayout {
-            alignment: center;
-            StepButton { text: "‹"; clicked => { root.step(-1); } }
-        }
-        Text {
-            text: root.slot;
-            min-width: 12px;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            font-size: Theme.font-body-large;
-            font-weight: 700;
-            color: Theme.text-strong;
-        }
-        VerticalLayout {
-            alignment: center;
-            StepButton { text: "›"; clicked => { root.step(1); } }
-        }
-    }
-}
-
 component MenuDivider inherits Rectangle {
     height: 7px;
     Rectangle { height: 1px; background: Theme.divider; }
@@ -237,9 +193,6 @@ component GameMenu inherits Rectangle {
     callback toggle-pause();
     callback restart();
     callback step-volume(int);
-    callback save-state();
-    callback load-state();
-    callback step-slot(int);
     callback toggle-fullscreen();
     callback take-screenshot();
     callback open-controllers();
@@ -248,6 +201,7 @@ component GameMenu inherits Rectangle {
     in property <string> achievements-label;
     in property <bool> hardcore;
     callback open-achievements();
+    callback open-slots();
 
     property <bool> keyboard: root.menu-key == "Esc";
 
@@ -349,31 +303,12 @@ component GameMenu inherits Rectangle {
                     clicked => { root.restart(); }
                 }
             }
-            HorizontalLayout {
-                padding-top: 4px;
-                spacing: 6px;
-                SlotChip {
-                    slot: root.slot;
-                    focused: root.focused-item == 3;
-                    step(d) => { root.step-slot(d); }
-                }
-                ChipButton {
-                    horizontal-stretch: 1;
-                    text: @tr("Save");
-                    icon: @image-url("icons/save.svg");
-                    shortcut: root.keyboard ? root.save-key : "";
-                    focused: root.focused-item == 4;
-                    clicked => { root.save-state(); }
-                }
-                ChipButton {
-                    horizontal-stretch: 1;
-                    text: @tr("Load");
-                    icon: @image-url("icons/load.svg");
-                    shortcut: root.keyboard ? root.load-key : "";
-                    focused: root.focused-item == 5;
-                    enabled: !root.hardcore;
-                    clicked => { root.load-state(); }
-                }
+            MenuRow {
+                text: @tr("Save states");
+                icon: @image-url("icons/save.svg");
+                shortcut: root.keyboard ? root.save-key + " / " + root.load-key : "";
+                focused: root.focused-item == 3;
+                clicked => { root.open-slots(); }
             }
             if root.hardcore: Text {
                 text: @tr("Hardcore mode: loading states is off.");
@@ -384,39 +319,39 @@ component GameMenu inherits Rectangle {
             Stepper {
                 label: @tr("Volume");
                 value: root.volume + "%";
-                focused: root.focused-item == 6;
+                focused: root.focused-item == 4;
                 step(d) => { root.step-volume(d); }
             }
             MenuRow {
                 text: root.fullscreen ? @tr("Exit full screen") : @tr("Full screen");
                 icon: root.fullscreen ? @image-url("icons/exit-fullscreen.svg") : @image-url("icons/fullscreen.svg");
                 shortcut: root.keyboard ? root.fullscreen-key : "";
-                focused: root.focused-item == 7;
+                focused: root.focused-item == 5;
                 clicked => { root.toggle-fullscreen(); }
             }
             MenuRow {
                 text: @tr("Take screenshot");
                 icon: @image-url("icons/camera.svg");
                 shortcut: root.keyboard ? root.screenshot-key : "";
-                focused: root.focused-item == 8;
+                focused: root.focused-item == 6;
                 clicked => { root.take-screenshot(); }
             }
             MenuRow {
                 text: root.has-achievements ? @tr("Achievements  ·  {}", root.achievements-label) : @tr("Achievements  ·  sign in under Settings");
                 icon: @image-url("icons/trophy.svg");
-                focused: root.focused-item == 9;
+                focused: root.focused-item == 7;
                 clicked => { root.open-achievements(); }
             }
             MenuRow {
                 text: @tr("Controllers…");
                 icon: @image-url("icons/gamepad.svg");
-                focused: root.focused-item == 10;
+                focused: root.focused-item == 8;
                 clicked => { root.open-controllers(); }
             }
             for port[i] in root.ports: Stepper {
                 label: port.label;
                 value: port.device;
-                focused: root.focused-item == 11 + i;
+                focused: root.focused-item == 9 + i;
                 step(d) => { root.cycle-port(i, d); }
             }
             MenuDivider { }
@@ -424,7 +359,7 @@ component GameMenu inherits Rectangle {
                 text: @tr("Quit game");
                 icon: @image-url("icons/quit.svg");
                 danger: true;
-                focused: root.focused-item == 11 + root.ports.length;
+                focused: root.focused-item == 9 + root.ports.length;
                 clicked => { root.quit(); }
             }
             Text {
@@ -435,6 +370,41 @@ component GameMenu inherits Rectangle {
                 wrap: word-wrap;
                 height: self.preferred-height + 6px;
                 vertical-alignment: bottom;
+            }
+        }
+    }
+}
+
+/// One save slot in the game menu: its picture, when it was saved, and what to do with it.
+component SlotTile inherits Rectangle {
+    in property <SlotCard> card;
+    in property <bool> focused;
+    in property <bool> hardcore;
+    callback save(int);
+    callback load(int);
+    horizontal-stretch: 1;
+    height: tile-box.preferred-height;
+    border-radius: 10px;
+    background: root.focused ? Theme.accent-soft : Theme.surface-muted;
+    border-width: root.focused ? 2px : 0px;
+    border-color: Theme.accent;
+    tile-box := VerticalLayout {
+        padding: 8px;
+        spacing: 6px;
+        SlotPicture { card: root.card; height: self.width * 0.62; }
+        HorizontalLayout {
+            spacing: 6px;
+            Text { text: root.card.label; font-weight: 700; font-size: Theme.font-body; color: Theme.text-strong; }
+            if root.card.current: Text { text: @tr("current"); font-size: Theme.font-caption; color: Theme.accent; vertical-alignment: center; }
+        }
+        Text { text: root.card.detail; font-size: Theme.font-small; color: Theme.text-muted; }
+        HorizontalLayout {
+            spacing: 6px;
+            Button { text: @tr("Save"); clicked => { root.save(root.card.slot); } }
+            Button {
+                text: @tr("Load");
+                enabled: !root.card.empty && !root.hardcore;
+                clicked => { root.load(root.card.slot); }
             }
         }
     }
@@ -470,9 +440,6 @@ export component GameWindow inherits Window {
     callback toggle-pause();
     callback restart();
     callback step-volume(int);
-    callback save-state();
-    callback load-state();
-    callback step-slot(int);
     callback toggle-fullscreen();
     callback take-screenshot();
     callback open-controllers();
@@ -480,6 +447,13 @@ export component GameWindow inherits Window {
     in property <image> frame;
     in property <float> aspect: 4 / 3;
     in property <string> status;
+    in property <bool> slots-open;
+    in property <[SlotCard]> slot-cards;
+    in property <int> slots-focus;
+    callback open-slots();
+    callback close-slots();
+    callback save-slot(int);
+    callback load-slot(int);
     in property <bool> hardcore;
     in property <[string]> trackers;
     in property <[image]> challenge-badges;
@@ -628,14 +602,12 @@ export component GameWindow inherits Window {
             achievements-label: root.achievements-label;
             hardcore: root.hardcore;
             open-achievements => { root.open-achievements(); }
+            open-slots => { root.open-slots(); }
             cycle-port(i, step) => { root.cycle-port(i, step); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
             restart => { root.restart(); }
             step-volume(d) => { root.step-volume(d); }
-            save-state => { root.save-state(); }
-            load-state => { root.load-state(); }
-            step-slot(d) => { root.step-slot(d); }
             toggle-fullscreen => { root.toggle-fullscreen(); }
             take-screenshot => { root.take-screenshot(); }
             open-controllers => { root.open-controllers(); }
@@ -677,6 +649,47 @@ export component GameWindow inherits Window {
                     background: Theme.scrim-strong;
                     border-radius: 6px;
                     tracker-text := Text { text: tracker; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
+                }
+            }
+        }
+
+        if root.slots-open: Rectangle {
+            background: Theme.scrim;
+            TouchArea { }
+            Rectangle {
+                width: min(parent.width - 32px, 560px);
+                height: min(parent.height - 32px, slots-box.preferred-height);
+                background: Theme.surface-raised;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+                clip: true;
+                slots-box := VerticalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            Text { text: @tr("Save states"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
+                            Text {
+                                text: root.hardcore ? @tr("Hardcore mode: you can save, but not load.") : @tr("A loads, X saves, B closes.");
+                                font-size: Theme.font-small;
+                                color: Theme.text-muted;
+                            }
+                        }
+                        Button { text: @tr("Close"); clicked => { root.close-slots(); } }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        SlotTile { card: root.slot-cards[0]; focused: root.slots-focus == 1; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[1]; focused: root.slots-focus == 2; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        SlotTile { card: root.slot-cards[2]; focused: root.slots-focus == 3; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[3]; focused: root.slots-focus == 4; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                    }
                 }
             }
         }

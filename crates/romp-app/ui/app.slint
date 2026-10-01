@@ -1,6 +1,7 @@
 import { Theme } from "theme.slint";
 import { FocusRing, KeyActivator } from "focus.slint";
 import { AchievementItem, AchievementRow } from "achievements.slint";
+import { SlotCard, SlotPicture } from "slots.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
@@ -895,6 +896,8 @@ component GamePage inherits FocusScope {
     in property <string> reason;
     in property <string> summary;
     in property <[Fact]> facts;
+    in property <[SlotCard]> save-slots;
+    callback play-slot(int);
     in property <[AchievementRow]> achievements;
     in property <string> achievements-summary;
     in property <int> achievements-hidden;
@@ -1150,6 +1153,34 @@ component GamePage inherits FocusScope {
                                 shot-keys := KeyActivator { activate => { root.viewing = i; } }
                                 if shot-touch.has-hover: Rectangle { background: Theme.hover; }
                                 if shot-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
+                            }
+                        }
+                    }
+                }
+                if root.save-slots.length > 0: VerticalLayout {
+                    spacing: 10px;
+                    SectionTitle { text: @tr("Save states"); }
+                    ScrollView {
+                        height: slot-row.preferred-height;
+                        content-width: slot-row.preferred-width;
+                        content-height: self.visible-height;
+                        slot-row := HorizontalLayout {
+                            spacing: 12px;
+                            padding-bottom: 6px;
+                            for card in root.save-slots: VerticalLayout {
+                                width: 200px;
+                                spacing: 6px;
+                                SlotPicture { card: card; height: 124px; }
+                                Text { text: card.label; font-weight: 700; font-size: Theme.font-body; color: Theme.text-strong; }
+                                Text { text: card.detail; font-size: Theme.font-small; color: Theme.text-muted; }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        text: @tr("Play from here");
+                                        enabled: root.downloaded && !root.busy;
+                                        clicked => { root.play-slot(card.slot); }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2009,6 +2040,8 @@ export component AppWindow inherits Window {
     in property <string> game-category;
     in property <string> game-subtitle;
     in property <string> game-reason;
+    in property <[SlotCard]> game-save-slots;
+    callback play-slot(int);
     in property <[AchievementRow]> game-achievements;
     in property <string> game-achievements-summary;
     in property <int> game-achievements-hidden;
@@ -2184,6 +2217,8 @@ export component AppWindow inherits Window {
             reason: root.game-reason;
             summary: root.game-summary;
             facts: root.game-facts;
+            save-slots: root.game-save-slots;
+            play-slot(slot) => { root.play-slot(slot); }
             achievements: root.game-achievements;
             achievements-summary: root.game-achievements-summary;
             achievements-hidden: root.game-achievements-hidden;

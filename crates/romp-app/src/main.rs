@@ -38,6 +38,7 @@ mod saves;
 mod scale;
 mod screenshot;
 mod session;
+mod slots;
 mod storage;
 mod store;
 mod sync;

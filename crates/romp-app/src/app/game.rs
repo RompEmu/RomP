@@ -127,6 +127,7 @@ impl Controller {
         self.load_game_cover(&detail);
         self.load_screenshots(&detail, offset);
         self.load_game_achievements(&detail);
+        self.show_save_slots(&detail);
         self.load_similar(id);
     }
 
@@ -498,6 +499,12 @@ impl Controller {
     }
 
     pub(super) fn play_game(&self) {
+        self.play_game_from(None);
+    }
+
+    /// Plays the current game, from a save slot when one is given.
+    pub(super) fn play_game_from(&self, slot: Option<u8>) {
+        self.requested_slot.set(slot);
         let Some(ui) = self.ui() else { return };
         let Some(detail) = self.current_game() else {
             return;
@@ -895,11 +902,14 @@ impl Controller {
             .is_some_and(|core| crate::cores::resumes_reliably(core.id));
         let achievements = self.achievements_launch(&detail);
         let hardcore = achievements.as_ref().is_some_and(|a| a.hardcore);
-        let load_slot = (reliable
-            && prefs.resume
-            && !hardcore
-            && save_dir.join(crate::saves::AUTO_STATE).exists())
-        .then_some(0);
+        let requested = self.requested_slot.take().filter(|_| !hardcore);
+        let load_slot = requested.or_else(|| {
+            (reliable
+                && prefs.resume
+                && !hardcore
+                && save_dir.join(crate::saves::AUTO_STATE).exists())
+            .then_some(0)
+        });
         let options = GameOptions {
             core,
             rom,
@@ -990,6 +1000,12 @@ impl Controller {
         self.end_session();
         self.save_players();
         let playing = self.playing.borrow_mut().take();
+        if let Some(detail) = playing
+            .as_ref()
+            .filter(|d| self.current_game().map(|g| g.id) == Some(d.id))
+        {
+            self.show_save_slots(detail);
+        }
         if identity.is_some() {
             self.send_pending_unlocks();
             self.refresh_romm_achievements();

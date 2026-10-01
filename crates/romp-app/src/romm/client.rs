@@ -622,9 +622,16 @@ impl Client {
         emulator: &str,
         file_name: &str,
         bytes: Vec<u8>,
+        picture: Option<(String, Vec<u8>)>,
     ) -> Result<RemoteState, Error> {
         let part = reqwest::multipart::Part::bytes(bytes).file_name(file_name.to_string());
-        let form = reqwest::multipart::Form::new().part("stateFile", part);
+        let mut form = reqwest::multipart::Form::new().part("stateFile", part);
+        if let Some((name, png)) = picture {
+            form = form.part(
+                "screenshotFile",
+                reqwest::multipart::Part::bytes(png).file_name(name),
+            );
+        }
         let resp = self
             .send(
                 self.request(reqwest::Method::POST, "/api/states")
@@ -636,6 +643,11 @@ impl Client {
             )
             .await?;
         resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    pub async fn download_screenshot(&self, id: i64) -> Result<Vec<u8>, Error> {
+        self.fetch_bytes(&format!("/api/screenshots/{id}/content"))
+            .await
     }
 
     pub async fn download_state(&self, id: i64) -> Result<Vec<u8>, Error> {
@@ -1490,7 +1502,7 @@ pub(crate) mod tests {
         assert_eq!(client.states(5).await.unwrap()[0].id, 3);
         assert_eq!(
             client
-                .upload_state(5, "snes9x", "slot-1.snes9x.1.63.state", b"S".to_vec())
+                .upload_state(5, "snes9x", "slot-1.snes9x.1.63.state", b"S".to_vec(), None)
                 .await
                 .unwrap()
                 .id,
