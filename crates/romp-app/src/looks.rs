@@ -145,7 +145,8 @@ pub fn has_tuning(look: Look) -> bool {
 /// The shader preset for a look on a console, relative to the bundled shaders, or None for no shader.
 pub fn preset(look: Look, platform: &str) -> Option<&'static str> {
     match look {
-        Look::Sharp | Look::Smooth => None,
+        Look::Sharp => Some("pixel-art-scaling/sharp-shimmerless.slangp"),
+        Look::Smooth => None,
         Look::Crt => Some("crt/crt-guest-advanced.slangp"),
         Look::Handheld => Some(match platform {
             "gb" => "handheld/gameboy.slangp",
@@ -287,7 +288,7 @@ mod tests {
             preset(Look::Handheld, "psp"),
             Some("handheld/lcd-grid-v2.slangp")
         );
-        assert_eq!(preset(Look::Sharp, "snes"), None);
+        assert_eq!(preset(Look::Smooth, "snes"), None);
     }
 
     #[test]
@@ -336,7 +337,7 @@ mod tests {
     #[test]
     fn every_bundled_preset_exists() {
         let shaders = Path::new(env!("CARGO_MANIFEST_DIR")).join("shaders");
-        for platform in ["snes", "gb", "gbc", "gba", "psp"] {
+        for platform in ["snes", "arcade", "gb", "gbc", "gba", "psp"] {
             for (look, _) in LOOKS {
                 if let Some(p) = preset(look, platform) {
                     assert!(shaders.join(p).is_file(), "{p} is not bundled");
