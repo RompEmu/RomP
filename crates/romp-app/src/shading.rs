@@ -11,8 +11,7 @@ pub struct Shading {
     preset: Option<PathBuf>,
     params: Vec<(String, f32)>,
     gl: Option<Arc<glow::Context>>,
-    chain: Option<FilterChain>,
-    chain_for: Option<PathBuf>,
+    chains: std::collections::HashMap<PathBuf, Option<FilterChain>>,
     input: Option<(glow::Texture, u32, u32)>,
     output: Option<(glow::Texture, u32, u32)>,
     read_fbo: Option<glow::Framebuffer>,
@@ -147,8 +146,7 @@ impl Shading {
     }
 
     pub fn teardown(&mut self) {
-        self.chain = None;
-        self.chain_for = None;
+        self.chains.clear();
         if let Some(gl) = &self.gl {
             unsafe {
                 if let Some((t, ..)) = self.input.take() {
@@ -165,21 +163,30 @@ impl Shading {
         self.gl = None;
     }
 
+    /// Builds a preset once and keeps it, so switching back to a look is instant.
     fn load(&mut self, gl: &Arc<glow::Context>, preset: &Path) -> bool {
-        if self.chain_for.as_deref() == Some(preset) {
-            return self.chain.is_some();
+        self.chains
+            .entry(preset.to_path_buf())
+            .or_insert_with(|| {
+                match unsafe {
+                    FilterChain::load_from_path(preset, ShaderFeatures::NONE, gl.clone(), None)
+                } {
+                    Ok(chain) => Some(chain),
+                    Err(e) => {
+                        tracing::warn!("shader {} could not load: {e}", preset.display());
+                        None
+                    }
+                }
+            })
+            .is_some()
+    }
+
+    unsafe fn clear_opaque(gl: &glow::Context) {
+        unsafe {
+            gl.disable(glow::SCISSOR_TEST);
+            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            gl.clear(glow::COLOR_BUFFER_BIT);
         }
-        self.chain_for = Some(preset.to_path_buf());
-        self.chain = match unsafe {
-            FilterChain::load_from_path(preset, ShaderFeatures::NONE, gl.clone(), None)
-        } {
-            Ok(chain) => Some(chain),
-            Err(e) => {
-                tracing::warn!("shader {} could not load: {e}", preset.display());
-                None
-            }
-        };
-        self.chain.is_some()
     }
 
     unsafe fn texture(gl: &glow::Context, width: u32, height: u32) -> glow::Texture {
@@ -202,19 +209,25 @@ impl Shading {
         let (Some(gl), Some(preset)) = (self.gl.clone(), self.preset.clone()) else {
             return false;
         };
-        if self.failed || self.frame_size.0 == 0 {
+        if self.failed {
             return false;
         }
         if !self.load(&gl, &preset) {
             self.failed = true;
             return false;
         }
+        if self.frame_size.0 == 0 {
+            unsafe {
+                let saved = SavedState::save(&gl);
+                Self::clear_opaque(&gl);
+                saved.restore(&gl);
+            }
+            return true;
+        }
         let (x, y, width, height) = game_rect(window, self.aspect);
         unsafe {
             let saved = SavedState::save(&gl);
-            gl.disable(glow::SCISSOR_TEST);
-            gl.clear_color(0.0, 0.0, 0.0, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
+            Self::clear_opaque(&gl);
 
             let (fw, fh) = self.frame_size;
             if self.input.is_none_or(|(_, w, h)| (w, h) != (fw, fh)) {
@@ -250,7 +263,11 @@ impl Shading {
                 self.output = Some((Self::texture(&gl, width, height), width, height));
             }
             let output = self.output.expect("output texture").0;
-            let chain = self.chain.as_mut().expect("chain loaded");
+            let chain = self
+                .chains
+                .get_mut(&preset)
+                .and_then(Option::as_mut)
+                .expect("chain loaded");
             for (name, value) in &self.params {
                 chain.parameters().set_parameter_value(name, *value);
             }
@@ -304,6 +321,11 @@ impl Shading {
                     glow::NEAREST,
                 );
             }
+            // Shaders may leave alpha at zero, which a see-through window would show the desktop through.
+            gl.color_mask(false, false, false, true);
+            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            gl.clear(glow::COLOR_BUFFER_BIT);
+            gl.color_mask(true, true, true, true);
             saved.restore(&gl);
             drawn.is_ok()
         }

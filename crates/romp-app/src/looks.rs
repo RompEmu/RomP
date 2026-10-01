@@ -112,7 +112,7 @@ pub fn default_tuning(look: Look) -> Tuning {
     match look {
         Look::CrtMonitor => Tuning {
             curvature: 0,
-            scanlines: 2,
+            scanlines: 1,
             mask: 1,
         },
         _ => Tuning {
@@ -161,39 +161,87 @@ pub fn preset(look: Look, platform: &str) -> Option<&'static str> {
     }
 }
 
-/// The shader's own settings for a CRT look's steps.
+/// What sets each CRT look apart, before the player's curvature, scanline and mask steps.
+fn character(look: Look) -> &'static [(&'static str, f32)] {
+    match look {
+        // A home TV over composite: soft, glowing, with a slot mask and darker edges.
+        Look::CrtTv => &[
+            ("glow", 0.12),
+            ("halation", 0.15),
+            ("shadowMask", 0.0),
+            ("vigstr", 0.25),
+            ("brightboost", 1.5),
+        ],
+        // A studio monitor over RGB: sharp, flat, with an aperture grille and no glow.
+        Look::CrtMonitor => &[
+            ("h_sharp", 8.0),
+            ("s_sharp", 1.0),
+            ("glow", 0.0),
+            ("halation", 0.0),
+            ("shadowMask", 6.0),
+            ("slotmask", 0.0),
+            ("slotmask1", 0.0),
+            ("vigstr", 0.0),
+            ("gsl", 1.0),
+            ("brightboost", 1.8),
+            ("brightboost1", 1.2),
+        ],
+        _ => &[],
+    }
+}
+
+/// The shader's own settings for a look and its curvature, scanline and mask steps.
 pub fn params(choice: &Choice) -> Vec<(String, f32)> {
     if !has_tuning(choice.look) {
         return Vec::new();
     }
+    let tv = choice.look == Look::CrtTv;
     let t = choice.tuning;
     let (warp_x, warp_y, corner) = match t.curvature {
         0 => (0.0, 0.0, 0.0),
         1 => (0.03, 0.04, 0.02),
         _ => (0.06, 0.08, 0.04),
     };
-    let (beam_min, beam_max) = match t.scanlines {
-        0 => (1.0, 0.8),
-        1 => (1.3, 1.0),
-        _ => (2.0, 1.3),
+    let (beam_min, beam_max) = match (tv, t.scanlines) {
+        (true, 0) => (1.0, 0.8),
+        (true, 1) => (1.2, 0.9),
+        (true, _) => (1.6, 1.1),
+        (false, 0) => (1.3, 1.0),
+        (false, 1) => (1.6, 1.2),
+        (false, _) => (2.2, 1.4),
     };
-    let (mask_strength, mask_boost) = match t.mask {
-        0 => (0.0, 1.0),
-        1 => (0.3, 1.0),
-        _ => (0.6, 1.3),
+    let mask = match (tv, t.mask) {
+        (_, 0) => 0.0,
+        (true, 1) => 0.3,
+        (true, _) => 0.5,
+        (false, 1) => 0.45,
+        (false, _) => 0.7,
     };
-    [
-        ("warpX", warp_x),
-        ("warpY", warp_y),
-        ("csize", corner),
-        ("beam_min", beam_min),
-        ("beam_max", beam_max),
-        ("maskstr", mask_strength),
-        ("maskboost", mask_boost),
-    ]
-    .into_iter()
-    .map(|(name, value)| (name.to_string(), value))
-    .collect()
+    let mut params: Vec<(String, f32)> = character(choice.look)
+        .iter()
+        .map(|(name, value)| ((*name).to_string(), *value))
+        .collect();
+    let slot = if tv {
+        f32::from(t.mask.min(2)) * 0.3
+    } else {
+        0.0
+    };
+    params.extend(
+        [
+            ("warpX", warp_x),
+            ("warpY", warp_y),
+            ("csize", corner),
+            ("beam_min", beam_min),
+            ("beam_max", beam_max),
+            ("maskstr", mask),
+            ("slotmask", slot),
+            ("slotmask1", slot),
+        ]
+        .into_iter()
+        .filter(|(name, _)| tv || !name.starts_with("slotmask"))
+        .map(|(name, value)| (name.to_string(), value)),
+    );
+    params
 }
 
 /// The shader to draw a console with under this choice, from `shaders`, with its settings.
@@ -252,12 +300,24 @@ mod tests {
                 mask: 0,
             },
         };
-        let params = params(&flat);
-        let get = |name: &str| params.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
+        let monitor = params(&flat);
+        let get = |name: &str| monitor.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
         assert_eq!(get("warpX"), Some(0.0));
-        assert_eq!(get("beam_min"), Some(2.0));
+        assert_eq!(get("beam_min"), Some(2.2));
         assert_eq!(get("maskstr"), Some(0.0));
-        assert!(super::params(&Choice {
+        assert_eq!(
+            get("shadowMask"),
+            Some(6.0),
+            "a monitor has an aperture grille"
+        );
+        let tv = params(&Choice {
+            look: Look::CrtTv,
+            tuning: default_tuning(Look::CrtTv),
+        });
+        let tv_get = |name: &str| tv.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
+        assert_eq!(tv_get("slotmask"), Some(0.3), "a TV has a slot mask");
+        assert!(tv_get("glow").unwrap() > get("glow").unwrap());
+        assert!(params(&Choice {
             look: Look::Sharp,
             tuning: default_tuning(Look::Sharp)
         })

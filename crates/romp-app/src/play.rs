@@ -1520,8 +1520,8 @@ fn show_frame(
     height: u32,
     aspect: f32,
 ) {
+    shading.borrow_mut().set_frame(rgba, width, height, aspect);
     if shading.borrow().active() {
-        shading.borrow_mut().set_frame(rgba, width, height, aspect);
         window.window().request_redraw();
         return;
     }
