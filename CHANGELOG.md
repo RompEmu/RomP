@@ -4,12 +4,19 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-01
+
 ### Added
 
-- RetroAchievements. Sign in under Settings → Account, and games with achievements show a popup with the badge when you earn one, and tell you when a leaderboard attempt starts or is submitted. Romp keeps RetroAchievements' sign-in token in the keychain, not your password, and only the app talks to RetroAchievements, never the sandboxed emulator.
-- An Achievements list in the game menu while playing, and an Achievements section on each game's page with every badge and what you've earned, from RetroAchievements when you're signed in and from RomM otherwise. After you play, RomM refreshes your RetroAchievements progress.
-- Hardcore mode for RetroAchievements, under Settings → Account. While it's on, games start fresh and save states can't be loaded, and emulator settings RetroAchievements doesn't allow turn it off for that game with a note saying why. Leaderboard counters, challenge icons and progress toward an achievement show in the corner of the game window, and save states remember achievement progress.
-- Achievements earned while RetroAchievements can't be reached are kept and sent later, even after Romp restarts, with the time they were earned.
+- RetroAchievements. Sign in under Settings → Account to earn achievements as you play, with a popup and badge for each unlock. Romp keeps RetroAchievements' sign-in token in the keychain, never your password, and only the app talks to RetroAchievements, never the sandboxed emulator.
+- An Achievements list in the game menu, and an Achievements section on each game's page with every badge and what you've earned.
+- Leaderboards, with a counter in the corner of the game window during an attempt, along with challenge icons and progress toward an achievement.
+- Hardcore mode, under Settings → Account. While it's on, games start fresh and save states can't be loaded, and an emulator setting RetroAchievements doesn't allow turns it off for that game with a note saying why. RetroAchievements counts hardcore unlocks from Romp once it has reviewed Romp; until then they count as casual.
+- Save states remember achievement progress, and achievements earned while RetroAchievements can't be reached are sent later, even after Romp restarts.
+
+### Changed
+
+- After you play, RomM refreshes your RetroAchievements progress. If you're signed in to RetroAchievements, Romp asks you once to pair again with RomM for the permission this needs.
 
 ## [0.7.0] - 2026-09-30
 
@@ -122,7 +129,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/RompEmu/RompEmu/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/RompEmu/RompEmu/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/RompEmu/RompEmu/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/RompEmu/RompEmu/compare/v0.4.0...v0.5.0
