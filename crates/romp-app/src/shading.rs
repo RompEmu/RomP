@@ -43,11 +43,15 @@ pub fn game_size(window: (u32, u32), aspect: f32) -> (u32, u32) {
     )
 }
 
+/// The texture units a shader pass may bind its inputs and samplers to.
+const TEXTURE_UNITS: u32 = 16;
+
+/// The OpenGL state the window's own drawing relies on, put back after the shader runs.
 struct SavedState {
     program: Option<glow::Program>,
     vertex_array: Option<glow::VertexArray>,
     array_buffer: Option<glow::Buffer>,
-    texture: Option<glow::Texture>,
+    units: Vec<(Option<glow::Texture>, Option<glow::Sampler>)>,
     active_texture: u32,
     read_framebuffer: Option<glow::Framebuffer>,
     draw_framebuffer: Option<glow::Framebuffer>,
@@ -81,11 +85,21 @@ impl SavedState {
                 )
                 .map(glow::NativeBuffer),
                 active_texture: gl.get_parameter_i32(glow::ACTIVE_TEXTURE) as u32,
-                texture: {
-                    gl.active_texture(glow::TEXTURE0);
-                    std::num::NonZeroU32::new(gl.get_parameter_i32(glow::TEXTURE_BINDING_2D) as u32)
-                        .map(glow::NativeTexture)
-                },
+                units: (0..TEXTURE_UNITS)
+                    .map(|unit| {
+                        gl.active_texture(glow::TEXTURE0 + unit);
+                        (
+                            std::num::NonZeroU32::new(
+                                gl.get_parameter_i32(glow::TEXTURE_BINDING_2D) as u32,
+                            )
+                            .map(glow::NativeTexture),
+                            std::num::NonZeroU32::new(
+                                gl.get_parameter_i32(glow::SAMPLER_BINDING) as u32
+                            )
+                            .map(glow::NativeSampler),
+                        )
+                    })
+                    .collect(),
                 read_framebuffer: framebuffer_binding(gl, glow::READ_FRAMEBUFFER_BINDING),
                 draw_framebuffer: framebuffer_binding(gl, glow::DRAW_FRAMEBUFFER_BINDING),
                 unpack_alignment: gl.get_parameter_i32(glow::UNPACK_ALIGNMENT),
@@ -101,8 +115,11 @@ impl SavedState {
             gl.use_program(self.program);
             gl.bind_vertex_array(self.vertex_array);
             gl.bind_buffer(glow::ARRAY_BUFFER, self.array_buffer);
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, self.texture);
+            for (unit, (texture, sampler)) in (0..).zip(&self.units) {
+                gl.active_texture(glow::TEXTURE0 + unit);
+                gl.bind_texture(glow::TEXTURE_2D, *texture);
+                gl.bind_sampler(unit, *sampler);
+            }
             gl.active_texture(self.active_texture);
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, self.read_framebuffer);
             gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, self.draw_framebuffer);
@@ -218,14 +235,15 @@ impl Shading {
         if self.failed || self.frame_size.0 == 0 {
             return None;
         }
-        if !self.load(&gl, &preset) {
-            self.failed = true;
-            return None;
-        }
         let (width, height) = game_size(window, self.aspect);
         let (fw, fh) = self.frame_size;
         unsafe {
             let saved = SavedState::save(&gl);
+            if !self.load(&gl, &preset) {
+                saved.restore(&gl);
+                self.failed = true;
+                return None;
+            }
             if self.input.is_none_or(|(_, w, h)| (w, h) != (fw, fh)) {
                 if let Some((t, ..)) = self.input.take() {
                     gl.delete_texture(t);
