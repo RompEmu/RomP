@@ -511,14 +511,14 @@ mod tests {
         let names = |choice: &Choice, platform| {
             stages(choice, platform, shaders)
                 .into_iter()
-                .map(|s| (s.preset.to_string_lossy().into_owned(), s.to_screen))
+                .map(|s| (s.preset, s.to_screen))
                 .collect::<Vec<_>>()
         };
         assert_eq!(
             names(&choice, "genesis"),
             [
-                ("shaders/dithering/mdapt.slangp".into(), false),
-                ("shaders/crt/crt-guest-advanced.slangp".into(), true),
+                (shaders.join("dithering/mdapt.slangp"), false),
+                (shaders.join("crt/crt-guest-advanced.slangp"), true),
             ]
         );
         assert!(rows(&choice, "genesis").contains(&Row::Dithering));
