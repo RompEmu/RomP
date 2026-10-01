@@ -11,6 +11,10 @@ pub struct Preferences {
     pub sharp_pixels: bool,
     pub volume: u8,
     pub ui_scale: u8,
+    /// How much RetroAchievements shows over games: an index into `popups::LEVELS`.
+    pub achievement_popups: u8,
+    /// Where it shows it: an index into `popups::CORNERS`.
+    pub achievement_corner: u8,
 }
 
 impl Default for Preferences {
@@ -22,6 +26,8 @@ impl Default for Preferences {
             sharp_pixels: true,
             volume: 100,
             ui_scale: 100,
+            achievement_popups: 1,
+            achievement_corner: 0,
         }
     }
 }
@@ -35,6 +41,8 @@ impl Preferences {
         if !UI_SCALES.contains(&prefs.ui_scale) {
             prefs.ui_scale = 100;
         }
+        prefs.achievement_popups = prefs.achievement_popups.min(2);
+        prefs.achievement_corner = prefs.achievement_corner.min(3);
         prefs
     }
 

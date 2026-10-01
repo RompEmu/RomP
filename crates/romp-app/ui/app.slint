@@ -1358,6 +1358,8 @@ component SettingsPage inherits FocusScope {
     in-out property <string> ra-username-input;
     in-out property <string> ra-password-input;
     in-out property <bool> ra-hardcore;
+    in-out property <int> achievement-popups;
+    in-out property <int> achievement-corner;
     callback ra-sign-in(string, string);
     callback ra-sign-out();
     callback ra-hardcore-changed();
@@ -1514,6 +1516,28 @@ component SettingsPage inherits FocusScope {
                                 label: @tr("Hardcore mode");
                                 detail: @tr("Earns hardcore achievements. Loading save states and continuing where you left off are off while it's on. Takes effect the next time you start a game.");
                                 Switch { checked <=> root.ra-hardcore; toggled => { root.ra-hardcore-changed(); } }
+                            }
+                            if root.ra-signed-in: SettingRow {
+                                divider: true;
+                                label: @tr("Popups while playing");
+                                detail: @tr("Quiet shows unlocks and keeps progress to milestones. Everything else, or everything when off, is a brief note in the corner.");
+                                ComboBox {
+                                    width: 150px;
+                                    model: [@tr("All"), @tr("Quiet"), @tr("Off")];
+                                    current-index <=> root.achievement-popups;
+                                    selected => { root.prefs-changed(); }
+                                }
+                            }
+                            if root.ra-signed-in: SettingRow {
+                                divider: true;
+                                label: @tr("Popup corner");
+                                detail: @tr("Where popups and notes appear over the game.");
+                                ComboBox {
+                                    width: 150px;
+                                    model: [@tr("Top right"), @tr("Top left"), @tr("Bottom right"), @tr("Bottom left")];
+                                    current-index <=> root.achievement-corner;
+                                    selected => { root.prefs-changed(); }
+                                }
                             }
                             if !root.ra-signed-in: SettingRow {
                                 label: @tr("Sign in");
@@ -2027,6 +2051,8 @@ export component AppWindow inherits Window {
     in-out property <bool> pref-resume;
     in-out property <bool> pref-fullscreen;
     in-out property <float> pref-volume;
+    in-out property <int> pref-achievement-popups;
+    in-out property <int> pref-achievement-corner;
     in-out property <int> pref-ui-scale;
     callback prefs-changed();
     in-out property <bool> pref-nintendo-labels;
@@ -2293,6 +2319,8 @@ export component AppWindow inherits Window {
             ra-username-input <=> root.ra-username-input;
             ra-password-input <=> root.ra-password-input;
             ra-hardcore <=> root.ra-hardcore;
+            achievement-popups <=> root.pref-achievement-popups;
+            achievement-corner <=> root.pref-achievement-corner;
             ra-hardcore-changed => { root.ra-hardcore-changed(); }
             ra-sign-in(user, password) => { root.ra-sign-in(user, password); }
             ra-sign-out => { root.ra-sign-out(); }

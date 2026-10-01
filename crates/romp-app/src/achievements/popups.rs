@@ -116,6 +116,91 @@ pub fn toast_for(event: &AchievementEvent) -> Option<Toast> {
     })
 }
 
+/// How much RetroAchievements may show over the game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Level {
+    All,
+    Quiet,
+    Off,
+}
+
+pub const LEVELS: [&str; 3] = ["All", "Quiet", "Off"];
+pub const CORNERS: [&str; 4] = ["Top right", "Top left", "Bottom right", "Bottom left"];
+
+impl Level {
+    pub fn from_index(index: u8) -> Self {
+        match index {
+            0 => Self::All,
+            1 => Self::Quiet,
+            _ => Self::Off,
+        }
+    }
+}
+
+/// How something that happened is shown: as a popup, or only as a brief note in the corner.
+#[derive(Debug, Clone, PartialEq)]
+enum Shown {
+    Popup(Toast),
+    Chip(String),
+}
+
+/// Whether an event is worth interrupting the game for even when popups are quiet.
+fn matters(event: &AchievementEvent) -> bool {
+    matches!(
+        event,
+        AchievementEvent::Unlocked { .. }
+            | AchievementEvent::Mastered
+            | AchievementEvent::SignInFailed(_)
+            | AchievementEvent::HardcoreOff(_)
+    )
+}
+
+fn shown(event: &AchievementEvent, level: Level) -> Option<Shown> {
+    let toast = toast_for(event)?;
+    Some(match level {
+        Level::All => Shown::Popup(toast),
+        Level::Quiet if matters(event) => Shown::Popup(toast),
+        _ => Shown::Chip(toast.title),
+    })
+}
+
+/// Which quarter of the way an achievement's progress is, from texts like "34/100" or "34%".
+fn quarter(progress: &str) -> Option<u8> {
+    let text = progress.replace(',', "");
+    let text = text.trim();
+    let (done, total) = match text.strip_suffix('%') {
+        Some(percent) => (percent.trim().parse::<f64>().ok()?, 100.0),
+        None => {
+            let (a, b) = text.split_once('/')?;
+            (a.trim().parse::<f64>().ok()?, b.trim().parse::<f64>().ok()?)
+        }
+    };
+    (total > 0.0).then(|| ((done / total * 4.0).floor() as i64).clamp(0, 4) as u8)
+}
+
+/// How often quiet popups may show the same achievement's progress.
+const PROGRESS_EVERY: Duration = Duration::from_secs(60);
+
+/// Whether progress is shown, given when and at which quarter it last was.
+fn progress_due(
+    level: Level,
+    last: Option<(Option<u8>, Instant)>,
+    progress: &str,
+    now: Instant,
+) -> bool {
+    if level == Level::All {
+        return true;
+    }
+    let rested = last.is_none_or(|(_, at)| now.duration_since(at) >= PROGRESS_EVERY);
+    match quarter(progress) {
+        Some(q) => {
+            let passed = last.and_then(|(q, _)| q).unwrap_or(0);
+            (1..=3).contains(&q) && q > passed && rested
+        }
+        None => rested,
+    }
+}
+
 enum Update {
     Reply {
         id: u64,
@@ -146,7 +231,14 @@ pub struct Link {
     challenges: BTreeMap<u32, String>,
     progress: Option<(String, String, String, Instant)>,
     overlay_changed: bool,
+    level: Level,
+    progress_shown: HashMap<String, (Option<u8>, Instant)>,
+    chip: Option<(String, Instant)>,
+    session: HashMap<String, String>,
 }
+
+const CHIP_SHOWN: Duration = Duration::from_millis(2500);
+const UNLOCKED: &str = "Unlocked while playing";
 
 const PROGRESS_SHOWN: Duration = Duration::from_secs(3);
 
@@ -171,7 +263,21 @@ impl Link {
             challenges: BTreeMap::new(),
             progress: None,
             overlay_changed: false,
+            level: Level::Quiet,
+            progress_shown: HashMap::new(),
+            chip: None,
+            session: HashMap::new(),
         }
+    }
+
+    pub fn set_level(&mut self, level: Level) {
+        self.level = level;
+        self.overlay_changed = true;
+    }
+
+    /// What happened to an achievement while playing, by its title: unlocked, or how far along.
+    pub fn session_note(&self, title: &str) -> Option<&str> {
+        self.session.get(title).map(String::as_str)
     }
 
     pub fn start_message(&self) -> AppMsg {
@@ -255,13 +361,22 @@ impl Link {
                 badge_url,
                 progress,
             } => {
+                if !self.session.get(title).is_some_and(|n| n == UNLOCKED) {
+                    self.session.insert(title.clone(), progress.clone());
+                }
+                let now = Instant::now();
+                let last = self.progress_shown.get(title).copied();
+                if !progress_due(self.level, last, progress, now) {
+                    return;
+                }
+                self.progress_shown
+                    .insert(title.clone(), (quarter(progress), now));
+                if self.level == Level::Off {
+                    self.chip = Some((format!("{progress} · {title}"), now));
+                    return;
+                }
                 self.want_badge(badge_url);
-                self.progress = Some((
-                    title.clone(),
-                    progress.clone(),
-                    badge_url.clone(),
-                    Instant::now(),
-                ));
+                self.progress = Some((title.clone(), progress.clone(), badge_url.clone(), now));
             }
             AchievementEvent::ProgressHidden => self.progress = None,
             AchievementEvent::Reset => {
@@ -287,6 +402,9 @@ impl Link {
         if !std::mem::take(&mut self.overlay_changed) {
             return None;
         }
+        if self.level == Level::Off {
+            return Some(Overlay::default());
+        }
         Some(Overlay {
             trackers: self.trackers.values().cloned().collect(),
             challenges: self
@@ -307,13 +425,21 @@ impl Link {
 
     pub fn event(&mut self, event: &AchievementEvent) {
         self.indicate(event);
-        let Some(toast) = toast_for(event) else {
-            return;
-        };
-        if let Some(url) = toast.badge_url.clone() {
-            self.want_badge(&url);
+        if let AchievementEvent::Unlocked { id, title, .. } = event {
+            if !super::is_notice(*id) {
+                self.session.insert(title.clone(), UNLOCKED.into());
+            }
         }
-        self.queue.push_back(toast);
+        match shown(event, self.level) {
+            Some(Shown::Popup(toast)) => {
+                if let Some(url) = toast.badge_url.clone() {
+                    self.want_badge(&url);
+                }
+                self.queue.push_back(toast);
+            }
+            Some(Shown::Chip(text)) => self.chip = Some((text, Instant::now())),
+            None => {}
+        }
     }
 
     /// Replies for the runner, the popup to show now, and whether new badges arrived.
@@ -343,6 +469,14 @@ impl Link {
         if expired || self.showing.is_none() {
             self.showing = self.queue.pop_front().map(|t| (t, now));
         }
+        if self
+            .chip
+            .as_ref()
+            .is_some_and(|(_, since)| now.duration_since(*since) >= CHIP_SHOWN)
+        {
+            self.chip = None;
+        }
+        polled.chip = self.chip.as_ref().map(|(text, _)| text.clone());
         polled.view = self.showing.as_ref().map(|(t, _)| View {
             title: t.title.clone(),
             detail: t.detail.clone(),
@@ -357,6 +491,8 @@ pub struct Polled {
     pub replies: Vec<AppMsg>,
     pub view: Option<View>,
     pub new_badges: bool,
+    /// A brief note to show in the corner instead of a popup.
+    pub chip: Option<String>,
 }
 
 async fn fetch_badge(http: &reqwest::Client, url: &str) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
@@ -407,6 +543,108 @@ mod tests {
             "Hardcore unlocks cannot be earned using this emulator."
         );
         assert_eq!(t.badge_url, None);
+    }
+
+    fn unlock() -> AchievementEvent {
+        AchievementEvent::Unlocked {
+            id: 1,
+            title: "Ring Collector".into(),
+            description: "Collect 100 rings".into(),
+            points: 5,
+            badge_url: String::new(),
+        }
+    }
+
+    #[test]
+    fn quiet_popups_keep_unlocks_and_shrink_the_rest() {
+        let loaded = AchievementEvent::GameLoaded {
+            title: "Sonic".into(),
+            achievements: 3,
+        };
+        assert!(matches!(
+            shown(&unlock(), Level::Quiet),
+            Some(Shown::Popup(_))
+        ));
+        assert!(matches!(shown(&loaded, Level::All), Some(Shown::Popup(_))));
+        assert_eq!(
+            shown(&loaded, Level::Quiet),
+            Some(Shown::Chip("RetroAchievements".into()))
+        );
+        assert_eq!(
+            shown(&unlock(), Level::Off),
+            Some(Shown::Chip("Unlocked: Ring Collector".into()))
+        );
+        assert_eq!(shown(&AchievementEvent::SignedIn, Level::All), None);
+    }
+
+    #[test]
+    fn progress_reads_as_quarters() {
+        assert_eq!(quarter("34/100"), Some(1));
+        assert_eq!(quarter("1,500/2,000"), Some(3));
+        assert_eq!(quarter("50%"), Some(2));
+        assert_eq!(quarter("0/10"), Some(0));
+        assert_eq!(quarter("10/10"), Some(4));
+        assert_eq!(quarter("Level 3"), None);
+    }
+
+    #[test]
+    fn quiet_progress_shows_only_new_milestones_at_most_once_a_minute() {
+        let start = Instant::now();
+        let later = |secs| start + Duration::from_secs(secs);
+        assert!(progress_due(
+            Level::All,
+            Some((Some(1), start)),
+            "26/100",
+            start
+        ));
+        assert!(
+            !progress_due(Level::Quiet, None, "3/100", start),
+            "not a milestone yet"
+        );
+        assert!(progress_due(Level::Quiet, None, "25/100", start));
+        let shown = Some((Some(1), start));
+        assert!(
+            !progress_due(Level::Quiet, shown, "30/100", later(120)),
+            "same quarter"
+        );
+        assert!(
+            !progress_due(Level::Quiet, shown, "50/100", later(30)),
+            "too soon"
+        );
+        assert!(progress_due(Level::Quiet, shown, "50/100", later(61)));
+        assert!(
+            !progress_due(Level::Quiet, shown, "100/100", later(61)),
+            "the unlock says it"
+        );
+        assert!(progress_due(Level::Off, None, "Level 3", start));
+        assert!(!progress_due(
+            Level::Off,
+            Some((None, start)),
+            "Level 4",
+            later(10)
+        ));
+    }
+
+    #[test]
+    fn quiet_links_note_minor_events_in_the_corner_and_remember_the_session() {
+        let (mut link, _rt) = link();
+        let start = Instant::now();
+        link.event(&AchievementEvent::Online);
+        link.event(&unlock());
+        let polled = link.poll(start);
+        assert_eq!(
+            polled.view.map(|v| v.title).as_deref(),
+            Some("Unlocked: Ring Collector")
+        );
+        assert_eq!(polled.chip.as_deref(), Some("RetroAchievements is back"));
+        assert_eq!(link.poll(start + Duration::from_secs(3)).chip, None);
+        assert_eq!(link.session_note("Ring Collector"), Some(UNLOCKED));
+        link.set_level(Level::Off);
+        link.event(&AchievementEvent::Tracker {
+            id: 1,
+            display: "0:42".into(),
+        });
+        assert!(link.overlay(start).is_some_and(|o| o.trackers.is_empty()));
     }
 
     #[test]
@@ -474,6 +712,7 @@ mod tests {
     #[test]
     fn popups_take_turns() {
         let (mut link, _rt) = link();
+        link.set_level(Level::All);
         let start = Instant::now();
         link.event(&AchievementEvent::Mastered);
         link.event(&AchievementEvent::Online);

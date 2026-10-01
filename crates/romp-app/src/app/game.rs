@@ -981,6 +981,11 @@ impl Controller {
                     with_controller(|c| c.set_game_volume(volume));
                 });
             }),
+            popups_changed: Box::new(|level, corner| {
+                let _ = slint::invoke_from_event_loop(move || {
+                    with_controller(|c| c.set_game_popups(level, corner));
+                });
+            }),
             save_ports: {
                 let store = self.shared.store.clone();
                 let id = detail.id;

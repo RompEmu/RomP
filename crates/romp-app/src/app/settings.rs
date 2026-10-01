@@ -41,6 +41,8 @@ impl Controller {
         ui.set_pref_resume(prefs.resume);
         ui.set_pref_fullscreen(prefs.fullscreen);
         ui.set_pref_volume(f32::from(prefs.volume));
+        ui.set_pref_achievement_popups(i32::from(prefs.achievement_popups));
+        ui.set_pref_achievement_corner(i32::from(prefs.achievement_corner));
         ui.set_pref_ui_scale(
             UI_SCALES
                 .iter()
@@ -74,6 +76,8 @@ impl Controller {
                 .get(ui.get_pref_ui_scale() as usize)
                 .copied()
                 .unwrap_or(100),
+            achievement_popups: ui.get_pref_achievement_popups().clamp(0, 2) as u8,
+            achievement_corner: ui.get_pref_achievement_corner().clamp(0, 3) as u8,
         };
         if prefs == self.prefs.get() {
             return;
@@ -89,6 +93,24 @@ impl Controller {
             .set("prefs", &prefs.to_json());
         if let Some(running) = self.running.borrow().as_ref() {
             running.apply_prefs(&prefs);
+        }
+    }
+
+    pub(super) fn set_game_popups(&self, level: u8, corner: u8) {
+        let prefs = Preferences {
+            achievement_popups: level,
+            achievement_corner: corner,
+            ..self.prefs.get()
+        };
+        self.prefs.set(prefs);
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .set("prefs", &prefs.to_json());
+        if let Some(ui) = self.ui() {
+            ui.set_pref_achievement_popups(i32::from(level));
+            ui.set_pref_achievement_corner(i32::from(corner));
         }
     }
 

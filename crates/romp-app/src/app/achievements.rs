@@ -285,6 +285,7 @@ impl Controller {
                     has_badge: badge.is_some(),
                     badge: badge.unwrap_or_default(),
                     unlocked: a.unlocked,
+                    note: Default::default(),
                 }
             })
             .collect();

@@ -21,6 +21,7 @@ use std::time::Duration;
 
 pub type SavePorts = Box<dyn Fn(Vec<(u8, u32)>)>;
 pub type VolumeChanged = Box<dyn Fn(u8)>;
+pub type PopupsChanged = Box<dyn Fn(u8, u8)>;
 pub type SavePlacement = Box<dyn Fn(usize, &Observed)>;
 pub type ScreenshotTaken = Box<dyn Fn(PathBuf)>;
 
@@ -54,6 +55,7 @@ pub struct GameOptions {
     pub port_devices: Vec<(u8, u32)>,
     pub save_ports: SavePorts,
     pub volume_changed: VolumeChanged,
+    pub popups_changed: PopupsChanged,
     pub placements: Vec<Option<Placement>>,
     pub save_placement: SavePlacement,
     pub screenshot_taken: ScreenshotTaken,
@@ -135,6 +137,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Resu
             port_devices: Vec::new(),
             save_ports: Box::new(|_| {}),
             volume_changed: Box::new(|_| {}),
+            popups_changed: Box::new(|_, _| {}),
             placements: Vec::new(),
             save_placement: Box::new(|_, _| {}),
         },
@@ -177,6 +180,10 @@ struct Game {
     save_ports: SavePorts,
     volume: Cell<u8>,
     volume_changed: VolumeChanged,
+    popups: Cell<u8>,
+    corner: Cell<u8>,
+    popups_changed: PopupsChanged,
+    achievements_focus: Cell<i32>,
     save_placement: SavePlacement,
     computer: bool,
     held_keys: RefCell<HashSet<u32>>,
@@ -452,6 +459,10 @@ impl Game {
         if polled.new_badges && self.achievements_open.get() {
             self.show_achievement_rows();
         }
+        let chip = polled.chip.clone().unwrap_or_default();
+        if self.primary().get_chip_text() != chip.as_str() {
+            self.primary().set_chip_text(chip.into());
+        }
         let overlay = self
             .achievements
             .borrow_mut()
@@ -713,11 +724,51 @@ impl Game {
             return;
         }
         self.achievements_open.set(true);
+        self.focus_achievements(0);
         self.send(&AppMsg::ListAchievements);
         let ui = self.primary();
         ui.set_achievements_scroll(0.0);
         ui.set_achievements_open(true);
         self.show_achievement_rows();
+    }
+
+    /// Shows how much RetroAchievements may show over the game, and where.
+    fn apply_popups(&self) {
+        use crate::achievements::popups::{Level, CORNERS, LEVELS};
+        if let Some(link) = self.achievements.borrow_mut().as_mut() {
+            link.set_level(Level::from_index(self.popups.get()));
+        }
+        let label = |list: &[&str], i: u8| list.get(usize::from(i)).copied().unwrap_or("").into();
+        for window in &self.windows {
+            window.set_popups_label(label(&LEVELS, self.popups.get()));
+            window.set_corner_label(label(&CORNERS, self.corner.get()));
+            window.set_achievement_corner(i32::from(self.corner.get()));
+        }
+    }
+
+    fn step_popups(&self, delta: i32) {
+        let levels = crate::achievements::popups::LEVELS.len() as i32;
+        let level = (i32::from(self.popups.get()) + delta).clamp(0, levels - 1);
+        self.popups.set(level as u8);
+        self.popups_saved();
+    }
+
+    fn step_corner(&self, delta: i32) {
+        let corners = crate::achievements::popups::CORNERS.len() as i32;
+        let corner = (i32::from(self.corner.get()) + delta).rem_euclid(corners);
+        self.corner.set(corner as u8);
+        self.popups_saved();
+    }
+
+    fn popups_saved(&self) {
+        self.apply_popups();
+        (self.popups_changed)(self.popups.get(), self.corner.get());
+    }
+
+    /// Moves between the panel's popup settings (0 and 1) and its list (2).
+    fn focus_achievements(&self, focus: i32) {
+        self.achievements_focus.set(focus);
+        self.primary().set_achievements_focus(focus);
     }
 
     fn close_achievements(&self) {
@@ -752,7 +803,7 @@ impl Game {
 
     fn show_achievement_rows(&self) {
         let link = self.achievements.borrow();
-        let rows: Vec<crate::AchievementRow> = self
+        let mut rows: Vec<crate::AchievementRow> = self
             .achievement_list
             .borrow()
             .iter()
@@ -760,15 +811,19 @@ impl Game {
                 let badge = link
                     .as_ref()
                     .and_then(|l| l.badge(crate::achievements::badge_url(a)));
+                let note = link.as_ref().and_then(|l| l.session_note(&a.title));
                 crate::AchievementRow {
                     title: a.title.clone().into(),
                     detail: crate::achievements::row_detail(a).into(),
                     has_badge: badge.is_some(),
                     badge: badge.unwrap_or_default(),
                     unlocked: a.unlocked,
+                    note: note.unwrap_or_default().into(),
                 }
             })
             .collect();
+        // What happened while playing comes first.
+        rows.sort_by_key(|row| row.note.is_empty());
         self.primary()
             .set_achievement_rows(ModelRc::new(VecModel::from(rows)));
     }
@@ -944,9 +999,18 @@ impl Game {
             return;
         }
         if self.achievements_open.get() {
+            let focus = self.achievements_focus.get();
+            let step = if button == input::LEFT { -1 } else { 1 };
             match button {
-                input::UP => self.scroll_achievements(-1.0),
-                input::DOWN => self.scroll_achievements(1.0),
+                input::UP if focus == 2 && self.primary().get_achievements_scroll() >= 0.0 => {
+                    self.focus_achievements(1);
+                }
+                input::UP if focus == 2 => self.scroll_achievements(-1.0),
+                input::UP => self.focus_achievements((focus - 1).max(0)),
+                input::DOWN if focus == 2 => self.scroll_achievements(1.0),
+                input::DOWN => self.focus_achievements(focus + 1),
+                input::LEFT | input::RIGHT if focus == 0 => self.step_popups(step),
+                input::LEFT | input::RIGHT if focus == 1 => self.step_corner(step),
                 input::B | input::A | input::START => self.close_achievements(),
                 _ => {}
             }
@@ -1087,6 +1151,9 @@ impl Game {
 
     fn apply_prefs(&self, prefs: &Preferences) {
         self.pause_unfocused.set(prefs.pause_unfocused);
+        self.popups.set(prefs.achievement_popups);
+        self.corner.set(prefs.achievement_corner);
+        self.apply_popups();
         self.volume.set(prefs.volume);
         let has_look = self.look.borrow().is_some();
         for window in &self.windows {
@@ -1201,6 +1268,10 @@ pub fn launch(
             save_ports: opts.save_ports,
             volume: Cell::new(opts.prefs.volume),
             volume_changed: opts.volume_changed,
+            popups: Cell::new(opts.prefs.achievement_popups),
+            corner: Cell::new(opts.prefs.achievement_corner),
+            popups_changed: opts.popups_changed,
+            achievements_focus: Cell::new(0),
             save_placement: opts.save_placement,
             computer: opts.computer,
             held_keys: RefCell::default(),
@@ -1235,6 +1306,7 @@ pub fn launch(
         wire(window, &game, i == 1);
     }
     game.apply_look();
+    game.apply_popups();
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_millis(4), {
@@ -1659,6 +1731,14 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
     window.on_close_achievements({
         let with = with.clone();
         move || with(&|g| g.close_achievements())
+    });
+    window.on_step_popups({
+        let with = with.clone();
+        move |delta| with(&|g| g.step_popups(delta))
+    });
+    window.on_step_corner({
+        let with = with.clone();
+        move |delta| with(&|g| g.step_corner(delta))
     });
     window.on_open_controllers({
         let with = with.clone();

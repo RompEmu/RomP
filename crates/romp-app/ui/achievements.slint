@@ -1,6 +1,6 @@
 import { Theme } from "theme.slint";
 
-export struct AchievementRow { title: string, detail: string, badge: image, has-badge: bool, unlocked: bool }
+export struct AchievementRow { title: string, detail: string, badge: image, has-badge: bool, unlocked: bool, note: string }
 
 /// One achievement: its badge, name, what earns it, and its points.
 export component AchievementItem inherits HorizontalLayout {
@@ -37,6 +37,12 @@ export component AchievementItem inherits HorizontalLayout {
             font-size: Theme.font-small;
             color: Theme.text-muted;
             wrap: word-wrap;
+        }
+        if root.entry.note != "": Text {
+            text: root.entry.note;
+            font-size: Theme.font-small;
+            font-weight: 600;
+            color: Theme.accent;
         }
     }
 }
