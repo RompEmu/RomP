@@ -894,6 +894,7 @@ component GamePage inherits FocusScope {
     in property <string> category;
     in property <string> subtitle;
     in property <string> reason;
+    in property <string> stats;
     in property <string> summary;
     in property <[Fact]> facts;
     in property <[SlotCard]> save-slots;
@@ -1017,6 +1018,7 @@ component GamePage inherits FocusScope {
                         }
                         Text { text: root.title; font-size: Theme.font-display; font-weight: 800; wrap: word-wrap; }
                         Text { text: root.subtitle; font-size: Theme.font-subtitle; color: Theme.text-muted; wrap: word-wrap; }
+                        if root.stats != "": Text { text: root.stats; font-size: Theme.font-body; color: Theme.text-muted; wrap: word-wrap; }
                         if root.reason != "": Text { text: root.reason; font-size: Theme.font-body; color: Theme.accent; wrap: word-wrap; }
                         HorizontalLayout {
                             padding-top: 8px;
@@ -2040,6 +2042,7 @@ export component AppWindow inherits Window {
     in property <string> game-category;
     in property <string> game-subtitle;
     in property <string> game-reason;
+    in property <string> game-stats;
     in property <[SlotCard]> game-save-slots;
     callback play-slot(int);
     in property <[AchievementRow]> game-achievements;
@@ -2215,6 +2218,7 @@ export component AppWindow inherits Window {
             category: root.game-category;
             subtitle: root.game-subtitle;
             reason: root.game-reason;
+            stats: root.game-stats;
             summary: root.game-summary;
             facts: root.game-facts;
             save-slots: root.game-save-slots;

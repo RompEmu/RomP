@@ -26,6 +26,7 @@ mod mouse;
 mod navigation;
 mod paths;
 mod play;
+mod play_stats;
 mod players;
 mod ports;
 mod prefs;

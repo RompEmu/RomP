@@ -7,6 +7,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Added
 
 - Save states with pictures. Save states in the game menu shows your four slots with a picture of the moment you saved and when that was, and the game's page lists your save states with a Play from here button. Pictures sync with RomM along with the states.
+- Play time on each game's page: how long you've played across every device, how many sessions, and when you last played. Romp asks you once to pair again with RomM for the permission this needs.
 
 ## [0.8.0] - 2026-10-01
 

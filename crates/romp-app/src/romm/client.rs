@@ -124,6 +124,41 @@ impl Client {
             .expect("relative url")
     }
 
+    /// Every play session RomM has for a game, from all of the player's devices, added up.
+    pub async fn play_stats(&self, rom_id: i64) -> Result<crate::play_stats::PlayStats, Error> {
+        #[derive(serde::Deserialize)]
+        struct Session {
+            start_time: String,
+            end_time: String,
+        }
+        const PAGE: usize = 100;
+        let mut stats = crate::play_stats::PlayStats::default();
+        for page in 0..50 {
+            let sessions: Vec<Session> = self
+                .get_json(
+                    "/api/play-sessions",
+                    &[
+                        ("rom_id", rom_id.to_string()),
+                        ("limit", PAGE.to_string()),
+                        ("offset", (page * PAGE).to_string()),
+                    ],
+                )
+                .await?;
+            for s in &sessions {
+                if let (Some(start), Some(end)) = (
+                    crate::sync::parse_iso(&s.start_time),
+                    crate::sync::parse_iso(&s.end_time),
+                ) {
+                    stats.add(start, end);
+                }
+            }
+            if sessions.len() < PAGE {
+                break;
+            }
+        }
+        Ok(stats)
+    }
+
     pub async fn heartbeat(&self) -> Result<Heartbeat, Error> {
         self.get_json("/api/heartbeat", &[]).await
     }
@@ -1112,6 +1147,38 @@ pub(crate) mod tests {
             .mount(&server)
             .await;
         authed(&server).refresh_retro_achievements(3).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn play_stats_add_up_every_page() {
+        let server = MockServer::start().await;
+        let session = |h: u32| {
+            serde_json::json!({
+                "start_time": format!("2026-09-30T{h:02}:00:00+00:00"),
+                "end_time": format!("2026-09-30T{h:02}:30:00+00:00")
+            })
+        };
+        let full: Vec<_> = (0..100).map(|i| session(i % 20)).collect();
+        Mock::given(method("GET"))
+            .and(path("/api/play-sessions"))
+            .and(query_param("rom_id", "7"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/play-sessions"))
+            .and(query_param("offset", "100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(vec![session(21)]))
+            .mount(&server)
+            .await;
+        let stats = authed(&server).play_stats(7).await.unwrap();
+        assert_eq!(stats.sessions, 101);
+        assert_eq!(stats.total_ms, 101 * 30 * 60_000);
+        assert_eq!(
+            stats.last_played_ms,
+            crate::sync::parse_iso("2026-09-30T21:30:00+00:00")
+        );
     }
 
     #[tokio::test]

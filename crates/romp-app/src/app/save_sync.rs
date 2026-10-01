@@ -73,6 +73,8 @@ impl Controller {
             Some("Pair again to use favorites and collections")
         } else if !self.has_scope("roms.user.write") {
             Some("Pair again to share when you last played")
+        } else if !self.has_scope("roms.user.read") {
+            Some("Pair again to see how long you've played")
         } else if self.ra_account().is_some() && !self.has_scope("me.write") {
             Some("Pair again to keep RetroAchievements progress current in RomM")
         } else {

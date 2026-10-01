@@ -128,6 +128,7 @@ impl Controller {
         self.load_screenshots(&detail, offset);
         self.load_game_achievements(&detail);
         self.show_save_slots(&detail);
+        self.load_play_stats(id);
         self.load_similar(id);
     }
 
@@ -1005,6 +1006,7 @@ impl Controller {
             .filter(|d| self.current_game().map(|g| g.id) == Some(d.id))
         {
             self.show_save_slots(detail);
+            self.load_play_stats(detail.id);
         }
         if identity.is_some() {
             self.send_pending_unlocks();

@@ -102,6 +102,73 @@ impl Controller {
     }
 }
 
+fn stats_key(rom_id: i64) -> String {
+    format!("playstats:{rom_id}")
+}
+
+impl Controller {
+    fn unsent_play(&self, rom_id: i64) -> crate::play_stats::PlayStats {
+        let mut stats = crate::play_stats::PlayStats::default();
+        for s in self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .play_sessions()
+            .iter()
+            .filter(|s| s.rom_id == rom_id)
+        {
+            stats.add(s.start_ms, s.end_ms);
+        }
+        stats
+    }
+
+    fn show_play_stats(&self, rom_id: i64, known: crate::play_stats::PlayStats) {
+        if self.current_game().map(|g| g.id) != Some(rom_id) {
+            return;
+        }
+        let stats = known.merged(self.unsent_play(rom_id));
+        if let Some(ui) = self.ui() {
+            ui.set_game_stats(crate::play_stats::describe(&stats, SystemTime::now()).into());
+        }
+    }
+
+    /// The game page's play time: RomM's record when it can be reached, plus this computer's unsent time.
+    pub(super) fn load_play_stats(&self, rom_id: i64) {
+        let cached: crate::play_stats::PlayStats = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .get(&stats_key(rom_id))
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        self.show_play_stats(rom_id, cached);
+        let Some(client) = self
+            .client
+            .borrow()
+            .clone()
+            .filter(|_| !self.offline.get() && self.has_scope("roms.user.read"))
+        else {
+            return;
+        };
+        self.shared.rt.spawn(async move {
+            let Ok(stats) = client.play_stats(rom_id).await else {
+                return;
+            };
+            super::on_ui(move |c| {
+                let json = serde_json::to_string(&stats).expect("play stats serialize");
+                c.shared
+                    .store
+                    .lock()
+                    .unwrap()
+                    .set(&stats_key(rom_id), &json);
+                c.show_play_stats(rom_id, stats);
+            });
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
