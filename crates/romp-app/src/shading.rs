@@ -25,6 +25,7 @@ pub struct Shading {
     chains: std::collections::HashMap<PathBuf, Option<FilterChain>>,
     input: Option<Target>,
     targets: Vec<Option<Target>>,
+    opaque_fbo: Option<glow::Framebuffer>,
     frame: Vec<u8>,
     frame_size: (u32, u32),
     frame_dirty: bool,
@@ -33,7 +34,12 @@ pub struct Shading {
     failed: bool,
     redraw: bool,
     shown: bool,
+    settling: u32,
 }
+
+/// How many more times the shaders run after the picture last changed. Ghosting and afterglow
+/// build up over frames, and a still screen sends no new ones.
+const SETTLE_FRAMES: u32 = 60;
 
 /// A texture the shader drew, for the window to show in place of the plain picture.
 pub struct Drawn {
@@ -157,6 +163,11 @@ impl Shading {
         self.redraw = true;
     }
 
+    /// Whether the shaders still need to run on the same picture, so the window should redraw.
+    pub fn settling(&self) -> bool {
+        self.active() && self.settling > 0
+    }
+
     /// Whether the shaders are drawing the game, so the window should not show the plain picture.
     pub fn active(&self) -> bool {
         !self.stages.is_empty() && !self.failed
@@ -200,6 +211,9 @@ impl Shading {
                     .chain(self.targets.drain(..).flatten())
                 {
                     gl.delete_texture(t);
+                }
+                if let Some(fbo) = self.opaque_fbo.take() {
+                    gl.delete_framebuffer(fbo);
                 }
             }
         }
@@ -259,6 +273,29 @@ impl Shading {
         true
     }
 
+    /// Sets the finished picture's alpha to opaque. Shaders written for RetroArch may leave it
+    /// partly transparent, which RetroArch ignores but the window would blend with its background.
+    unsafe fn make_opaque(&mut self, gl: &glow::Context, texture: glow::Texture) {
+        unsafe {
+            let fbo = *self
+                .opaque_fbo
+                .get_or_insert_with(|| gl.create_framebuffer().expect("framebuffer"));
+            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(fbo));
+            gl.framebuffer_texture_2d(
+                glow::DRAW_FRAMEBUFFER,
+                glow::COLOR_ATTACHMENT0,
+                glow::TEXTURE_2D,
+                Some(texture),
+                0,
+            );
+            gl.disable(glow::SCISSOR_TEST);
+            gl.color_mask(false, false, false, true);
+            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            gl.clear(glow::COLOR_BUFFER_BIT);
+            gl.color_mask(true, true, true, true);
+        }
+    }
+
     /// Runs the shaders on the latest frame for the window about to render. Returns the texture
     /// when the window must be told to show it, and None when it already does or nothing changed.
     pub fn draw(&mut self, window: (u32, u32)) -> Option<Drawn> {
@@ -313,6 +350,10 @@ impl Shading {
             }
             let mut drawn = Ok(());
             if changed || std::mem::take(&mut self.redraw) {
+                self.settling = SETTLE_FRAMES;
+            }
+            if self.settling > 0 {
+                self.settling -= 1;
                 self.frame_count = self.frame_count.wrapping_add(1);
                 let mut source = (input, fw, fh);
                 for (i, stage) in stages.iter().enumerate() {
@@ -344,6 +385,15 @@ impl Shading {
                         break;
                     }
                     source = target;
+                }
+                if drawn.is_ok() {
+                    let last = self
+                        .targets
+                        .last()
+                        .copied()
+                        .flatten()
+                        .expect("stage texture");
+                    self.make_opaque(&gl, last.0);
                 }
             }
             saved.restore(&gl);

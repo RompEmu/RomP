@@ -1486,6 +1486,9 @@ fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
                     } else if !state.active() {
                         show_plain(&window, &state);
                     }
+                    if state.settling() {
+                        window.window().request_redraw();
+                    }
                 }
                 slint::RenderingState::RenderingTeardown => state.teardown(),
                 _ => {}

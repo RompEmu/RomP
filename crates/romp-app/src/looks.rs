@@ -23,6 +23,7 @@ pub const SCREEN: [&str; 2] = ["TV", "Monitor"];
 pub const CURVATURE: [&str; 3] = ["Off", "Subtle", "Strong"];
 pub const SCANLINES: [&str; 3] = ["Light", "Medium", "Strong"];
 pub const MASK: [&str; 3] = ["Off", "Light", "Strong"];
+pub const MODELS: [&str; 3] = ["Pocket", "Original green", "Backlit"];
 pub const COLOURS: [&str; 2] = ["Original", "Vivid"];
 pub const DITHERING: [&str; 2] = ["Blend", "Off"];
 
@@ -46,6 +47,9 @@ pub struct Choice {
     /// Whether a handheld's colours are shown as stored, instead of as its screen showed them.
     #[serde(default)]
     pub vivid: bool,
+    /// Which Game Boy's screen a Game Boy game is shown on, an index into `MODELS`.
+    #[serde(default)]
+    pub model: u8,
 }
 
 fn yes() -> bool {
@@ -60,6 +64,7 @@ pub enum Row {
     Curvature,
     Scanlines,
     Mask,
+    Model,
     Colours,
     Dithering,
 }
@@ -165,6 +170,7 @@ pub fn default_choice(platform: &str, sharp_pixels: bool) -> Choice {
         tuning: default_tuning(platform),
         blend_dithering: true,
         vivid: false,
+        model: 0,
     }
 }
 
@@ -179,7 +185,7 @@ pub fn preset(look: Look, platform: &str) -> Option<&'static str> {
         Look::Smooth => None,
         Look::Crt => Some("crt/crt-guest-advanced.slangp"),
         Look::Handheld => Some(match platform {
-            "gb" => "handheld/gameboy.slangp",
+            "gb" => "handheld/gameboy-pocket.slangp",
             "gbc" => "handheld/gameboy-color-dot-matrix.slangp",
             "gba" => "handheld/gameboy-advance-dot-matrix.slangp",
             _ => "handheld/lcd-grid-v2.slangp",
@@ -204,6 +210,9 @@ pub fn rows(choice: &Choice, platform: &str) -> Vec<Row> {
     if has_tuning(choice.look) {
         rows.extend([Row::Screen, Row::Curvature, Row::Scanlines, Row::Mask]);
     }
+    if choice.look == Look::Handheld && platform == "gb" {
+        rows.push(Row::Model);
+    }
     if choice.look == Look::Handheld && colours_preset(platform).is_some() {
         rows.push(Row::Colours);
     }
@@ -220,6 +229,7 @@ pub fn row_label(row: Row) -> &'static str {
         Row::Curvature => "Curvature",
         Row::Scanlines => "Scanlines",
         Row::Mask => "Mask",
+        Row::Model => "Model",
         Row::Colours => "Colours",
         Row::Dithering => "Dithering",
     }
@@ -234,6 +244,7 @@ pub fn row_value(choice: &Choice, row: Row) -> &'static str {
         Row::Curvature => pick(&CURVATURE, t.curvature),
         Row::Scanlines => pick(&SCANLINES, t.scanlines),
         Row::Mask => pick(&MASK, t.mask),
+        Row::Model => pick(&MODELS, choice.model),
         Row::Colours => pick(&COLOURS, u8::from(choice.vivid)),
         Row::Dithering => pick(&DITHERING, u8::from(!choice.blend_dithering)),
     }
@@ -254,6 +265,7 @@ pub fn step(choice: &mut Choice, platform: &str, row: Row, delta: i32) {
         Row::Curvature => t.curvature = turn(t.curvature, CURVATURE.len()),
         Row::Scanlines => t.scanlines = turn(t.scanlines, SCANLINES.len()),
         Row::Mask => t.mask = turn(t.mask, MASK.len()),
+        Row::Model => choice.model = turn(choice.model, MODELS.len()),
         Row::Colours => choice.vivid = turn(u8::from(choice.vivid), COLOURS.len()) == 1,
         Row::Dithering => {
             choice.blend_dithering = turn(u8::from(!choice.blend_dithering), DITHERING.len()) == 0;
@@ -360,12 +372,36 @@ pub fn stages(choice: &Choice, platform: &str, shaders: &Path) -> Vec<Stage> {
     if choice.look == Look::Handheld && !choice.vivid {
         stages.extend(colours_preset(platform).map(before));
     }
-    stages.extend(preset(choice.look, platform).map(|p| Stage {
+    stages.extend(screen_preset(choice, platform).map(|(p, params)| Stage {
         preset: shaders.join(p),
-        params: params(choice),
+        params,
         to_screen: true,
     }));
     stages
+}
+
+/// The look's own shader for this console, with its settings.
+fn screen_preset(choice: &Choice, platform: &str) -> Option<(&'static str, Vec<(String, f32)>)> {
+    if choice.look != Look::Handheld || platform != "gb" {
+        return preset(choice.look, platform).map(|p| (p, params(choice)));
+    }
+    // The dot matrix shader's own palettes: 1 is the Pocket's, 4 the original's green.
+    let palette = match choice.model {
+        0 => 1.0,
+        1 => 4.0,
+        _ => return Some(("handheld/dot.slangp", Vec::new())),
+    };
+    let params = [
+        ("palette", palette),
+        ("screen_light", 1.05),
+        ("contrast", 0.95),
+        ("pixel_size", 0.9),
+        ("baseline_alpha", 0.05),
+    ];
+    Some((
+        "handheld/gameboy-pocket.slangp",
+        params.iter().map(|(n, v)| ((*n).to_string(), *v)).collect(),
+    ))
 }
 
 pub fn store_key(platform: &str) -> String {
@@ -399,7 +435,7 @@ mod tests {
         assert!(!available("snes").contains(&Look::Handheld));
         assert_eq!(
             preset(Look::Handheld, "gb"),
-            Some("handheld/gameboy.slangp")
+            Some("handheld/gameboy-pocket.slangp")
         );
         assert_eq!(
             preset(Look::Handheld, "psp"),
@@ -451,9 +487,10 @@ mod tests {
         for platform in [
             "snes", "arcade", "genesis", "gb", "gbc", "gba", "nds", "psp",
         ] {
-            for (look, _) in LOOKS {
+            for ((look, _), model) in LOOKS.iter().flat_map(|l| (0..3).map(move |m| (l, m))) {
                 let choice = Choice {
-                    look,
+                    look: *look,
+                    model,
                     ..default_choice(platform, true)
                 };
                 for stage in stages(&choice, platform, &shaders) {
@@ -501,7 +538,21 @@ mod tests {
         step(&mut choice, "gba", Row::Colours, 1);
         assert_eq!(row_value(&choice, Row::Colours), "Vivid");
         assert_eq!(stages(&choice, "gba", shaders).len(), 1);
-        assert_eq!(rows(&default_choice("gb", true), "gb"), [Row::Style]);
+    }
+
+    #[test]
+    fn game_boy_games_pick_which_game_boy_screen() {
+        let shaders = Path::new("shaders");
+        let mut choice = default_choice("gb", true);
+        assert_eq!(rows(&choice, "gb"), [Row::Style, Row::Model]);
+        assert_eq!(row_value(&choice, Row::Model), "Pocket");
+        let screen = |choice: &Choice| stages(choice, "gb", shaders).pop().unwrap();
+        assert!(screen(&choice).params.contains(&("palette".into(), 1.0)));
+        step(&mut choice, "gb", Row::Model, 1);
+        assert!(screen(&choice).params.contains(&("palette".into(), 4.0)));
+        step(&mut choice, "gb", Row::Model, 1);
+        assert_eq!(screen(&choice).preset, shaders.join("handheld/dot.slangp"));
+        assert!(!rows(&default_choice("gbc", true), "gbc").contains(&Row::Model));
     }
 
     #[test]
