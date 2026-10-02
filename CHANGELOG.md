@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-02
+
 ### Added
 
 - Command-W on a Mac, or Control-W on Windows and Linux, closes the game, the same as its window's close button.
@@ -170,7 +172,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/RompEmu/RompEmu/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/RompEmu/RompEmu/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/RompEmu/RompEmu/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/RompEmu/RompEmu/compare/v0.6.0...v0.7.0
