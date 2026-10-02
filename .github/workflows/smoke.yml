@@ -99,7 +99,7 @@ jobs:
             args=(--core "$PWD/$library" --rom "$PWD/games/$game" --smoke "$PWD/out/$name")
             if [ "$RUNNER_OS" = macOS ]; then
               # Started as an app rather than a bare process, or macOS barely runs its timers.
-              open -W -n "$ROMP" --env "ROMP_PLATFORM=$console" \
+              open -W -n "$ROMP" --env "ROMP_PLATFORM=$console" --env SLINT_BACKEND=winit-software \
                 --stdout "$PWD/out/$name.log" --stderr "$PWD/out/$name.err" --args "${args[@]}" || true
             else
               ROMP_PLATFORM="$console" "${run[@]}" "$ROMP" "${args[@]}" > "out/$name.log" 2>&1 < /dev/null || true
