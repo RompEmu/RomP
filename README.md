@@ -63,7 +63,7 @@ Romp downloads the emulator for each system the first time you play one of its g
 | Super Nintendo and Super Famicom | Snes9x |
 | Nintendo 64 | Mupen64Plus-Next |
 | Game Boy, Game Boy Color and Game Boy Advance | mGBA |
-| Nintendo DS | DeSmuME |
+| Nintendo DS | melonDS DS |
 | Nintendo GameCube and Wii | Dolphin |
 | Nintendo Virtual Boy | Beetle VB |
 | Philips CD-i | SAME CDi |

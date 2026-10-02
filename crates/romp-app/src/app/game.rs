@@ -963,7 +963,7 @@ impl Controller {
                 .map(|core| crate::console_settings::core_options(core.id, &self.console_choices()))
                 .unwrap_or_default(),
             split_screens: core_for_platform(&detail.platform_slug)
-                .is_some_and(|core| core.id == "desmume"),
+                .is_some_and(|core| core.id == "melondsds"),
             gamepads: self.gamepads.clone(),
             players: self.players.clone(),
             prefs,

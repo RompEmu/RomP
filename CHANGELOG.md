@@ -8,6 +8,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - Command-W on a Mac, or Control-W on Windows and Linux, closes the game, the same as its window's close button.
 
+### Changed
+
+- Nintendo DS games play in melonDS DS instead of DeSmuME. Their saves now sync with RomM as .sav files, the same as standalone melonDS. Existing DeSmuME saves become melonDS saves the first time Romp looks at them; DeSmuME's save and save states, which melonDS can't load, are kept in the game's backup folder.
+
 ## [0.9.0] - 2026-10-02
 
 ### Added

@@ -193,9 +193,9 @@ static CORE_LICENSES: &[(&str, &str, &str)] = &[
         "https://github.com/schellingb/dosbox-pure/blob/main/LICENSE",
     ),
     (
-        "desmume",
-        "GPL-2.0",
-        "https://github.com/libretro/desmume/blob/master/license.txt",
+        "melondsds",
+        "GPL-3.0",
+        "https://github.com/JesseTG/melonds-ds/blob/main/LICENSE",
     ),
     (
         "dolphin",

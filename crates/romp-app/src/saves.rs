@@ -87,6 +87,55 @@ fn newest(saves: Vec<crate::romm::types::RemoteSave>) -> Option<crate::romm::typ
 
 pub const AUTO_STATE: &str = "auto.state";
 
+/// Where DeSmuME's files go once melonDS takes over a DS game, kept but out of the way.
+const DESMUME_BACKUP: &str = "backup/desmume";
+/// What DeSmuME writes after a DS game's save data. The data before it is the raw save melonDS reads.
+const DESMUME_FOOTER: &[u8] =
+    b"|<--Snip above here to create a raw sav by excluding this DeSmuME savedata footer:";
+
+/// Turns a DS game's DeSmuME save into the raw save melonDS reads, unless the folder already has
+/// one, and moves DeSmuME's save and states, which melonDS can't load, to the backup folder.
+pub fn adopt_desmume_saves(dir: &Path) -> io::Result<()> {
+    let mut saves: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "dsv"))
+        .filter_map(|p| Some((p.metadata().ok()?.modified().ok()?, p)))
+        .collect();
+    if saves.is_empty() {
+        return Ok(());
+    }
+    saves.sort();
+    let (_, newest) = saves.last().expect("a save");
+    let sram = dir.join(SRAM_FILE);
+    if !sram.exists() {
+        let bytes = std::fs::read(newest)?;
+        let raw = bytes
+            .windows(DESMUME_FOOTER.len())
+            .position(|w| w == DESMUME_FOOTER)
+            .map_or(&bytes[..], |end| &bytes[..end]);
+        replace_file(&sram, raw)?;
+    }
+    let backup = dir.join(DESMUME_BACKUP);
+    std::fs::create_dir_all(&backup)?;
+    let states = STATE_SLOTS
+        .iter()
+        .flat_map(|stem| [format!("{stem}.state"), format!("{stem}.png")]);
+    for path in saves
+        .into_iter()
+        .map(|(_, p)| p)
+        .chain(states.map(|name| dir.join(name)))
+        .filter(|p| p.exists())
+    {
+        if let Some(name) = path.file_name() {
+            std::fs::rename(&path, backup.join(name))?;
+        }
+    }
+    Ok(())
+}
+
 pub fn set_aside_auto_state(dir: &Path) -> io::Result<()> {
     let source = dir.join(AUTO_STATE);
     if !source.exists() {
@@ -224,10 +273,14 @@ impl GameSaves {
                 }
             })
             .collect();
-        let extension = Path::new(&self.save_file)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("srm");
+        // melonDS names its DS saves .sav, and other devices look for that.
+        let extension = match self.save_emulator.as_str() {
+            "melondsds" => "sav",
+            _ => Path::new(&self.save_file)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("srm"),
+        };
         format!("{}.{extension}", clean.trim())
     }
 }
@@ -378,6 +431,9 @@ pub fn games_with_saves(server_saves: &Path) -> Vec<i64> {
         .flatten()
         .filter_map(|entry| {
             let id = entry.file_name().to_str()?.parse::<i64>().ok()?;
+            if let Err(e) = adopt_desmume_saves(&entry.path()) {
+                tracing::warn!("moving game {id}'s DeSmuME save to melonDS: {e}");
+            }
             has_save(&entry.path()).then_some(id)
         })
         .collect()
@@ -478,6 +534,64 @@ pub async fn sync_states(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn dsv(raw: &[u8]) -> Vec<u8> {
+        let mut bytes = raw.to_vec();
+        bytes.extend_from_slice(DESMUME_FOOTER);
+        bytes.extend_from_slice(b"\0 \0\0\0 \0\0|-DESMUME SAVE-|");
+        bytes
+    }
+
+    #[test]
+    fn desmume_saves_become_the_raw_save_melonds_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Spyro.dsv"), dsv(&[7; 8192])).unwrap();
+        std::fs::write(dir.path().join("auto.state"), b"desmume").unwrap();
+        std::fs::write(dir.path().join("slot-2.png"), b"picture").unwrap();
+        adopt_desmume_saves(dir.path()).unwrap();
+        assert_eq!(
+            std::fs::read(dir.path().join(SRAM_FILE)).unwrap(),
+            [7; 8192]
+        );
+        let backup = dir.path().join(DESMUME_BACKUP);
+        for name in ["Spyro.dsv", "auto.state", "slot-2.png"] {
+            assert!(!dir.path().join(name).exists(), "{name} is set aside");
+            assert!(backup.join(name).exists(), "{name} is kept");
+        }
+    }
+
+    #[test]
+    fn ds_games_with_only_a_desmume_save_still_sync() {
+        let server = tempfile::tempdir().unwrap();
+        let game = server.path().join("42");
+        std::fs::create_dir(&game).unwrap();
+        std::fs::write(game.join("Spyro.dsv"), dsv(b"save")).unwrap();
+        assert_eq!(games_with_saves(server.path()), [42]);
+        assert_eq!(std::fs::read(game.join(SRAM_FILE)).unwrap(), b"save");
+    }
+
+    #[test]
+    fn a_save_already_there_wins_over_desmumes() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(SRAM_FILE), b"from RomM").unwrap();
+        std::fs::write(dir.path().join("Spyro.dsv"), dsv(b"old")).unwrap();
+        adopt_desmume_saves(dir.path()).unwrap();
+        assert_eq!(
+            std::fs::read(dir.path().join(SRAM_FILE)).unwrap(),
+            b"from RomM"
+        );
+        assert!(!dir.path().join("Spyro.dsv").exists());
+        adopt_desmume_saves(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn folders_without_desmume_saves_are_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("auto.state"), b"melonds").unwrap();
+        adopt_desmume_saves(dir.path()).unwrap();
+        assert!(dir.path().join("auto.state").exists());
+        assert!(!dir.path().join(DESMUME_BACKUP).exists());
+    }
 
     #[test]
     fn md5_matches_known_vector() {
@@ -719,6 +833,18 @@ mod tests {
                 save_emulator,
                 ..game(dir)
             }
+        }
+
+        #[test]
+        fn ds_saves_are_named_like_melonds_names_them() {
+            let dir = tempfile::tempdir().unwrap();
+            let ds = GameSaves {
+                emulator: "melondsds".into(),
+                save_emulator: "melondsds".into(),
+                ..game(dir.path())
+            };
+            assert_eq!(ds.remote_sram_name(), "Zelda- Link.sav");
+            assert_eq!(game(dir.path()).remote_sram_name(), "Zelda- Link.srm");
         }
 
         #[tokio::test]

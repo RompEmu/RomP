@@ -170,7 +170,7 @@ static CORES: &[(&[&str], CoreInfo)] = &[
     ),
     (
         &["nds"],
-        core("desmume", "DeSmuME", "desmume_libretro", true),
+        core("melondsds", "melonDS DS", "melondsds_libretro", true),
     ),
     (&["ps2"], PS2),
     (
@@ -325,9 +325,13 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
             ("pcsx2_renderer", "OpenGL"),
             ("pcsx2_shared_memory_cards", "disabled"),
         ],
-        "desmume" => &[
-            ("desmume_pointer_type", "touch"),
-            ("desmume_screens_layout", "top/bottom"),
+        // Both screens stacked with no gap, which Romp splits into two windows, touched with the mouse.
+        "melondsds" => &[
+            ("melonds_touch_mode", "touch"),
+            ("melonds_show_cursor", "disabled"),
+            ("melonds_number_of_screen_layouts", "1"),
+            ("melonds_screen_layout1", "top-bottom"),
+            ("melonds_screen_gap", "0"),
         ],
         _ => &[],
     };
