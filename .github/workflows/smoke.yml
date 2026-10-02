@@ -5,12 +5,14 @@ name: Smoke test
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches: [smoke-test]
 
 permissions: {}
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/smoke-test'
     uses: ./.github/workflows/build.yml
     permissions:
       contents: read
@@ -31,13 +33,16 @@ jobs:
         include:
           - name: macOS
             os: macos-latest
-            core: apple/osx/arm64/latest/nestopia_libretro.dylib
+            cores: apple/osx/arm64
+            library: dylib
           - name: Linux
             os: ubuntu-latest
-            core: linux/x86_64/latest/nestopia_libretro.so
+            cores: linux/x86_64
+            library: so
           - name: Windows
             os: windows-latest
-            core: windows/x86_64/latest/nestopia_libretro.dll
+            cores: windows/x86_64
+            library: dll
     defaults:
       run:
         shell: bash
@@ -71,23 +76,36 @@ jobs:
               echo "ROMP=$(ls "$PWD"/app/*/romp.exe)" >> "$GITHUB_ENV"
               ;;
           esac
-      - name: Get a core and a game
+      - name: Play a game on each core
         env:
-          CORE: ${{ matrix.core }}
-        run: |
-          curl -fsSL -o core.zip "https://buildbot.libretro.com/nightly/$CORE.zip"
-          python="$(command -v python3 || command -v python)"
-          "$python" -m zipfile -e core.zip core
-          echo "CORE_FILE=$(ls "$PWD"/core/*)" >> "$GITHUB_ENV"
-          "$python" .github/smoke/make_rom.py smoke.nes
-      - name: Play
-        env:
-          ROMP_PLATFORM: nes
+          CORES: ${{ matrix.cores }}
+          LIBRARY: ${{ matrix.library }}
           APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
+          python="$(command -v python3 || command -v python)"
+          "$python" .github/smoke/make_games.py games
+          mkdir -p cores out
           run=()
           if [ "$RUNNER_OS" = Linux ]; then run=(xvfb-run -a -s "-screen 0 1280x1024x24"); fi
-          "${run[@]}" "$ROMP" --core "$CORE_FILE" --rom smoke.nes --smoke out
+          failed=()
+          while read -r core game console; do
+            case "$core" in ''|'#'*) continue ;; esac
+            library="cores/${core}_libretro.$LIBRARY"
+            if [ ! -f "$library" ]; then
+              curl -fsSL -o core.zip "https://buildbot.libretro.com/nightly/$CORES/latest/${core}_libretro.$LIBRARY.zip"
+              "$python" -m zipfile -e core.zip cores
+            fi
+            name="$core-${game%.*}"
+            if ROMP_PLATFORM="$console" "${run[@]}" "$ROMP" --core "$PWD/$library" --rom "games/$game" \
+              --smoke "out/$name" > "out/$name.log" 2>&1 < /dev/null; then
+              echo "Played $game on $core"
+            else
+              echo "::error::$game didn't play on $core"
+              tail -n 20 "out/$name.log"
+              failed+=("$name")
+            fi
+          done < .github/smoke/games.txt
+          test "${#failed[@]}" -eq 0
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
