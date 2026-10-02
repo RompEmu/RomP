@@ -188,7 +188,7 @@ pub fn preset(look: Look, platform: &str) -> Option<&'static str> {
         Look::Crt => Some("crt/crt-guest-advanced.slangp"),
         Look::Handheld => Some(match platform {
             "gb" => "handheld/gameboy-pocket.slangp",
-            "gbc" => "handheld/gameboy-color-dot-matrix.slangp",
+            "gbc" => "handheld/gameboy-color-dot-matrix-white-bg.slangp",
             "gba" => "handheld/gameboy-advance-dot-matrix.slangp",
             _ => "handheld/lcd-grid-v2.slangp",
         }),
