@@ -1429,6 +1429,16 @@ pub fn launch(
             }
             game.take_thumbnails(&buf, shown, frame_count);
             if let Some(smoke) = &game.smoke {
+                PROBE.with(|p| {
+                    let mut p = p.borrow_mut();
+                    p.1 += 1;
+                    if fresh { p.2 += 1; }
+                    let now = std::time::Instant::now();
+                    if now.duration_since(p.0).as_secs_f32() >= 5.0 {
+                        tracing::info!(ticks = p.1, frames = p.2, seq = last_seq, "PROBE smoke loop over 5s");
+                        *p = (now, 0, 0);
+                    }
+                });
                 let mut step = smoke.borrow().tick(std::time::Instant::now());
                 if let (crate::smoke::Step::Wait, true, Some((w, h, _))) = (&step, fresh, shown) {
                     step = smoke.borrow_mut().frame(&buf, w, h, last_seq);
@@ -1986,4 +1996,8 @@ mod tests {
         assert_eq!(bottom, &rgba[16..]);
         assert!(split_frame(&rgba[..4], 1, 1).is_none());
     }
+}
+
+thread_local! {
+    static PROBE: RefCell<(std::time::Instant, u32, u32)> = RefCell::new((std::time::Instant::now(), 0, 0));
 }

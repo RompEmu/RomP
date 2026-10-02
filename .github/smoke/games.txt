@@ -3,6 +3,7 @@
 # core                  game                console, for its look
 nestopia                nes.nes             nes
 snes9x                  snes.sfc            snes
+snes9x                  snes.sfc            snes
 mgba                    gameboy.gb          gb
 mgba                    gba.gba             gba
 genesis_plus_gx         genesis.md          genesis
