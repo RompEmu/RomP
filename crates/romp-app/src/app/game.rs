@@ -314,7 +314,7 @@ impl Controller {
         self.refresh_collection_controls(detail.id);
         ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
-            ui.set_game_status(format!("Romp can't play {} games yet.", detail.platform).into());
+            ui.set_game_status(format!("RomP can't play {} games yet.", detail.platform).into());
         } else if self.downloading_id().is_some_and(|d| d != detail.id) {
             ui.set_game_status("Another download is in progress.".into());
         } else if self.offline.get() && downloaded_path(&detail).is_none() {

@@ -18,7 +18,7 @@ pub fn device_name() -> String {
     } else {
         host
     };
-    format!("Romp on {host}")
+    format!("RomP on {host}")
 }
 
 #[cfg(unix)]
@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn device_name_mentions_the_app() {
         let name = device_name();
-        assert!(name.starts_with("Romp on "));
-        assert!(name.len() > "Romp on ".len());
+        assert!(name.starts_with("RomP on "));
+        assert!(name.len() > "RomP on ".len());
     }
 }

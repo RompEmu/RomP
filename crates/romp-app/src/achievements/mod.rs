@@ -369,7 +369,7 @@ pub async fn sign_in(
         .map_err(|_| "Could not reach RetroAchievements".to_string())?
         .json()
         .await
-        .map_err(|_| "RetroAchievements sent an answer Romp did not understand".to_string())?;
+        .map_err(|_| "RetroAchievements sent an answer RomP did not understand".to_string())?;
     if !reply.success || reply.token.is_empty() {
         return Err(if reply.error.is_empty() {
             "RetroAchievements did not accept the sign-in".into()

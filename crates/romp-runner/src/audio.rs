@@ -19,7 +19,7 @@ pub fn open(
     sample_rate: u32,
     capacity_samples: usize,
 ) -> anyhow::Result<(AudioOutput, AudioProducer)> {
-    let context_name = CString::new("Romp")?;
+    let context_name = CString::new("RomP")?;
     let ctx = Context::init(Some(context_name.as_c_str()), None)?;
     let params = StreamParamsBuilder::new()
         .format(SampleFormat::S16NE)
@@ -49,7 +49,7 @@ pub fn open(
 
     let mut builder = StreamBuilder::<StereoFrame<i16>>::new();
     builder
-        .name(CString::new("RompOutput")?)
+        .name(CString::new("RomP")?)
         .default_output(&params)
         .latency(min_latency.max(1024))
         .data_callback(

@@ -21,7 +21,7 @@ export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
 
 export global Brand {
-    out property <string> name: "Romp";
+    out property <string> name: "RomP";
     out property <string> website: "https://github.com/RompEmu/RompEmu";
     out property <string> website-label: "github.com/RompEmu/RompEmu";
     out property <string> author: "Beshr Kayali Reinholdsson";
@@ -193,7 +193,7 @@ component Welcome inherits SetupFrame {
         Feature {
             icon: @image-url("icons/play.svg");
             title: @tr("Emulators taken care of");
-            text: @tr("Romp sets up the right emulator for each game and runs it in a sandbox.");
+            text: @tr("RomP sets up the right emulator for each game and runs it in a sandbox.");
         }
     }
     HorizontalLayout {
@@ -228,7 +228,7 @@ component Connect inherits SetupFrame {
             accepted => { root.connect(); }
         }
         if root.error == "": Text {
-            text: @tr("Romp works with RomM 5.0 or newer.");
+            text: @tr("RomP works with RomM 5.0 or newer.");
             font-size: Theme.font-small;
             color: Theme.text-subtle;
         }
@@ -1516,7 +1516,7 @@ component SettingsPage inherits FocusScope {
                         Panel {
                             if root.ra-signed-in: SettingRow {
                                 label: @tr("Signed in as {}", root.ra-user);
-                                detail: @tr("Games with achievements show them as you play. Romp keeps a sign-in token, not your password.");
+                                detail: @tr("Games with achievements show them as you play. RomP keeps a sign-in token, not your password.");
                                 Button { text: @tr("Sign out"); clicked => { root.ra-sign-out(); } }
                             }
                             if root.ra-signed-in: SettingRow {
@@ -1549,7 +1549,7 @@ component SettingsPage inherits FocusScope {
                             }
                             if !root.ra-signed-in: SettingRow {
                                 label: @tr("Sign in");
-                                detail: root.ra-status != "" ? root.ra-status : @tr("Earn achievements while you play. Romp keeps a sign-in token, not your password.");
+                                detail: root.ra-status != "" ? root.ra-status : @tr("Earn achievements while you play. RomP keeps a sign-in token, not your password.");
                                 detail-color: root.ra-status != "" && !root.ra-busy ? Theme.danger : Theme.text-muted;
                                 LineEdit {
                                     width: 150px;
@@ -1936,7 +1936,7 @@ component AboutDialog inherits Rectangle {
                 Text {
                     x: 24px;
                     width: parent.width - 48px;
-                    text: @tr("Romp and the emulators it downloads are each covered by their own license.");
+                    text: @tr("RomP and the emulators it downloads are each covered by their own license.");
                     font-size: Theme.font-small;
                     color: Theme.text-muted;
                     wrap: word-wrap;

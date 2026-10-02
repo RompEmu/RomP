@@ -60,7 +60,7 @@ pub fn check_version(version: &str) -> Result<(), String> {
     {
         Some(major) if major >= 5 => Ok(()),
         Some(_) => Err(format!(
-            "This server runs RomM {version}. Romp needs RomM 5.0 or newer."
+            "This server runs RomM {version}. RomP needs RomM 5.0 or newer."
         )),
         None => Err(format!("Unrecognised RomM version \"{version}\".")),
     }
@@ -820,7 +820,7 @@ pub(crate) mod tests {
             .and(path("/api/auth/device/init"))
             .and(body_json(serde_json::json!({
                 "client_device_identifier": "dev-1",
-                "name": "Romp on test",
+                "name": "RomP on test",
                 "client": "Romp",
                 "platform": std::env::consts::OS,
                 "client_version": env!("CARGO_PKG_VERSION"),
@@ -835,7 +835,7 @@ pub(crate) mod tests {
             .mount(&server)
             .await;
         let auth = Client::new(base_of(&server, "/"))
-            .device_init("dev-1", "Romp on test")
+            .device_init("dev-1", "RomP on test")
             .await
             .unwrap();
         assert_eq!(auth.user_code, "FDF64KC5");

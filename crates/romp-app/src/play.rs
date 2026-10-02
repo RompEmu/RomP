@@ -1216,7 +1216,7 @@ pub fn launch(
     let session = Session::start(&cfg)?;
 
     let ui = GameWindow::new()?;
-    ui.set_game_title(format!("{} — Romp", opts.title).into());
+    ui.set_game_title(format!("{} — RomP", opts.title).into());
     ui.set_game_name(opts.title.clone().into());
     ui.set_mouse_mode(opts.mouse);
     ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());

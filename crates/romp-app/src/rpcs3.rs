@@ -164,7 +164,7 @@ pub fn boot_path(rom: &Path) -> Result<&Path, String> {
         .map(|e| format!(".{}", e.to_string_lossy()))
         .unwrap_or_else(|| name.clone());
     Err(format!(
-        "Romp plays PS3 games stored as a game folder, an ISO, or a zip or 7z of one, and this one is a {kind} file."
+        "RomP plays PS3 games stored as a game folder, an ISO, or a zip or 7z of one, and this one is a {kind} file."
     ))
 }
 

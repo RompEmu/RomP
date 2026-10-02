@@ -11,7 +11,7 @@ const fn notice(name: &'static str, license: &'static str, url: &'static str) ->
 }
 
 const ROMP: Notice = notice(
-    "Romp",
+    "RomP",
     "GPL-3.0 or later",
     "https://github.com/RompEmu/RompEmu/blob/main/LICENSE",
 );
@@ -266,7 +266,7 @@ mod tests {
             );
         }
         let names: Vec<_> = notices().iter().map(|n| n.name).collect();
-        assert_eq!(names[0], "Romp");
+        assert_eq!(names[0], "RomP");
         assert!(names.contains(&"Slint"));
         assert!(notices().iter().all(|n| n.url.starts_with("https://")));
     }
