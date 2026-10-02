@@ -900,6 +900,7 @@ component GamePage inherits FocusScope {
     in property <string> summary;
     in property <[Fact]> facts;
     in property <[SlotCard]> save-slots;
+    in property <bool> slots-hardcore;
     callback play-slot(int);
     in property <[AchievementRow]> achievements;
     in property <string> achievements-summary;
@@ -1164,6 +1165,11 @@ component GamePage inherits FocusScope {
                 if root.save-slots.length > 0: VerticalLayout {
                     spacing: 10px;
                     SectionTitle { text: @tr("Save states"); }
+                    if root.slots-hardcore: Text {
+                        text: @tr("Loading save states is off in hardcore mode.");
+                        font-size: Theme.font-small;
+                        color: Theme.text-muted;
+                    }
                     ScrollView {
                         height: slot-row.preferred-height;
                         content-width: slot-row.preferred-width;
@@ -1181,7 +1187,7 @@ component GamePage inherits FocusScope {
                                     alignment: start;
                                     Button {
                                         text: @tr("Play from here");
-                                        enabled: root.downloaded && !root.busy;
+                                        enabled: root.downloaded && !root.busy && !root.slots-hardcore;
                                         clicked => { root.play-slot(card.slot); }
                                     }
                                 }
@@ -1360,6 +1366,8 @@ component SettingsPage inherits FocusScope {
     in-out property <bool> ra-hardcore;
     in-out property <int> achievement-popups;
     in-out property <int> achievement-corner;
+    in property <[string]> popup-levels;
+    in property <[string]> popup-corners;
     callback ra-sign-in(string, string);
     callback ra-sign-out();
     callback ra-hardcore-changed();
@@ -1523,7 +1531,7 @@ component SettingsPage inherits FocusScope {
                                 detail: @tr("Quiet shows unlocks and keeps progress to milestones. Everything else, or everything when off, is a brief note in the corner.");
                                 ComboBox {
                                     width: 150px;
-                                    model: [@tr("All"), @tr("Quiet"), @tr("Off")];
+                                    model: root.popup-levels;
                                     current-index <=> root.achievement-popups;
                                     selected => { root.prefs-changed(); }
                                 }
@@ -1534,7 +1542,7 @@ component SettingsPage inherits FocusScope {
                                 detail: @tr("Where popups and notes appear over the game.");
                                 ComboBox {
                                     width: 150px;
-                                    model: [@tr("Top right"), @tr("Top left"), @tr("Bottom right"), @tr("Bottom left")];
+                                    model: root.popup-corners;
                                     current-index <=> root.achievement-corner;
                                     selected => { root.prefs-changed(); }
                                 }
@@ -2053,6 +2061,8 @@ export component AppWindow inherits Window {
     in-out property <float> pref-volume;
     in-out property <int> pref-achievement-popups;
     in-out property <int> pref-achievement-corner;
+    in property <[string]> pref-popup-levels;
+    in property <[string]> pref-popup-corners;
     in-out property <int> pref-ui-scale;
     callback prefs-changed();
     in-out property <bool> pref-nintendo-labels;
@@ -2092,6 +2102,7 @@ export component AppWindow inherits Window {
     in property <string> game-reason;
     in property <string> game-stats;
     in property <[SlotCard]> game-save-slots;
+    in property <bool> game-slots-hardcore;
     callback play-slot(int);
     in property <[AchievementRow]> game-achievements;
     in property <string> game-achievements-summary;
@@ -2270,6 +2281,7 @@ export component AppWindow inherits Window {
             summary: root.game-summary;
             facts: root.game-facts;
             save-slots: root.game-save-slots;
+            slots-hardcore: root.game-slots-hardcore;
             play-slot(slot) => { root.play-slot(slot); }
             achievements: root.game-achievements;
             achievements-summary: root.game-achievements-summary;
@@ -2321,6 +2333,8 @@ export component AppWindow inherits Window {
             ra-hardcore <=> root.ra-hardcore;
             achievement-popups <=> root.pref-achievement-popups;
             achievement-corner <=> root.pref-achievement-corner;
+            popup-levels: root.pref-popup-levels;
+            popup-corners: root.pref-popup-corners;
             ra-hardcore-changed => { root.ra-hardcore-changed(); }
             ra-sign-in(user, password) => { root.ra-sign-in(user, password); }
             ra-sign-out => { root.ra-sign-out(); }

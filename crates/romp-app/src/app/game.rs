@@ -505,7 +505,6 @@ impl Controller {
 
     /// Plays the current game, from a save slot when one is given.
     pub(super) fn play_game_from(&self, slot: Option<u8>) {
-        self.requested_slot.set(slot);
         let Some(ui) = self.ui() else { return };
         let Some(detail) = self.current_game() else {
             return;
@@ -530,6 +529,7 @@ impl Controller {
         let Some(core) = core_for_platform(&detail.platform_slug) else {
             return;
         };
+        self.requested_slot.set(slot);
         self.preparing.set(true);
         ui.set_game_status("Getting ready…".into());
         let cores = self.shared.cores.clone();
@@ -895,7 +895,6 @@ impl Controller {
         self.start_game(detail, rom, jit, core);
     }
 
-    /// The console's look: the player's choice, or the one it starts with.
     /// How a console's games are drawn: the player's choice, or the console's default.
     pub(super) fn look_choice(&self, platform: &str) -> crate::looks::Choice {
         let saved = self
@@ -906,32 +905,21 @@ impl Controller {
             .get(&crate::looks::store_key(platform));
         saved
             .and_then(|json| serde_json::from_str(&json).ok())
-            .unwrap_or_else(|| {
-                crate::looks::default_choice(platform, self.prefs.get().sharp_pixels)
-            })
+            .unwrap_or_else(|| crate::looks::default_choice(platform))
     }
 
     pub(super) fn save_look_choice(&self, platform: &str, choice: &crate::looks::Choice) {
-        let json = serde_json::to_string(choice).expect("look serializes");
-        self.shared
-            .store
-            .lock()
-            .unwrap()
-            .set(&crate::looks::store_key(platform), &json);
+        save_look(&self.shared.store, platform, choice);
     }
 
     fn look_options(&self, platform: &str) -> crate::play::LookOptions {
-        let key = crate::looks::store_key(platform);
-        let choice = self.look_choice(platform);
         let store = self.shared.store.clone();
+        let owner = platform.to_string();
         crate::play::LookOptions {
             platform: platform.to_string(),
-            choice,
+            choice: self.look_choice(platform),
             shaders: paths::shaders_dir(),
-            changed: Box::new(move |choice| {
-                let json = serde_json::to_string(&choice).expect("look serializes");
-                store.lock().unwrap().set(&key, &json);
-            }),
+            changed: Box::new(move |choice| save_look(&store, &owner, &choice)),
         }
     }
 
@@ -1081,4 +1069,16 @@ impl Controller {
         self.game_status(detail.id, String::new());
         self.refresh_game_page(true);
     }
+}
+
+fn save_look(
+    store: &std::sync::Mutex<crate::store::Store>,
+    platform: &str,
+    choice: &crate::looks::Choice,
+) {
+    let json = serde_json::to_string(choice).expect("look serializes");
+    store
+        .lock()
+        .unwrap()
+        .set(&crate::looks::store_key(platform), &json);
 }

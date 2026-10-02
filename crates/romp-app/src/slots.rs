@@ -87,6 +87,26 @@ pub fn when(saved_at: SystemTime, now: SystemTime) -> String {
     }
 }
 
+/// How a slot shows in the game menu and on the game's page, marked when it's the current one.
+pub fn card(info: &SlotInfo, now: SystemTime, current: Option<u8>) -> crate::SlotCard {
+    let thumbnail = info
+        .thumbnail
+        .as_ref()
+        .and_then(|p| slint::Image::load_from_path(p).ok());
+    crate::SlotCard {
+        slot: i32::from(info.slot),
+        label: info.label().into(),
+        detail: info
+            .saved_at
+            .map_or_else(|| "Empty".to_string(), |t| when(t, now))
+            .into(),
+        has_thumbnail: thumbnail.is_some(),
+        thumbnail: thumbnail.unwrap_or_default(),
+        empty: info.is_empty(),
+        current: Some(info.slot) == current,
+    }
+}
+
 /// A small copy of the frame for a slot's picture, sampled so it costs next to nothing.
 pub fn thumbnail(rgba: &[u8], width: u32, height: u32, aspect: f32) -> Option<image::RgbaImage> {
     if width == 0 || height == 0 || rgba.len() < (width * height * 4) as usize {

@@ -1,4 +1,5 @@
 use super::{on_ui, with_controller, Controller, SCREEN_LIBRARY, SCREEN_SETTINGS};
+use crate::achievements::popups;
 use crate::console_settings::{self, Chosen};
 use crate::cores::core_for_platform;
 use crate::details::human_size;
@@ -41,6 +42,15 @@ impl Controller {
         ui.set_pref_resume(prefs.resume);
         ui.set_pref_fullscreen(prefs.fullscreen);
         ui.set_pref_volume(f32::from(prefs.volume));
+        let names = |list: &[&str]| {
+            ModelRc::new(VecModel::from(
+                list.iter()
+                    .map(|s| slint::SharedString::from(*s))
+                    .collect::<Vec<_>>(),
+            ))
+        };
+        ui.set_pref_popup_levels(names(&popups::LEVELS));
+        ui.set_pref_popup_corners(names(&popups::CORNERS));
         ui.set_pref_achievement_popups(i32::from(prefs.achievement_popups));
         ui.set_pref_achievement_corner(i32::from(prefs.achievement_corner));
         ui.set_pref_ui_scale(
@@ -70,14 +80,13 @@ impl Controller {
             pause_unfocused: ui.get_pref_pause_unfocused(),
             resume: ui.get_pref_resume(),
             fullscreen: ui.get_pref_fullscreen(),
-            sharp_pixels: self.prefs.get().sharp_pixels,
             volume: ui.get_pref_volume().round().clamp(0.0, 100.0) as u8,
             ui_scale: UI_SCALES
                 .get(ui.get_pref_ui_scale() as usize)
                 .copied()
                 .unwrap_or(100),
-            achievement_popups: ui.get_pref_achievement_popups().clamp(0, 2) as u8,
-            achievement_corner: ui.get_pref_achievement_corner().clamp(0, 3) as u8,
+            achievement_popups: index_within(ui.get_pref_achievement_popups(), &popups::LEVELS),
+            achievement_corner: index_within(ui.get_pref_achievement_corner(), &popups::CORNERS),
         };
         if prefs == self.prefs.get() {
             return;
@@ -570,4 +579,9 @@ impl Controller {
     pub(super) fn show_folder(&self) {
         let _ = open::that_detached(paths::data_dir());
     }
+}
+
+/// A picked index, kept within `list`.
+fn index_within(index: i32, list: &[&str]) -> u8 {
+    index.clamp(0, list.len() as i32 - 1) as u8
 }

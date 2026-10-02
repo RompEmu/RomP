@@ -35,6 +35,7 @@ pub struct Shading {
     redraw: bool,
     shown: bool,
     settling: u32,
+    unavailable: bool,
 }
 
 /// How many more times the shaders run after the picture last changed. Ghosting and afterglow
@@ -158,6 +159,7 @@ impl Shading {
         if presets(&self.stages) != presets(&stages) {
             self.failed = false;
             self.shown = false;
+            self.chains.retain(|_, chain| chain.is_some());
         }
         self.stages = stages;
         self.redraw = true;
@@ -170,7 +172,12 @@ impl Shading {
 
     /// Whether the shaders are drawing the game, so the window should not show the plain picture.
     pub fn active(&self) -> bool {
-        !self.stages.is_empty() && !self.failed
+        !self.stages.is_empty() && !self.failed && !self.unavailable
+    }
+
+    /// For a window that can't run shaders, so it keeps showing the plain picture.
+    pub fn set_unavailable(&mut self) {
+        self.unavailable = true;
     }
 
     pub fn set_frame(&mut self, rgba: &[u8], width: u32, height: u32, aspect: f32) {
@@ -190,9 +197,9 @@ impl Shading {
     }
 
     /// The last frame from the game, for showing it plainly once the shaders are off.
-    pub fn frame(&self) -> Option<(&[u8], u32, u32, f32)> {
+    pub fn frame(&self) -> Option<(&[u8], u32, u32)> {
         let (width, height) = self.frame_size;
-        (width > 0).then_some((&self.frame, width, height, self.aspect))
+        (width > 0).then_some((&self.frame, width, height))
     }
 
     pub fn setup(&mut self, get_proc_address: &dyn Fn(&std::ffi::CStr) -> *const std::ffi::c_void) {
@@ -221,7 +228,8 @@ impl Shading {
         self.shown = false;
     }
 
-    /// Builds a preset once and keeps it, so switching back to a look is instant.
+    /// Builds a preset once and keeps it, so switching back to a look is instant. librashader
+    /// doesn't free a chain's programs when it's dropped, so keeping them also avoids a leak.
     fn load(&mut self, gl: &Arc<glow::Context>, preset: &Path) -> bool {
         self.chains
             .entry(preset.to_path_buf())

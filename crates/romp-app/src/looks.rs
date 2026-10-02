@@ -69,7 +69,8 @@ pub enum Row {
     Dithering,
 }
 
-const HANDHELDS: [&str; 11] = [
+// Not the PSP: it draws at several times its screen's resolution, which a pixel grid can't follow.
+const HANDHELDS: [&str; 10] = [
     "gb",
     "gbc",
     "gba",
@@ -80,7 +81,6 @@ const HANDHELDS: [&str; 11] = [
     "wonderswan",
     "wonderswan-color",
     "nds",
-    "psp",
 ];
 
 const TELEVISION: [&str; 20] = [
@@ -159,15 +159,13 @@ pub fn default_tuning(platform: &str) -> Tuning {
 }
 
 /// What a console looks like until the player picks something else.
-pub fn default_choice(platform: &str, sharp_pixels: bool) -> Choice {
+pub fn default_choice(platform: &str) -> Choice {
     let look = if is_handheld(platform) {
         Look::Handheld
     } else if TELEVISION.contains(&platform) || MONITOR.contains(&platform) {
         Look::Crt
-    } else if sharp_pixels {
-        Look::Sharp
     } else {
-        Look::Smooth
+        Look::Sharp
     };
     Choice {
         look,
@@ -203,7 +201,6 @@ fn colours_preset(platform: &str) -> Option<&'static str> {
         "gba" => Some("handheld/color-mod/gba-color.slangp"),
         "gbc" => Some("handheld/color-mod/gbc-color.slangp"),
         "nds" => Some("handheld/color-mod/nds-color.slangp"),
-        "psp" => Some("handheld/color-mod/psp-color.slangp"),
         _ => None,
     }
 }
@@ -308,6 +305,7 @@ pub fn step(choice: &mut Choice, platform: &str, row: Row, delta: i32) {
 }
 
 /// What sets a TV apart from a monitor, before the player's curvature, scanline and mask steps.
+/// Both set the same parameters: a shader keeps its values while its look is switched.
 fn character(tv: bool) -> &'static [(&'static str, f32)] {
     if tv {
         // A home TV over composite: soft, glowing, with a slot mask and darker edges.
@@ -318,7 +316,9 @@ fn character(tv: bool) -> &'static [(&'static str, f32)] {
             ("halation", 0.15),
             ("shadowMask", 0.0),
             ("vigstr", 0.25),
+            ("gsl", 0.0),
             ("brightboost", 1.5),
+            ("brightboost1", 1.1),
         ]
     } else {
         // A studio monitor over RGB: sharp, with an aperture grille and no glow.
@@ -328,8 +328,6 @@ fn character(tv: bool) -> &'static [(&'static str, f32)] {
             ("glow", 0.0),
             ("halation", 0.0),
             ("shadowMask", 6.0),
-            ("slotmask", 0.0),
-            ("slotmask1", 0.0),
             ("vigstr", 0.0),
             ("gsl", 1.0),
             ("brightboost", 1.8),
@@ -386,7 +384,6 @@ pub fn params(choice: &Choice) -> Vec<(String, f32)> {
             ("slotmask1", slot),
         ]
         .into_iter()
-        .filter(|(name, _)| tv || !name.starts_with("slotmask"))
         .map(|(name, value)| (name.to_string(), value)),
     );
     params
@@ -448,17 +445,15 @@ mod tests {
 
     #[test]
     fn consoles_start_with_the_screen_they_were_played_on() {
-        assert_eq!(default_choice("snes", true).look, Look::Crt);
-        assert_eq!(default_choice("snes", true).tuning.screen, 0);
-        assert_eq!(default_choice("arcade", true).look, Look::Crt);
-        assert_eq!(default_choice("arcade", true).tuning.screen, 1);
-        assert_eq!(default_choice("arcade", true).tuning.curvature, 0);
-        assert_eq!(default_choice("gb", true).look, Look::Handheld);
-        assert_eq!(default_choice("ps2", true).look, Look::Sharp);
-        assert_eq!(default_choice("ps2", false).look, Look::Smooth);
+        assert_eq!(default_choice("snes").look, Look::Crt);
+        assert_eq!(default_choice("snes").tuning.screen, 0);
+        assert_eq!(default_choice("arcade").look, Look::Crt);
+        assert_eq!(default_choice("arcade").tuning.screen, 1);
+        assert_eq!(default_choice("arcade").tuning.curvature, 0);
+        assert_eq!(default_choice("gb").look, Look::Handheld);
         assert_eq!(
-            default_choice("psx", false).look,
-            Look::Smooth,
+            default_choice("psx").look,
+            Look::Sharp,
             "upscaled 3D would get twice the scanlines"
         );
     }
@@ -467,12 +462,16 @@ mod tests {
     fn handheld_screens_are_only_offered_for_handhelds() {
         assert!(available("gba").contains(&Look::Handheld));
         assert!(!available("snes").contains(&Look::Handheld));
+        assert!(
+            !available("psp").contains(&Look::Handheld),
+            "the PSP draws upscaled"
+        );
         assert_eq!(
             preset(Look::Handheld, "gb"),
             Some("handheld/gameboy-pocket.slangp")
         );
         assert_eq!(
-            preset(Look::Handheld, "psp"),
+            preset(Look::Handheld, "lynx"),
             Some("handheld/lcd-grid-v2.slangp")
         );
         assert_eq!(preset(Look::Smooth, "snes"), None);
@@ -488,7 +487,7 @@ mod tests {
                 scanlines: 2,
                 mask: 0,
             },
-            ..default_choice("arcade", true)
+            ..default_choice("arcade")
         };
         let monitor = params(&flat);
         let get = |name: &str| monitor.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
@@ -500,11 +499,11 @@ mod tests {
             Some(6.0),
             "a monitor has an aperture grille"
         );
-        let tv = params(&default_choice("snes", true));
+        let tv = params(&default_choice("snes"));
         let tv_get = |name: &str| tv.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
         assert_eq!(tv_get("slotmask"), Some(0.3), "a TV has a slot mask");
         assert!(tv_get("glow").unwrap() > get("glow").unwrap());
-        assert!(params(&default_choice("ps2", true)).is_empty());
+        assert!(params(&default_choice("ps2")).is_empty());
     }
 
     #[test]
@@ -525,7 +524,7 @@ mod tests {
                 let choice = Choice {
                     look: *look,
                     model,
-                    ..default_choice(platform, true)
+                    ..default_choice(platform)
                 };
                 for stage in stages(&choice, platform, &shaders) {
                     assert!(
@@ -541,7 +540,7 @@ mod tests {
     #[test]
     fn dithering_is_blended_before_the_look_on_consoles_that_used_it() {
         let shaders = Path::new("shaders");
-        let mut choice = default_choice("genesis", true);
+        let mut choice = default_choice("genesis");
         let names = |choice: &Choice, platform| {
             stages(choice, platform, shaders)
                 .into_iter()
@@ -556,7 +555,7 @@ mod tests {
             ]
         );
         assert!(rows(&choice, "genesis").contains(&Row::Dithering));
-        assert!(!rows(&default_choice("snes", true), "snes").contains(&Row::Dithering));
+        assert!(!rows(&default_choice("snes"), "snes").contains(&Row::Dithering));
         step(&mut choice, "genesis", Row::Dithering, 1);
         assert_eq!(row_value(&choice, Row::Dithering), "Off");
         assert_eq!(names(&choice, "genesis").len(), 1);
@@ -565,7 +564,7 @@ mod tests {
     #[test]
     fn handhelds_show_the_colours_their_screens_did() {
         let shaders = Path::new("shaders");
-        let mut choice = default_choice("gba", true);
+        let mut choice = default_choice("gba");
         assert_eq!(rows(&choice, "gba"), [Row::Style, Row::Colours]);
         assert_eq!(row_value(&choice, Row::Colours), "Original");
         assert_eq!(stages(&choice, "gba", shaders).len(), 2);
@@ -577,7 +576,7 @@ mod tests {
     #[test]
     fn game_boy_games_pick_which_game_boy_screen() {
         let shaders = Path::new("shaders");
-        let mut choice = default_choice("gb", true);
+        let mut choice = default_choice("gb");
         assert_eq!(rows(&choice, "gb"), [Row::Style, Row::Model]);
         assert_eq!(row_value(&choice, Row::Model), "Pocket");
         let screen = |choice: &Choice| stages(choice, "gb", shaders).pop().unwrap();
@@ -586,12 +585,29 @@ mod tests {
         assert!(screen(&choice).params.contains(&("palette".into(), 4.0)));
         step(&mut choice, "gb", Row::Model, 1);
         assert_eq!(screen(&choice).preset, shaders.join("handheld/dot.slangp"));
-        assert!(!rows(&default_choice("gbc", true), "gbc").contains(&Row::Model));
+        assert!(!rows(&default_choice("gbc"), "gbc").contains(&Row::Model));
+    }
+
+    #[test]
+    fn tv_and_monitor_set_the_same_parameters() {
+        let names = |screen| {
+            let choice = Choice {
+                tuning: Tuning {
+                    screen,
+                    ..default_tuning("snes")
+                },
+                ..default_choice("snes")
+            };
+            let mut names: Vec<String> = params(&choice).into_iter().map(|(n, _)| n).collect();
+            names.sort();
+            names
+        };
+        assert_eq!(names(0), names(1));
     }
 
     #[test]
     fn settings_pick_from_each_lines_choices() {
-        let mut choice = default_choice("snes", true);
+        let mut choice = default_choice("snes");
         assert_eq!(
             row_choices(Row::Style, "snes"),
             ["Sharp pixels", "Smooth", "CRT"]
@@ -610,7 +626,7 @@ mod tests {
     fn smooth_pixels_with_no_passes_are_drawn_plainly() {
         let choice = Choice {
             look: Look::Smooth,
-            ..default_choice("ps2", false)
+            ..default_choice("ps2")
         };
         assert!(stages(&choice, "ps2", Path::new("shaders")).is_empty());
     }

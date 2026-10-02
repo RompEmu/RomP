@@ -11,6 +11,15 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Changed
 
 - Nintendo DS games play in melonDS DS instead of DeSmuME. Their saves now sync with RomM as .sav files, the same as standalone melonDS. Existing DeSmuME saves become melonDS saves the first time Romp looks at them; DeSmuME's save and save states, which melonDS can't load, are kept in the game's backup folder.
+- PSP games no longer offer the handheld screen look or its colours. The PSP draws at several times its screen's resolution, where the screen's pixel grid turned into a pattern.
+- Consoles without a chosen look start with sharp pixels, even if the Sharp pixels switch removed in 0.9.0 was off.
+
+### Fixed
+
+- Play from here starts from the chosen save state even if Play is pressed while the game is getting ready.
+- Play from here is off in hardcore mode, with a note saying so, instead of quietly starting from the beginning.
+- The CRT's TV screen looks the same after switching to Monitor and back during a game.
+- Games show their picture plainly instead of a black window on computers where shaders can't run.
 
 ## [0.9.0] - 2026-10-02
 

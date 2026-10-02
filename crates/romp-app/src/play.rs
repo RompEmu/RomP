@@ -112,7 +112,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Resu
             look: std::env::var("ROMP_PLATFORM")
                 .ok()
                 .map(|platform| LookOptions {
-                    choice: crate::looks::default_choice(&platform, true),
+                    choice: crate::looks::default_choice(&platform),
                     platform,
                     shaders: paths::shaders_dir(),
                     changed: Box::new(|_| {}),
@@ -206,6 +206,7 @@ struct Game {
     slots_open: Cell<bool>,
     slots_focus: Cell<u8>,
     thumbnail_wanted: Cell<Option<u8>>,
+    thumbnail_frame: Cell<u32>,
     recent_thumbnail: RefCell<Option<image::RgbaImage>>,
     thumbnails: (std::sync::mpsc::Sender<u8>, std::sync::mpsc::Receiver<u8>),
 }
@@ -618,25 +619,8 @@ impl Game {
         let now = std::time::SystemTime::now();
         let current = self.controls.borrow().slot();
         let cards: Vec<crate::SlotCard> = crate::slots::read(&self.save_dir, 1..=input::SLOTS)
-            .into_iter()
-            .map(|info| {
-                let thumbnail = info
-                    .thumbnail
-                    .as_ref()
-                    .and_then(|p| Image::load_from_path(p).ok());
-                crate::SlotCard {
-                    slot: i32::from(info.slot),
-                    label: info.label().into(),
-                    detail: info
-                        .saved_at
-                        .map_or_else(|| "Empty".to_string(), |t| crate::slots::when(t, now))
-                        .into(),
-                    has_thumbnail: thumbnail.is_some(),
-                    thumbnail: thumbnail.unwrap_or_default(),
-                    empty: info.is_empty(),
-                    current: info.slot == current,
-                }
-            })
+            .iter()
+            .map(|info| crate::slots::card(info, now, Some(current)))
             .collect();
         let ui = self.primary();
         ui.set_slot_cards(ModelRc::new(VecModel::from(cards)));
@@ -646,7 +630,6 @@ impl Game {
     /// Saves to `slot`, which becomes the current one, with a picture of the game as it is now.
     fn save_slot(&self, slot: u8) {
         self.controls.borrow_mut().set_slot(slot);
-        self.primary().set_slot(i32::from(slot));
         self.thumbnail_wanted.set(Some(slot));
         self.send(&AppMsg::SaveSlot(slot));
     }
@@ -657,7 +640,6 @@ impl Game {
             return;
         }
         self.controls.borrow_mut().set_slot(slot);
-        self.primary().set_slot(i32::from(slot));
         self.load_slot(slot);
         if !self.hardcore.get() {
             self.close_slots();
@@ -679,14 +661,21 @@ impl Game {
 
     fn take_thumbnails(&self, rgba: &[u8], shown: Option<(u32, u32, f32)>, frame: u32) {
         let wanted = self.thumbnail_wanted.take();
-        if wanted.is_none() && !frame.is_multiple_of(THUMBNAIL_EVERY) {
+        let due = frame != self.thumbnail_frame.get() && frame.is_multiple_of(THUMBNAIL_EVERY);
+        if wanted.is_none() && !due {
             return;
         }
+        self.thumbnail_frame.set(frame);
         let Some((width, height, aspect)) = shown else {
             return;
         };
-        let (pixels, width, height) =
-            crate::rotation::rotate(rgba, width, height, self.rotation.get());
+        let turns = self.rotation.get();
+        let (pixels, width, height) = if turns.is_multiple_of(4) {
+            (std::borrow::Cow::Borrowed(rgba), width, height)
+        } else {
+            let (rotated, w, h) = crate::rotation::rotate(rgba, width, height, turns);
+            (std::borrow::Cow::Owned(rotated), w, h)
+        };
         let Some(picture) = crate::slots::thumbnail(&pixels, width, height, aspect) else {
             return;
         };
@@ -834,7 +823,6 @@ impl Game {
     }
 
     fn show_slot(&self, slot: u8) {
-        self.primary().set_slot(i32::from(slot));
         flash(self.primary(), format!("Save slot {slot}"));
     }
 
@@ -1166,11 +1154,7 @@ impl Game {
         self.corner.set(prefs.achievement_corner);
         self.apply_popups();
         self.volume.set(prefs.volume);
-        let has_look = self.look.borrow().is_some();
         for window in &self.windows {
-            if !has_look {
-                window.set_sharp(prefs.sharp_pixels);
-            }
             window.set_volume(i32::from(prefs.volume));
         }
         self.send(&AppMsg::Volume(prefs.volume));
@@ -1226,7 +1210,6 @@ pub fn launch(
         windows.push(window);
     }
     for window in &windows {
-        window.set_sharp(opts.prefs.sharp_pixels);
         window.set_volume(i32::from(opts.prefs.volume));
     }
 
@@ -1305,6 +1288,7 @@ pub fn launch(
             slots_open: Cell::new(false),
             slots_focus: Cell::new(1),
             thumbnail_wanted: Cell::new(None),
+            thumbnail_frame: Cell::new(0),
             recent_thumbnail: RefCell::new(None),
             thumbnails: std::sync::mpsc::channel(),
         }
@@ -1383,6 +1367,7 @@ pub fn launch(
                 let session = game.session.borrow();
                 if let Some(info) = session.frames.read_into(last_seq, &mut buf) {
                     last_seq = info.seq;
+                    frame_count = frame_count.wrapping_add(1);
                     shown = Some((info.width, info.height, info.aspect));
                     match (
                         game.windows.get(1),
@@ -1406,7 +1391,6 @@ pub fn launch(
             if game.screenshot_wanted.take() {
                 game.capture(&buf, shown);
             }
-            frame_count = frame_count.wrapping_add(1);
             game.take_thumbnails(&buf, shown, frame_count);
             game.thumbnail_written();
             game.screenshot_saved();
@@ -1548,6 +1532,12 @@ fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
                 slint::RenderingState::RenderingSetup => {
                     if let slint::GraphicsAPI::NativeOpenGL { get_proc_address } = api {
                         state.setup(get_proc_address);
+                    } else {
+                        tracing::warn!("shaders need OpenGL, which this window doesn't draw with");
+                        state.set_unavailable();
+                        if let Some(window) = weak.upgrade() {
+                            show_plain(&window, &state);
+                        }
                     }
                 }
                 slint::RenderingState::BeforeRendering => {
@@ -1579,14 +1569,14 @@ fn shade(window: &GameWindow) -> Rc<RefCell<crate::shading::Shading>> {
         });
     if let Err(e) = installed {
         tracing::warn!("shaders are unavailable in this window: {e}");
-        shading.borrow_mut().set_stages(Vec::new());
+        shading.borrow_mut().set_unavailable();
     }
     shading
 }
 
 /// Shows the game's last frame as it is, for when the shader stops drawing it.
 fn show_plain(window: &GameWindow, shading: &crate::shading::Shading) {
-    if let Some((rgba, width, height, _)) = shading.frame() {
+    if let Some((rgba, width, height)) = shading.frame() {
         let pixels = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba, width, height);
         window.set_frame(Image::from_rgba8(pixels));
     }

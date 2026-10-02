@@ -206,7 +206,6 @@ component MenuDivider inherits Rectangle {
 component GameMenu inherits Rectangle {
     in property <string> name;
     in property <bool> paused;
-    in property <int> slot;
     in property <int> volume;
     in property <bool> fullscreen;
     in property <int> focused-item: -1;
@@ -344,7 +343,7 @@ component GameMenu inherits Rectangle {
             }
             MenuRow {
                 text: @tr("Look  ·  {}", root.look-label);
-                icon: @image-url("icons/fullscreen.svg");
+                icon: @image-url("icons/screen.svg");
                 focused: root.focused-item == 4;
                 clicked => { root.open-look(); }
             }
@@ -479,7 +478,6 @@ export component GameWindow inherits Window {
     in property <bool> has-menu;
     in property <bool> menu-open;
     in property <bool> paused;
-    in property <int> slot: 1;
     in property <int> volume: 100;
     in property <bool> fullscreen;
     in property <bool> sharp: true;
@@ -663,7 +661,6 @@ export component GameWindow inherits Window {
             height: parent.height;
             name: root.game-name;
             paused: root.paused;
-            slot: root.slot;
             volume: root.volume;
             fullscreen: root.fullscreen;
             focused-item: root.menu-focus;

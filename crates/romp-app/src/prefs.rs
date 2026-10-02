@@ -1,3 +1,4 @@
+use crate::achievements::popups;
 use serde::{Deserialize, Serialize};
 
 pub const UI_SCALES: [u8; 3] = [100, 150, 200];
@@ -8,7 +9,6 @@ pub struct Preferences {
     pub pause_unfocused: bool,
     pub resume: bool,
     pub fullscreen: bool,
-    pub sharp_pixels: bool,
     pub volume: u8,
     pub ui_scale: u8,
     /// How much RetroAchievements shows over games: an index into `popups::LEVELS`.
@@ -23,7 +23,6 @@ impl Default for Preferences {
             pause_unfocused: true,
             resume: true,
             fullscreen: false,
-            sharp_pixels: true,
             volume: 100,
             ui_scale: 100,
             achievement_popups: 1,
@@ -41,8 +40,9 @@ impl Preferences {
         if !UI_SCALES.contains(&prefs.ui_scale) {
             prefs.ui_scale = 100;
         }
-        prefs.achievement_popups = prefs.achievement_popups.min(2);
-        prefs.achievement_corner = prefs.achievement_corner.min(3);
+        let last = |list: &[&str]| (list.len() - 1) as u8;
+        prefs.achievement_popups = prefs.achievement_popups.min(last(&popups::LEVELS));
+        prefs.achievement_corner = prefs.achievement_corner.min(last(&popups::CORNERS));
         prefs
     }
 
@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn defaults_favour_a_calm_desktop_setup() {
         let p = Preferences::default();
-        assert!(p.pause_unfocused && p.resume && p.sharp_pixels);
+        assert!(p.pause_unfocused && p.resume);
         assert!(!p.fullscreen);
         assert_eq!(p.volume, 100);
     }
