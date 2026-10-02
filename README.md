@@ -96,7 +96,7 @@ cargo build --release
 
 `make check` runs the same checks as CI: formatting, Clippy, tests, [cargo-deny](https://github.com/EmbarkStudios/cargo-deny), [cargo-machete](https://github.com/bnjbvr/cargo-machete), [typos](https://github.com/crate-ci/typos), [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://github.com/zizmorcore/zizmor).
 
-`romp --core <core library> --rom <file>` plays a file without a RomM server, which helps when testing. `ROMP_PLATFORM=snes` (or any RomM platform name) gives it that console's look.
+`romp --core <core library> --rom <file>` plays a file without a RomM server, which helps when testing. `ROMP_PLATFORM=snes` (or any RomM platform name) gives it that console's look. With `--smoke <folder>` it plays briefly as a check, saving a frame there, and exits with an error if the game doesn't play; the Smoke test workflow runs this on each packaged build before a release.
 
 `make update-rcheevos` replaces the bundled [rcheevos](https://github.com/RetroAchievements/rcheevos) with its latest release, or a given one with `RCHEEVOS=v12.5.0`.
 

@@ -993,6 +993,7 @@ impl Controller {
             },
             achievements,
             look: Some(self.look_options(&detail.platform_slug)),
+            smoke: None,
             screenshot_taken: {
                 let id = detail.id;
                 Box::new(move |path| {

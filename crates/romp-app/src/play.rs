@@ -61,6 +61,7 @@ pub struct GameOptions {
     pub screenshot_taken: ScreenshotTaken,
     pub achievements: Option<crate::achievements::popups::Launch>,
     pub look: Option<LookOptions>,
+    pub smoke: Option<crate::smoke::Smoke>,
 }
 
 pub struct CoreGame {
@@ -94,7 +95,20 @@ impl RunningGame {
     }
 }
 
-pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Result<()> {
+pub fn run(
+    core: PathBuf,
+    rom: PathBuf,
+    jit: bool,
+    vulkan: bool,
+    smoke: Option<PathBuf>,
+) -> anyhow::Result<()> {
+    let (smoke, outcome) = match smoke {
+        Some(dir) => {
+            let (smoke, outcome) = crate::smoke::Smoke::new(dir, std::time::Instant::now());
+            (Some(smoke), Some(outcome))
+        }
+        None => (None, None),
+    };
     let rom = rom
         .canonicalize()
         .with_context(|| format!("ROM not found: {}", rom.display()))?;
@@ -117,6 +131,7 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Resu
                     shaders: paths::shaders_dir(),
                     changed: Box::new(|_| {}),
                 }),
+            smoke,
             core,
             rom,
             save_dir,
@@ -146,7 +161,11 @@ pub fn run(core: PathBuf, rom: PathBuf, jit: bool, vulkan: bool) -> anyhow::Resu
     )?;
     slint::run_event_loop()?;
     game.wait_exit(Duration::from_secs(4));
-    Ok(())
+    match outcome.map(|o| o.borrow_mut().take()) {
+        None | Some(Some(Ok(()))) => Ok(()),
+        Some(Some(Err(reason))) => anyhow::bail!("smoke test failed: {reason}"),
+        Some(None) => anyhow::bail!("smoke test failed: the window closed before it finished"),
+    }
 }
 
 pub type CoreIdentity = (String, String);
@@ -200,6 +219,7 @@ struct Game {
     screenshot_taken: ScreenshotTaken,
     achievements: RefCell<Option<crate::achievements::popups::Link>>,
     achievements_open: Cell<bool>,
+    smoke: Option<RefCell<crate::smoke::Smoke>>,
     achievement_list: RefCell<Vec<romp_proto::msg::AchievementInfo>>,
     hardcore: Cell<bool>,
     save_dir: PathBuf,
@@ -724,6 +744,14 @@ impl Game {
         ui.set_achievements_scroll(0.0);
         ui.set_achievements_open(true);
         self.show_achievement_rows();
+    }
+
+    fn smoke_step(&self, step: crate::smoke::Step) {
+        match step {
+            crate::smoke::Step::Wait => {}
+            crate::smoke::Step::SaveState => self.save_slot(crate::smoke::SLOT),
+            crate::smoke::Step::Finish => (self.finish)(),
+        }
     }
 
     /// Shows how much RetroAchievements may show over the game, and where.
@@ -1282,6 +1310,7 @@ pub fn launch(
                     .map(crate::achievements::popups::Link::new),
             ),
             achievements_open: Cell::new(false),
+            smoke: opts.smoke.map(RefCell::new),
             achievement_list: RefCell::default(),
             hardcore: Cell::new(hardcore),
             save_dir: opts.save_dir.clone(),
@@ -1363,10 +1392,12 @@ pub fn launch(
                 commands.extend(game.controls.borrow_mut().set_gamepads(states));
                 game.run_commands(commands);
             }
+            let mut fresh = false;
             let events = {
                 let session = game.session.borrow();
                 if let Some(info) = session.frames.read_into(last_seq, &mut buf) {
                     last_seq = info.seq;
+                    fresh = true;
                     frame_count = frame_count.wrapping_add(1);
                     shown = Some((info.width, info.height, info.aspect));
                     match (
@@ -1392,6 +1423,13 @@ pub fn launch(
                 game.capture(&buf, shown);
             }
             game.take_thumbnails(&buf, shown, frame_count);
+            if let Some(smoke) = &game.smoke {
+                let mut step = smoke.borrow().tick(std::time::Instant::now());
+                if let (crate::smoke::Step::Wait, true, Some((w, h, _))) = (&step, fresh, shown) {
+                    step = smoke.borrow_mut().frame(&buf, w, h, frame_count);
+                }
+                game.smoke_step(step);
+            }
             game.thumbnail_written();
             game.screenshot_saved();
             game.show_achievements(std::time::Instant::now());
@@ -1427,6 +1465,17 @@ pub fn launch(
                         game.send(&AppMsg::ListAchievements);
                     }
                     continue;
+                }
+                if let (Some(smoke), SessionEvent::Runner(RunnerMsg::StateWritten { slot, ok })) =
+                    (&game.smoke, &event)
+                {
+                    game.smoke_step(smoke.borrow().state_written(*slot, *ok, &save_dir));
+                }
+                if let (Some(smoke), SessionEvent::Ended { code, .. }) = (&game.smoke, &event) {
+                    if *code != Some(0) {
+                        smoke.borrow().ended(*code);
+                        (game.finish)();
+                    }
                 }
                 if let SessionEvent::Runner(RunnerMsg::StateWritten { ok: true, .. }) = &event {
                     if game.slots_open.get() {

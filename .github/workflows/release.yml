@@ -31,8 +31,14 @@ jobs:
     with:
       version: ${{ github.ref_name }}
 
-  publish:
+  smoke:
     needs: build
+    uses: ./.github/workflows/smoke.yml
+    permissions:
+      contents: read
+
+  publish:
+    needs: [build, smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -1,0 +1,97 @@
+name: Smoke test
+
+# Plays a game in each packaged build. Release runs it on the packages it built, before
+# publishing; running it by hand builds the packages first.
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [smoke-test]
+
+permissions: {}
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/smoke-test'
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+    with:
+      version: smoke
+
+  smoke:
+    needs: build
+    if: ${{ !cancelled() && needs.build.result != 'failure' }}
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            core: apple/osx/arm64/latest/nestopia_libretro.dylib
+          - name: Linux
+            os: ubuntu-latest
+            core: linux/x86_64/latest/nestopia_libretro.so
+          - name: Windows
+            os: windows-latest
+            core: windows/x86_64/latest/nestopia_libretro.dll
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: romp-${{ runner.os }}
+          path: dist
+      - name: Install a virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri libegl1 libxkbcommon-x11-0
+      - name: Unpack Romp
+        run: |
+          case "$RUNNER_OS" in
+            macOS)
+              ditto -x -k dist/*-macos-*.zip app
+              echo "ROMP=$PWD/app/Romp.app/Contents/MacOS/romp" >> "$GITHUB_ENV"
+              ;;
+            Linux)
+              chmod +x dist/*.AppImage
+              echo "ROMP=$(ls "$PWD"/dist/*.AppImage)" >> "$GITHUB_ENV"
+              ;;
+            Windows)
+              7z x -bso0 -oapp dist/*-windows-*.zip
+              echo "ROMP=$(ls "$PWD"/app/*/romp.exe)" >> "$GITHUB_ENV"
+              ;;
+          esac
+      - name: Get a core and a game
+        env:
+          CORE: ${{ matrix.core }}
+        run: |
+          curl -fsSL -o core.zip "https://buildbot.libretro.com/nightly/$CORE.zip"
+          python="$(command -v python3 || command -v python)"
+          "$python" -m zipfile -e core.zip core
+          echo "CORE_FILE=$(ls "$PWD"/core/*)" >> "$GITHUB_ENV"
+          "$python" .github/smoke/make_rom.py smoke.nes
+      - name: Play
+        env:
+          ROMP_PLATFORM: nes
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          run=()
+          if [ "$RUNNER_OS" = Linux ]; then run=(xvfb-run -a -s "-screen 0 1280x1024x24"); fi
+          "${run[@]}" "$ROMP" --core "$CORE_FILE" --rom smoke.nes --smoke out
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smoke-${{ runner.os }}
+          path: out
+          if-no-files-found: ignore

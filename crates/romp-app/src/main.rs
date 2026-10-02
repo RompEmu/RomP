@@ -42,6 +42,7 @@ mod screenshot;
 mod session;
 mod shading;
 mod slots;
+mod smoke;
 mod storage;
 mod store;
 mod sync;
@@ -65,6 +66,10 @@ struct Args {
     jit: bool,
     #[arg(long)]
     vulkan: bool,
+    /// Plays the game briefly as a test, writing a frame to this folder, and exits with an error
+    /// if it doesn't play.
+    #[arg(long, requires = "core")]
+    smoke: Option<PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -81,7 +86,7 @@ fn main() -> anyhow::Result<()> {
         .with_winit_custom_application_handler(mouse::RawMouse)
         .select()?;
     match (args.core, args.rom) {
-        (Some(core), Some(rom)) => play::run(core, rom, args.jit, args.vulkan),
+        (Some(core), Some(rom)) => play::run(core, rom, args.jit, args.vulkan, args.smoke),
         _ => app::run(),
     }
 }
