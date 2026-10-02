@@ -10,8 +10,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Changed
 
-- Hardcore mode is off, and its setting hidden, until RetroAchievements adds Romp to its approved emulators. RetroAchievements doesn't accept hardcore unlocks from emulators it hasn't approved, and only considers ones that have been public for six months.
-- Nintendo DS games play in melonDS DS instead of DeSmuME. Their saves now sync with RomM as .sav files, the same as standalone melonDS. Existing DeSmuME saves become melonDS saves the first time Romp looks at them; DeSmuME's save and save states, which melonDS can't load, are kept in the game's backup folder.
+- Hardcore mode is off, and its setting hidden, until RetroAchievements adds RomP to its approved emulators. RetroAchievements doesn't accept hardcore unlocks from emulators it hasn't approved, and only considers ones that have been public for six months.
+- Nintendo DS games play in melonDS DS instead of DeSmuME. Their saves now sync with RomM as .sav files, the same as standalone melonDS. Existing DeSmuME saves become melonDS saves the first time RomP looks at them; DeSmuME's save and save states, which melonDS can't load, are kept in the game's backup folder.
 - PSP games no longer offer the handheld screen look or its colours. The PSP draws at several times its screen's resolution, where the screen's pixel grid turned into a pattern.
 - Consoles without a chosen look start with sharp pixels, even if the Sharp pixels switch removed in 0.9.0 was off.
 
@@ -24,7 +24,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - Games play without sound instead of failing to start on computers with no sound output, such as over Remote Desktop.
 - On Windows, games in a zip or 7z now load on cores that need the file itself, such as VICE and DOSBox Pure.
 - Game Boy Color games show their colours on the handheld screen instead of a Game Boy Pocket's olive tint.
-- Atari 2600 games load again with the current Stella, which only finds games through the file access RetroArch gives cores. Romp now gives cores that too.
+- Atari 2600 games load again with the current Stella, which only finds games through the file access RetroArch gives cores. RomP now gives cores that too.
 - A Mac no longer dozes off or slows the game window down while you play with a controller, which macOS doesn't count as using the computer.
 
 ## [0.9.0] - 2026-10-02

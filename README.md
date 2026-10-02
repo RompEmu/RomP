@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Romp" width="600">
+  <img src="docs/banner.png" alt="RomP" width="600">
 </p>
 
 <p align="center">
@@ -13,10 +13,10 @@
 
 <p align="center">Play retro games from your <a href="https://romm.app">RomM</a> library, with each game running in its own sandboxed process.</p>
 
-Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS, Windows and Linux. On a Mac you can also install it with [Homebrew](https://brew.sh): `brew install --cask rompemu/tap/romp`. The macOS download of each release is signed and notarized by Apple. Nightly macOS builds aren't: the first time, right-click Romp and choose Open. Windows builds aren't signed yet: the first time, choose More info, then Run anyway.
+Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS, Windows and Linux. On a Mac you can also install it with [Homebrew](https://brew.sh): `brew install --cask rompemu/tap/romp`. The macOS download of each release is signed and notarized by Apple. Nightly macOS builds aren't: the first time, right-click RomP and choose Open. Windows builds aren't signed yet: the first time, choose More info, then Run anyway.
 
 <p align="center">
-  <img src="docs/screenshots/library.png" alt="The Romp library, showing Amiga games" width="820">
+  <img src="docs/screenshots/library.png" alt="The RomP library, showing Amiga games" width="820">
 </p>
 
 | Game page | Playing | Nintendo DS |
@@ -26,10 +26,10 @@ Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest
 ## Features
 
 - **Your RomM library:** platforms, favorites, collections and recently played, with search, sorting and box art shaped like each console's.
-- **One click to play:** Romp installs the right emulator and BIOS files. Downloaded games play offline.
+- **One click to play:** RomP installs the right emulator and BIOS files. Downloaded games play offline.
 - **Saves that follow you:** in-game saves and save states sync with RomM before and after you play. If both sides changed, you choose which to keep.
-- **Sandboxed emulators:** emulators are native code downloaded from the internet, and games are files from anywhere. Each game runs in its own locked-down process that can only write to that game's saves and its own temporary files, so a buggy or malicious emulator or ROM can't touch your other files or take Romp down with it. xemu and RPCS3 run outside the sandbox.
-- **RetroAchievements:** earn achievements as you play, with popups, leaderboards, and an achievement list in the game menu and on each game's page. Hardcore mode comes once RetroAchievements approves Romp, which it considers after an emulator has been public for six months. Only the app talks to RetroAchievements, never the sandboxed emulator.
+- **Sandboxed emulators:** emulators are native code downloaded from the internet, and games are files from anywhere. Each game runs in its own locked-down process that can only write to that game's saves and its own temporary files, so a buggy or malicious emulator or ROM can't touch your other files or take RomP down with it. xemu and RPCS3 run outside the sandbox.
+- **RetroAchievements:** earn achievements as you play, with popups, leaderboards, and an achievement list in the game menu and on each game's page. Hardcore mode comes once RetroAchievements approves RomP, which it considers after an emulator has been public for six months. Only the app talks to RetroAchievements, never the sandboxed emulator.
 - **Many systems:** from the Atari 2600 to the PS3 and original Xbox, plus arcade and home computers. See [supported systems](#supported-systems).
 - **Controllers and multiplayer:** gamepads join as the next player, any key or button can be remapped, and the whole app works with a controller.
 - **Light guns, mice and keyboards:** for the systems that use them.
@@ -40,7 +40,7 @@ Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest
 
 ## Supported systems
 
-Romp downloads the emulator for each system the first time you play one of its games.
+RomP downloads the emulator for each system the first time you play one of its games.
 
 | System | Emulator |
 |---|---|
@@ -81,7 +81,7 @@ Romp downloads the emulator for each system the first time you play one of its g
 | Microsoft Xbox | xemu |
 | ZX Spectrum | Fuse |
 
-All emulators except xemu and RPCS3 are [libretro](https://www.libretro.com) cores. Dolphin, PPSSPP, Flycast, Beetle PSX HW, Mupen64Plus-Next and the PS2 emulators draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. On macOS, Vulkan comes from the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which Romp takes from your RomM server's firmware. PS3 games need the PS3 system software (`PS3UPDAT.PUP`) in RomM's PS3 firmware, and play from a game folder or an ISO, or a zip or 7z of one.
+All emulators except xemu and RPCS3 are [libretro](https://www.libretro.com) cores. Dolphin, PPSSPP, Flycast, Beetle PSX HW, Mupen64Plus-Next and the PS2 emulators draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. On macOS, Vulkan comes from the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which RomP takes from your RomM server's firmware. PS3 games need the PS3 system software (`PS3UPDAT.PUP`) in RomM's PS3 firmware, and play from a game folder or an ISO, or a zip or 7z of one.
 
 ## Running
 
@@ -100,11 +100,11 @@ cargo build --release
 
 `make update-rcheevos` replaces the bundled [rcheevos](https://github.com/RetroAchievements/rcheevos) with its latest release, or a given one with `RCHEEVOS=v12.5.0`.
 
-Enter your RomM server address (RomM 5.0 or newer). Approve Romp in RomM by scanning the code or opening the link.
+Enter your RomM server address (RomM 5.0 or newer). Approve RomP in RomM by scanning the code or opening the link.
 
-Open a game from your library to download and play it. Romp installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
+Open a game from your library to download and play it. RomP installs the emulator core it needs, and fetches BIOS files from your server's firmware. Downloaded games stay playable when the server is offline.
 
-In-game saves and save states sync with RomM before and after you play, so you can continue on another device. If a save changed in both places, Romp asks which to keep and backs up the other.
+In-game saves and save states sync with RomM before and after you play, so you can continue on another device. If a save changed in both places, RomP asks which to keep and backs up the other.
 
 ## Controls
 
@@ -135,8 +135,8 @@ Your games, saves and library cache are stored in `~/Library/Application Support
 
 ## Free, with no catches
 
-Romp is free and always will be: no paid features, subscriptions, ads, tracking or accounts of its own. Every build has every feature. [PRIVACY.md](PRIVACY.md) lists what Romp sends and where, and the Licenses tab under About Romp lists every emulator it downloads with its license.
+RomP is free and always will be: no paid features, subscriptions, ads, tracking or accounts of its own. Every build has every feature. [PRIVACY.md](PRIVACY.md) lists what RomP sends and where, and the Licenses tab under About RomP lists every emulator it downloads with its license.
 
 ## License
 
-Romp is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version.
+RomP is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version.
