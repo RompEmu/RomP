@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-02
+
 ### Added
 
 - Save states with pictures. Save states in the game menu shows your four slots with a picture of the moment you saved and when that was, and the game's page lists your save states with a Play from here button. Pictures sync with RomM along with the states.
@@ -145,7 +147,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RompEmu/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/RompEmu/RompEmu/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/RompEmu/RompEmu/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/RompEmu/RompEmu/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/RompEmu/RompEmu/compare/v0.5.0...v0.6.0
