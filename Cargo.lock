@@ -5296,6 +5296,7 @@ version = "0.9.0"
 dependencies = [
  "cc",
  "libloading 0.9.0",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 

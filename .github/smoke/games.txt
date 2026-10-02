@@ -11,7 +11,7 @@ picodrive               genesis.md          sega32
 mednafen_pce_fast       pcengine.pce        tg16
 mednafen_pce            pcengine.pce        turbografx-cd
 mednafen_supergrafx     pcengine.pce        supergrafx
-# stella                atari2600.a26       atari2600   (current Stella needs the libretro VFS, which Romp doesn't provide yet)
+stella                  atari2600.a26       atari2600
 vice_x64sc              c64.prg             c64
 dosbox_pure             dos.com             dos
 fuse                    zxspectrum.z80      zxs
