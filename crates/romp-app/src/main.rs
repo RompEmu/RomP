@@ -3,6 +3,7 @@
 mod achievements;
 mod app;
 mod avatar;
+mod awake;
 mod bios;
 mod collections;
 mod console_settings;

@@ -149,7 +149,7 @@ fn open_zip(
         .ok_or_else(|| anyhow!("invalid entry name in archive: {name}"))?;
     let out_path = base.join(file_name);
     std::fs::write(&out_path, &bytes).with_context(|| format!("write {}", out_path.display()))?;
-    let canon = out_path.canonicalize().unwrap_or(out_path);
+    let canon = dunce::canonicalize(&out_path).unwrap_or(out_path);
     Ok(LoadedRom {
         effective_path: canon,
         bytes: None,
@@ -239,7 +239,7 @@ fn open_7z(
         .ok_or_else(|| anyhow!("invalid entry name in archive: {name}"))?;
     let out_path = base.join(file_name);
     std::fs::write(&out_path, &bytes).with_context(|| format!("write {}", out_path.display()))?;
-    let canon = out_path.canonicalize().unwrap_or(out_path);
+    let canon = dunce::canonicalize(&out_path).unwrap_or(out_path);
     Ok(LoadedRom {
         effective_path: canon,
         bytes: None,
@@ -363,7 +363,7 @@ fn extract_disc_image_archive(
         "extracted disc image from archive"
     );
 
-    let canon = primary_out_path.canonicalize().unwrap_or(primary_out_path);
+    let canon = dunce::canonicalize(&primary_out_path).unwrap_or(primary_out_path);
     Ok(LoadedRom {
         effective_path: canon,
         bytes: None,

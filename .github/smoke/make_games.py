@@ -185,22 +185,6 @@ def pc_engine():
     return bytes(rom)
 
 
-def vectrex():
-    rom = bytearray(b"g GCE 1983\x80")
-    rom += bytes([0xFD, 0x0D])              # the BIOS's own start-up music
-    rom += bytes([0xF8, 0x50, 0x20, 0xD0])  # title size and position
-    rom += b"ROMP SMOKE\x80" + b"\x00"
-    loop = len(rom)
-    rom += bytes([
-        0xBD, 0xF1, 0x92,        # jsr Wait_Recal
-        0xBD, 0xF2, 0xA9,        # jsr Intensity_7F
-        0xCC, 0x40, 0x40,        # ldd #$4040
-        0xBD, 0xF3, 0xDF,        # jsr Draw_Line_d
-    ])
-    rom += bytes([0x20, (loop - (len(rom) + 2)) & 0xFF])  # bra, forever
-    return bytes(rom.ljust(4096, b"\xff"))
-
-
 def zx_spectrum():
     code = bytes([
         0xF3,                    # di
@@ -275,7 +259,6 @@ GAMES = {
     "genesis.md": genesis,
     "mastersystem.sms": master_system,
     "pcengine.pce": pc_engine,
-    "vectrex.vec": vectrex,
     "zxspectrum.z80": zx_spectrum,
     "nintendods.nds": nintendo_ds,
 }

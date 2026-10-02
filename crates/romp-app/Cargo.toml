@@ -20,6 +20,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 arboard = "3"
 dirs = "7"
+dunce = "1"
 gilrs = "0.11"
 glow = "0.17"
 httpdate = "1"
@@ -65,7 +66,7 @@ windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSImage", "NSResponder"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData", "NSProcessInfo", "NSString"] }
 
 [lints]
 workspace = true

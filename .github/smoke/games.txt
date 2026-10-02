@@ -1,3 +1,5 @@
+# Each core plays one of the programs make_games.py writes. Cores that need a BIOS or a GPU
+# can't run here: the runners have neither.
 # core                  game                console, for its look
 nestopia                nes.nes             nes
 snes9x                  snes.sfc            snes
@@ -9,9 +11,8 @@ picodrive               genesis.md          sega32
 mednafen_pce_fast       pcengine.pce        tg16
 mednafen_pce            pcengine.pce        turbografx-cd
 mednafen_supergrafx     pcengine.pce        supergrafx
-stella                  atari2600.a26       atari2600
+# stella                atari2600.a26       atari2600   (current Stella needs the libretro VFS, which Romp doesn't provide yet)
 vice_x64sc              c64.prg             c64
 dosbox_pure             dos.com             dos
-vecx                    vectrex.vec         vectrex
 fuse                    zxspectrum.z80      zxs
 melondsds               nintendods.nds      nds

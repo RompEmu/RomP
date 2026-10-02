@@ -109,9 +109,8 @@ pub fn run(
         }
         None => (None, None),
     };
-    let rom = rom
-        .canonicalize()
-        .with_context(|| format!("ROM not found: {}", rom.display()))?;
+    let rom =
+        dunce::canonicalize(&rom).with_context(|| format!("ROM not found: {}", rom.display()))?;
     let title = rom
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -220,6 +219,7 @@ struct Game {
     achievements: RefCell<Option<crate::achievements::popups::Link>>,
     achievements_open: Cell<bool>,
     smoke: Option<RefCell<crate::smoke::Smoke>>,
+    _awake: crate::awake::Awake,
     achievement_list: RefCell<Vec<romp_proto::msg::AchievementInfo>>,
     hardcore: Cell<bool>,
     save_dir: PathBuf,
@@ -1311,6 +1311,7 @@ pub fn launch(
             ),
             achievements_open: Cell::new(false),
             smoke: opts.smoke.map(RefCell::new),
+            _awake: crate::awake::Awake::begin(),
             achievement_list: RefCell::default(),
             hardcore: Cell::new(hardcore),
             save_dir: opts.save_dir.clone(),

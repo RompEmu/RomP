@@ -421,7 +421,7 @@ fn apply_sandbox(args: &Args, vulkan_library: Option<&std::path::Path>) -> anyho
         warn!("sandbox disabled by ROMP_NO_SANDBOX");
         return Ok(());
     }
-    let canon = |p: &PathBuf| p.canonicalize().unwrap_or_else(|_| p.clone());
+    let canon = |p: &PathBuf| dunce::canonicalize(p).unwrap_or_else(|_| p.clone());
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/"));
