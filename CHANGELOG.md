@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- Command-W on a Mac, or Control-W on Windows and Linux, closes the game, the same as its window's close button.
+
 ## [0.9.0] - 2026-10-02
 
 ### Added

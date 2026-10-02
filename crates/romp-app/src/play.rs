@@ -263,6 +263,11 @@ fn slot_grid_move(slot: u8, button: u32) -> u8 {
     row * 2 + col + 1
 }
 
+/// Command-W on a Mac, which Slint reports as Control there, and Control-W elsewhere.
+fn closes_window(text: &str, mods: crate::mapping::Mods) -> bool {
+    mods.ctrl && !mods.alt && !mods.meta && matches!(text, "w" | "W" | "\u{17}")
+}
+
 fn stepped_volume(volume: u8, delta: i32) -> u8 {
     let volume = i32::from(volume);
     let stepped = if delta > 0 {
@@ -1100,6 +1105,12 @@ impl Game {
     }
 
     fn key(&self, text: &str, mods: crate::mapping::Mods, pressed: bool, repeat: bool) -> bool {
+        if closes_window(text, mods) {
+            if pressed && !repeat {
+                (self.finish)();
+            }
+            return true;
+        }
         if self.computer {
             let menu_key = text.chars().eq([char::from(slint::platform::Key::F12)]);
             if menu_key {
@@ -1828,6 +1839,29 @@ pub fn split_frame(rgba: &[u8], width: u32, height: u32) -> Option<(&[u8], &[u8]
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_or_control_w_closes_the_game() {
+        let mods = |ctrl, alt, shift, meta| crate::mapping::Mods {
+            ctrl,
+            alt,
+            shift,
+            meta,
+        };
+        assert!(closes_window("w", mods(true, false, false, false)));
+        assert!(closes_window("W", mods(true, false, true, false)));
+        assert!(closes_window("\u{17}", mods(true, false, false, false)));
+        assert!(
+            !closes_window("w", mods(false, false, false, false)),
+            "plain W is a game key"
+        );
+        assert!(
+            !closes_window("w", mods(false, false, false, true)),
+            "Control-W on a Mac"
+        );
+        assert!(!closes_window("w", mods(true, true, false, false)));
+        assert!(!closes_window("s", mods(true, false, false, false)));
+    }
 
     #[test]
     fn menu_focus_moves_across_the_button_row_and_down_the_list() {
