@@ -85,13 +85,15 @@ impl Controller {
     }
 
     pub(super) fn ra_hardcore(&self) -> bool {
-        self.shared
-            .store
-            .lock()
-            .unwrap()
-            .get(HARDCORE_KEY)
-            .as_deref()
-            == Some("1")
+        achievements::HARDCORE_ALLOWED
+            && self
+                .shared
+                .store
+                .lock()
+                .unwrap()
+                .get(HARDCORE_KEY)
+                .as_deref()
+                == Some("1")
     }
 
     pub(super) fn ra_hardcore_changed(&self) {
@@ -103,6 +105,7 @@ impl Controller {
     pub(super) fn show_ra_account(&self) {
         let Some(ui) = self.ui() else { return };
         ui.set_ra_hardcore(self.ra_hardcore());
+        ui.set_ra_hardcore_allowed(achievements::HARDCORE_ALLOWED);
         let signed_in = self.ra_account().map(|a| a.username);
         ui.set_ra_signed_in(signed_in.is_some());
         ui.set_ra_user(signed_in.unwrap_or_default().into());

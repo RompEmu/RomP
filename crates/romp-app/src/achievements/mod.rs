@@ -64,6 +64,10 @@ fn now_millis() -> i64 {
 }
 
 /// Keeps an unlock that didn't reach RetroAchievements, and forgets it once one attempt gets through.
+/// RetroAchievements only accepts hardcore unlocks from emulators on its approved list, which it
+/// considers once an emulator has been public for six months. Until Romp is on it, hardcore is off.
+pub const HARDCORE_ALLOWED: bool = false;
+
 pub fn note_unlock(
     store: &std::sync::Mutex<crate::store::Store>,
     username: &str,

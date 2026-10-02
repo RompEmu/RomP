@@ -1364,6 +1364,7 @@ component SettingsPage inherits FocusScope {
     in-out property <string> ra-username-input;
     in-out property <string> ra-password-input;
     in-out property <bool> ra-hardcore;
+    in property <bool> ra-hardcore-allowed;
     in-out property <int> achievement-popups;
     in-out property <int> achievement-corner;
     in property <[string]> popup-levels;
@@ -1519,7 +1520,7 @@ component SettingsPage inherits FocusScope {
                                 detail: @tr("Games with achievements show them as you play. RomP keeps a sign-in token, not your password.");
                                 Button { text: @tr("Sign out"); clicked => { root.ra-sign-out(); } }
                             }
-                            if root.ra-signed-in: SettingRow {
+                            if root.ra-signed-in && root.ra-hardcore-allowed: SettingRow {
                                 divider: true;
                                 label: @tr("Hardcore mode");
                                 detail: @tr("Earns hardcore achievements. Loading save states and continuing where you left off are off while it's on. Takes effect the next time you start a game.");
@@ -2038,6 +2039,7 @@ export component AppWindow inherits Window {
     in-out property <string> ra-username-input;
     in-out property <string> ra-password-input;
     in-out property <bool> ra-hardcore;
+    in property <bool> ra-hardcore-allowed;
     callback ra-sign-in(string, string);
     callback ra-sign-out();
     callback ra-hardcore-changed();
@@ -2331,6 +2333,7 @@ export component AppWindow inherits Window {
             ra-username-input <=> root.ra-username-input;
             ra-password-input <=> root.ra-password-input;
             ra-hardcore <=> root.ra-hardcore;
+            ra-hardcore-allowed: root.ra-hardcore-allowed;
             achievement-popups <=> root.pref-achievement-popups;
             achievement-corner <=> root.pref-achievement-corner;
             popup-levels: root.pref-popup-levels;
