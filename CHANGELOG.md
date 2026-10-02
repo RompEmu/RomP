@@ -20,6 +20,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - Play from here is off in hardcore mode, with a note saying so, instead of quietly starting from the beginning.
 - The CRT's TV screen looks the same after switching to Monitor and back during a game.
 - Games show their picture plainly instead of a black window on computers where shaders can't run.
+- Games play without sound instead of failing to start on computers with no sound output, such as over Remote Desktop.
 
 ## [0.9.0] - 2026-10-02
 
