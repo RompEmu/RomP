@@ -21,6 +21,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - The CRT's TV screen looks the same after switching to Monitor and back during a game.
 - Games show their picture plainly instead of a black window on computers where shaders can't run.
 - Games play without sound instead of failing to start on computers with no sound output, such as over Remote Desktop.
+- On Windows, games in a zip or 7z now load on cores that need the file itself, such as VICE and DOSBox Pure.
+- A Mac no longer dozes off or slows the game window down while you play with a controller, which macOS doesn't count as using the computer.
 
 ## [0.9.0] - 2026-10-02
 

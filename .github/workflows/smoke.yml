@@ -5,14 +5,12 @@ name: Smoke test
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-    branches: [smoke-test]
 
 permissions: {}
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/smoke-test'
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/build.yml
     permissions:
       contents: read
@@ -98,7 +96,8 @@ jobs:
             name="$core-${game%.*}"
             args=(--core "$PWD/$library" --rom "$PWD/games/$game" --smoke "$PWD/out/$name")
             if [ "$RUNNER_OS" = macOS ]; then
-              # Started as an app rather than a bare process, or macOS barely runs its timers.
+              # Started the way Finder starts it. The runner has no GPU, and OpenGL without one
+              # draws so slowly that the window holds the game up, so Romp draws on the CPU here.
               open -W -n "$ROMP" --env "ROMP_PLATFORM=$console" --env SLINT_BACKEND=winit-software \
                 --stdout "$PWD/out/$name.log" --stderr "$PWD/out/$name.err" --args "${args[@]}" || true
             else
