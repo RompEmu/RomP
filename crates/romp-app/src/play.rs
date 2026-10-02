@@ -1426,7 +1426,7 @@ pub fn launch(
             if let Some(smoke) = &game.smoke {
                 let mut step = smoke.borrow().tick(std::time::Instant::now());
                 if let (crate::smoke::Step::Wait, true, Some((w, h, _))) = (&step, fresh, shown) {
-                    step = smoke.borrow_mut().frame(&buf, w, h, frame_count);
+                    step = smoke.borrow_mut().frame(&buf, w, h, last_seq);
                 }
                 game.smoke_step(step);
             }

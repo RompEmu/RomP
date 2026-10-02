@@ -51,11 +51,12 @@ jobs:
         with:
           name: romp-${{ runner.os }}
           path: dist
-      - name: Install a virtual display
+      # libpulse0 is on every Linux desktop, PipeWire ones included, but not on the runner.
+      - name: Install a virtual display and PulseAudio's library
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri libegl1 libxkbcommon-x11-0
+          sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri libegl1 libxkbcommon-x11-0 libpulse0
       - name: Unpack Romp
         run: |
           case "$RUNNER_OS" in

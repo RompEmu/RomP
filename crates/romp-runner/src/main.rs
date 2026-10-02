@@ -186,12 +186,19 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let av = core.av_info(frontend);
     let sample_rate = av.timing.sample_rate.round() as u32;
     let buffer_ms: usize = if cfg!(target_os = "macos") { 250 } else { 500 };
-    let (_audio, producer) = audio::open(sample_rate, sample_rate as usize * 2 * buffer_ms / 1000)?;
-    {
-        let mut pipe = frontend.audio.lock();
-        pipe.set_producer(producer);
-        pipe.set_volume(args.volume);
-    }
+    // Without a sound device the game still plays, silently, at the same pace.
+    let _audio = match audio::open(sample_rate, sample_rate as usize * 2 * buffer_ms / 1000) {
+        Ok((output, producer)) => {
+            let mut pipe = frontend.audio.lock();
+            pipe.set_producer(producer);
+            pipe.set_volume(args.volume);
+            Some(output)
+        }
+        Err(e) => {
+            tracing::warn!("no sound, as the audio output couldn't open: {e}");
+            None
+        }
+    };
     link.send(&RunnerMsg::Started {
         core_name: sys.library_name.clone(),
         core_version: sys.library_version.clone(),

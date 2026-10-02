@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-/// Frames to run before checking the picture, so the core is past any start-up screens.
-const FRAMES: u32 = 180;
+/// Frames the emulator runs before the picture is checked, so the core is past any start-up
+/// screens. Counted by the emulator, as a window nobody looks at may pick up only some of them.
+const FRAMES: u64 = 180;
 const TIMEOUT: Duration = Duration::from_secs(90);
 pub const SLOT: u8 = 1;
 pub const FRAME_FILE: &str = "frame.png";
@@ -65,7 +66,7 @@ impl Smoke {
     }
 
     /// Called with each new frame the game shows.
-    pub fn frame(&mut self, rgba: &[u8], width: u32, height: u32, frames: u32) -> Step {
+    pub fn frame(&mut self, rgba: &[u8], width: u32, height: u32, frames: u64) -> Step {
         if self.done() || self.saving || frames < FRAMES {
             return Step::Wait;
         }
