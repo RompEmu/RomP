@@ -63,7 +63,7 @@ jobs:
           case "$RUNNER_OS" in
             macOS)
               ditto -x -k dist/*-macos-*.zip app
-              echo "ROMP=$PWD/app/Romp.app" >> "$GITHUB_ENV"
+              echo "ROMP=$PWD/app/RomP.app" >> "$GITHUB_ENV"
               ;;
             Linux)
               chmod +x dist/*.AppImage

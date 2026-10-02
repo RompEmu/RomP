@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>romp</string>
 	<key>CFBundleIconFile</key>
-	<string>Romp</string>
+	<string>RomP</string>
 	<key>CFBundleIdentifier</key>
 	<string>@BUNDLE_ID@</string>
 	<key>CFBundleInfoDictionaryVersion</key>

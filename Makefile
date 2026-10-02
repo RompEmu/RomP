@@ -11,15 +11,15 @@ MOLTENVK := 1.4.1
 MOLTENVK_SHA256 := 5ea0c259df7ded9a275444820f09cced54d6e5a7c7a31d262de62a5cdb7e15cf
 MOLTENVK_TAR := target/MoltenVK-$(MOLTENVK)-macos.tar
 
-APP := $(DIST)/Romp.app
-ICONSET := $(DIST)/Romp.iconset
-MACOS_ZIP := $(DIST)/Romp-$(RELEASE)-macos-$(ARCH).zip
-LINUX_NAME := Romp-$(RELEASE)-linux-$(ARCH)
+APP := $(DIST)/RomP.app
+ICONSET := $(DIST)/RomP.iconset
+MACOS_ZIP := $(DIST)/RomP-$(RELEASE)-macos-$(ARCH).zip
+LINUX_NAME := RomP-$(RELEASE)-linux-$(ARCH)
 LINUX_TAR := $(DIST)/$(LINUX_NAME).tar.gz
-APPDIR := $(DIST)/Romp.AppDir
+APPDIR := $(DIST)/RomP.AppDir
 APPIMAGE := $(DIST)/$(LINUX_NAME).AppImage
 APPIMAGETOOL ?= appimagetool
-WINDOWS_NAME := Romp-$(RELEASE)-windows-$(ARCH)
+WINDOWS_NAME := RomP-$(RELEASE)-windows-$(ARCH)
 WINDOWS_ZIP := $(DIST)/$(WINDOWS_NAME).zip
 
 ifeq ($(OS),Windows_NT)
@@ -73,7 +73,7 @@ app: build $(MOLTENVK_TAR)
 		sips -z $$size $$size $(ICON) --out $(ICONSET)/icon_$${size}x$${size}.png >/dev/null && \
 		sips -z $$((size * 2)) $$((size * 2)) $(ICON) --out $(ICONSET)/icon_$${size}x$${size}@2x.png >/dev/null || exit 1; \
 	done
-	iconutil --convert icns --output $(APP)/Contents/Resources/Romp.icns $(ICONSET)
+	iconutil --convert icns --output $(APP)/Contents/Resources/RomP.icns $(ICONSET)
 	rm -rf $(ICONSET)
 	codesign --force --sign - $(APP)/Contents/Frameworks/libMoltenVK.dylib
 	codesign --force --sign - $(APP)/Contents/MacOS/romp-runner
@@ -150,7 +150,7 @@ release-notes:
 		END { if (!printed) { print "No changelog entry for $(VERSION)" > "/dev/stderr"; exit 1 } }' CHANGELOG.md
 
 RCHEEVOS_DIR := crates/romp-cheevos/rcheevos
-# Only RAIntegration on Windows and external clients use these, and Romp builds neither.
+# Only RAIntegration on Windows and external clients use these, and RomP builds neither.
 RCHEEVOS_UNUSED := src/rc_client_external.c src/rc_client_raintegration.c
 
 # Replaces the bundled rcheevos with a release: the latest, or RCHEEVOS=v12.5.0.
