@@ -104,8 +104,8 @@ pub fn run(
 ) -> anyhow::Result<()> {
     let (smoke, outcome) = match smoke {
         Some(dir) => {
-            let (smoke, outcome) = crate::smoke::Smoke::new(dir, std::time::Instant::now());
-            (Some(smoke), Some(outcome))
+            let (smoke, outcome) = crate::smoke::Smoke::new(dir.clone(), std::time::Instant::now());
+            (Some(smoke), Some((outcome, dir)))
         }
         None => (None, None),
     };
@@ -160,11 +160,15 @@ pub fn run(
     )?;
     slint::run_event_loop()?;
     game.wait_exit(Duration::from_secs(4));
-    match outcome.map(|o| o.borrow_mut().take()) {
-        None | Some(Some(Ok(()))) => Ok(()),
-        Some(Some(Err(reason))) => anyhow::bail!("smoke test failed: {reason}"),
-        Some(None) => anyhow::bail!("smoke test failed: the window closed before it finished"),
-    }
+    let Some((outcome, dir)) = outcome else {
+        return Ok(());
+    };
+    let result = outcome
+        .borrow_mut()
+        .take()
+        .unwrap_or_else(|| Err("the window closed before it finished".into()));
+    crate::smoke::report(&dir, &result);
+    result.map_err(|reason| anyhow::anyhow!("smoke test failed: {reason}"))
 }
 
 pub type CoreIdentity = (String, String);

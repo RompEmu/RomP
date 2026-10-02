@@ -9,6 +9,8 @@ const FRAMES: u64 = 180;
 const TIMEOUT: Duration = Duration::from_secs(90);
 pub const SLOT: u8 = 1;
 pub const FRAME_FILE: &str = "frame.png";
+/// "passed", or what failed: for when the exit code doesn't reach whoever started Romp.
+pub const RESULT_FILE: &str = "result.txt";
 
 pub type Outcome = Rc<RefCell<Option<Result<(), String>>>>;
 
@@ -114,6 +116,19 @@ impl Smoke {
     }
 }
 
+/// Writes how the test went next to its frame.
+pub fn report(dir: &Path, result: &Result<(), String>) {
+    let text = match result {
+        Ok(()) => "passed\n".to_string(),
+        Err(reason) => format!("failed: {reason}\n"),
+    };
+    let written =
+        std::fs::create_dir_all(dir).and_then(|()| std::fs::write(dir.join(RESULT_FILE), text));
+    if let Err(e) = written {
+        tracing::warn!("writing the smoke test result: {e}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,6 +154,20 @@ mod tests {
         std::fs::write(crate::slots::state_path(dir.path(), SLOT), b"state").unwrap();
         assert_eq!(smoke.state_written(SLOT, true, dir.path()), Step::Finish);
         assert_eq!(*outcome.borrow(), Some(Ok(())));
+    }
+
+    #[test]
+    fn the_result_is_written_down() {
+        let dir = tempfile::tempdir().unwrap();
+        report(dir.path(), &Ok(()));
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(RESULT_FILE)).unwrap(),
+            "passed\n"
+        );
+        report(dir.path(), &Err("frame 180 is all black".into()));
+        assert!(std::fs::read_to_string(dir.path().join(RESULT_FILE))
+            .unwrap()
+            .starts_with("failed: frame 180"));
     }
 
     #[test]
