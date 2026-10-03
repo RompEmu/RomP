@@ -74,8 +74,8 @@ pub const L3: u32 = 14;
 pub const R3: u32 = 15;
 const DEADZONE: f32 = 0.15;
 
-pub fn retro_button(button: gilrs::Button) -> Option<u32> {
-    use gilrs::Button::*;
+pub fn retro_button(button: crate::gamepads::Button) -> Option<u32> {
+    use crate::gamepads::Button::*;
     Some(match button {
         South => B,
         East => A,
@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn gamepad_buttons_map_to_retropad() {
-        use gilrs::Button;
+        use crate::gamepads::Button;
         assert_eq!(retro_button(Button::South), Some(B));
         assert_eq!(retro_button(Button::East), Some(A));
         assert_eq!(retro_button(Button::Start), Some(START));

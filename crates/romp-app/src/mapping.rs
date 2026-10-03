@@ -1,5 +1,5 @@
+use crate::gamepads::Button;
 use crate::input::{A, B, DOWN, L, L2, L3, LEFT, R, R2, R3, RIGHT, SELECT, START, UP, X, Y};
-use gilrs::Button;
 use romp_proto::msg::PadState;
 use serde::{Deserialize, Serialize};
 use slint::platform::Key;

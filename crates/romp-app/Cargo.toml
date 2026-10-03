@@ -21,7 +21,7 @@ clap = { version = "4", features = ["derive"] }
 arboard = "3"
 dirs = "7"
 dunce = "1"
-gilrs = "0.11"
+sdl3 = { version = "0.20", features = ["build-from-source-static"] }
 glow = "0.17"
 httpdate = "1"
 image = { version = "0.25", default-features = false, features = ["ico", "jpeg", "png", "webp"] }
