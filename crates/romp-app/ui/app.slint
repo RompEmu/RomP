@@ -25,6 +25,7 @@ export global Brand {
     out property <string> website: "https://github.com/RompEmu/RompEmu";
     out property <string> website-label: "github.com/RompEmu/RompEmu";
     out property <string> author: "Beshr Kayali Reinholdsson";
+    out property <string> author-website: "https://beshr.com";
     out property <string> tagline: @tr("Play your RomM library, each game in its own sandboxed emulator.");
 }
 
@@ -1907,7 +1908,11 @@ component AboutDialog inherits Rectangle {
                 Rectangle { height: 4px; }
                 Text { text: @tr("Version {}", root.version); font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
                 Rectangle { height: 5px; }
-                Text { text: @tr("By {}", Brand.author); font-size: Theme.font-small; color: Theme.text-secondary; horizontal-alignment: center; }
+                HorizontalLayout {
+                    alignment: center;
+                    Text { text: @tr("By"); font-size: Theme.font-small; color: Theme.text-secondary; vertical-alignment: center; }
+                    LinkButton { text: Brand.author; clicked => { root.open-link(Brand.author-website); } }
+                }
                 Rectangle { height: 16px; }
                 Text {
                     text: Brand.tagline;
