@@ -13,7 +13,7 @@ const fn notice(name: &'static str, license: &'static str, url: &'static str) ->
 const ROMP: Notice = notice(
     "RomP",
     "GPL-3.0 or later",
-    "https://github.com/RompEmu/RompEmu/blob/main/LICENSE",
+    "https://github.com/RompEmu/RomP/blob/main/LICENSE",
 );
 const SLINT: Notice = notice(
     "Slint",

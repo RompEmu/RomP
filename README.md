@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/RompEmu/RompEmu/releases/latest"><img src="https://img.shields.io/github/v/release/RompEmu/RompEmu" alt="Latest release"></a>
-  <a href="https://github.com/RompEmu/RompEmu/releases/tag/nightly"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/nightly.yml/badge.svg?branch=main" alt="Nightly build"></a>
-  <a href="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml"><img src="https://github.com/RompEmu/RompEmu/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/RompEmu/RomP/releases/latest"><img src="https://img.shields.io/github/v/release/RompEmu/RomP" alt="Latest release"></a>
+  <a href="https://github.com/RompEmu/RomP/releases/tag/nightly"><img src="https://github.com/RompEmu/RomP/actions/workflows/nightly.yml/badge.svg?branch=main" alt="Nightly build"></a>
+  <a href="https://github.com/RompEmu/RomP/actions/workflows/ci.yml"><img src="https://github.com/RompEmu/RomP/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms: macOS, Windows and Linux">
   <a href="https://romm.app"><img src="https://img.shields.io/badge/RomM-5.0%2B-6f42c1" alt="Needs RomM 5.0 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-green" alt="License: GPL-3.0-or-later"></a>
@@ -13,7 +13,7 @@
 
 <p align="center">Play retro games from your <a href="https://romm.app">RomM</a> library, with each game running in its own sandboxed process.</p>
 
-Download the [latest release](https://github.com/RompEmu/RompEmu/releases/latest) or the [nightly build](https://github.com/RompEmu/RompEmu/releases/tag/nightly) for macOS, Windows and Linux. On a Mac you can also install it with [Homebrew](https://brew.sh): `brew install --cask rompemu/tap/romp`. The macOS download of each release is signed and notarized by Apple. Nightly macOS builds aren't: the first time, right-click RomP and choose Open. Windows builds aren't signed yet: the first time, choose More info, then Run anyway.
+Download the [latest release](https://github.com/RompEmu/RomP/releases/latest) or the [nightly build](https://github.com/RompEmu/RomP/releases/tag/nightly) for macOS, Windows and Linux. On a Mac you can also install it with [Homebrew](https://brew.sh): `brew install --cask rompemu/tap/romp`. The macOS download of each release is signed and notarized by Apple. Nightly macOS builds aren't: the first time, right-click RomP and choose Open. Windows builds aren't signed yet: the first time, choose More info, then Run anyway.
 
 <p align="center">
   <img src="docs/screenshots/library.png" alt="The RomP library, showing Amiga games" width="820">

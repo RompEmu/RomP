@@ -34,4 +34,4 @@ Changes to this policy are part of RomP's source history, and each release's not
 
 ## Contact
 
-Questions about privacy can go to [RomP's issues on GitHub](https://github.com/RompEmu/RompEmu/issues).
+Questions about privacy can go to [RomP's issues on GitHub](https://github.com/RompEmu/RomP/issues).
