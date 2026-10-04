@@ -155,6 +155,9 @@ translations: translation-tools
 	xtr --add-location file -o $(TRANSLATIONS)/rust.pot $$(find crates/romp-app/src -name '*.rs' | sort)
 	$(call tidy_pot,$(TRANSLATIONS)/rust.pot)
 
+pseudo: translations
+	python3 $(TRANSLATIONS)/pseudo.py $(TRANSLATIONS)
+
 translations-check: translations
 	git diff --exit-code -- $(TRANSLATIONS)/*.pot
 

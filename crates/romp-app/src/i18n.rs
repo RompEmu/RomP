@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::RwLock;
 
 pub struct Language {
     pub code: &'static str,
@@ -46,11 +46,23 @@ pub fn choose(preference: u8, system: Option<&str>) -> Option<&'static Language>
         return LANGUAGES.get(chosen);
     }
     let base = system?.split(['-', '_', '.']).next()?.to_ascii_lowercase();
+    #[cfg(debug_assertions)]
+    if base == PSEUDO.code {
+        return Some(&PSEUDO);
+    }
     LANGUAGES.iter().find(|l| l.code == base)
 }
 
-/// 0 is English; otherwise an index into `LANGUAGES`, plus one.
-static CURRENT: AtomicUsize = AtomicUsize::new(0);
+/// Every string stretched and accented, from `make pseudo`, to find text that gets cut off.
+#[cfg(debug_assertions)]
+const PSEUDO: Language = Language {
+    code: "xx",
+    name: "Pseudo",
+    rtl: false,
+};
+
+/// `None` is English.
+static CURRENT: RwLock<Option<&'static Language>> = RwLock::new(None);
 
 fn catalog(code: &str) -> Option<&'static [u8]> {
     Some(match code {
@@ -58,6 +70,13 @@ fn catalog(code: &str) -> Option<&'static [u8]> {
         "es" => include_bytes!("../translations/es/LC_MESSAGES/rust.po"),
         "de" => include_bytes!("../translations/de/LC_MESSAGES/rust.po"),
         "ar" => include_bytes!("../translations/ar/LC_MESSAGES/rust.po"),
+        #[cfg(debug_assertions)]
+        "xx" => std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/translations/xx/LC_MESSAGES/rust.po"
+        ))
+        .ok()?
+        .leak(),
         _ => return None,
     })
 }
@@ -83,10 +102,7 @@ pub fn system() -> Option<String> {
 
 #[expect(dead_code, reason = "right-to-left layouts read this")]
 pub fn current() -> Option<&'static Language> {
-    CURRENT
-        .load(Ordering::Relaxed)
-        .checked_sub(1)
-        .and_then(|i| LANGUAGES.get(i))
+    *CURRENT.read().unwrap()
 }
 
 /// Switches what Slint and `tr!` show. Call it after the first window exists.
@@ -99,10 +115,7 @@ pub fn apply(language: Option<&'static Language>) {
     if let Err(e) = slint::select_bundled_translation(language.map_or("", |l| l.code)) {
         tracing::warn!("choosing the interface language: {e:?}");
     }
-    let index = language
-        .and_then(|l| LANGUAGES.iter().position(|x| x.code == l.code))
-        .map_or(0, |i| i + 1);
-    CURRENT.store(index, Ordering::Relaxed);
+    *CURRENT.write().unwrap() = language;
 }
 
 /// Translates a string from a `const` list, which was marked with `gettext_noop!`.
@@ -214,6 +227,19 @@ msgstr "{1} : {0}"
             t.ntranslate(0, "{n} game", "{n} games", None),
             "{n} jeu",
             "French counts 0 as one"
+        );
+    }
+
+    #[test]
+    fn the_pseudo_language_is_never_offered() {
+        assert!(LANGUAGES.iter().all(|l| l.code != "xx"));
+    }
+
+    #[test]
+    fn the_pseudo_language_is_only_chosen_by_name_in_debug_builds() {
+        assert_eq!(
+            choose(0, Some("xx")).map(|l| l.code),
+            cfg!(debug_assertions).then_some("xx")
         );
     }
 }
