@@ -1247,7 +1247,7 @@ pub fn launch(
 
     let ui = GameWindow::new()?;
     if !crate::i18n::applied() {
-        crate::i18n::apply(crate::i18n::choose(0, crate::i18n::system().as_deref()));
+        crate::i18n::apply(crate::i18n::pick(0));
     }
     ui.set_game_title(format!("{} — RomP", opts.title).into());
     ui.set_game_name(opts.title.clone().into());

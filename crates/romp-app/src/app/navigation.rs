@@ -132,7 +132,7 @@ impl Controller {
             }
             (SCREEN_GAME | SCREEN_SETTINGS, B) => self.back_to_library(),
             (SCREEN_SETTINGS, L | R) => {
-                let step = if button == L { -1 } else { 1 };
+                let step = tab_step(button, crate::i18n::rtl());
                 let section = (ui.get_settings_section() + step).rem_euclid(SETTINGS_SECTIONS);
                 ui.set_settings_section(section);
                 self.settings_section_changed(section);
@@ -195,6 +195,15 @@ impl Controller {
         self.nav_card.set(None);
         self.select(keys[next].clone());
         self.focus_card(Some(0));
+    }
+}
+
+/// LB moves to the tab on the left, which is the next one when tabs run right to left.
+fn tab_step(button: u32, rtl: bool) -> i32 {
+    if (button == L) != rtl {
+        -1
+    } else {
+        1
     }
 }
 
@@ -264,5 +273,13 @@ mod tests {
         assert_eq!(game[2], (vec![Badge::Shape(Shape::Circle)], "Back"));
         let settings = hints(SCREEN_SETTINGS, Family::Nintendo);
         assert_eq!(settings[1], (vec![Badge::Text("B")], "Back"));
+    }
+
+    #[test]
+    fn shoulder_buttons_move_through_tabs_the_way_they_run() {
+        assert_eq!(tab_step(L, false), -1);
+        assert_eq!(tab_step(R, false), 1);
+        assert_eq!(tab_step(L, true), 1);
+        assert_eq!(tab_step(R, true), -1);
     }
 }

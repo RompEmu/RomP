@@ -177,10 +177,7 @@ pub fn run() -> anyhow::Result<()> {
     );
     let prefs =
         crate::prefs::Preferences::from_json(shared.store.lock().unwrap().get("prefs").as_deref());
-    crate::i18n::apply(crate::i18n::choose(
-        prefs.language,
-        crate::i18n::system().as_deref(),
-    ));
+    crate::i18n::apply(crate::i18n::pick(prefs.language));
     ui.global::<crate::Locale>().set_rtl(crate::i18n::rtl());
     let placement = Placement::from_json(shared.store.lock().unwrap().get(WINDOW_KEY).as_deref());
     let last_view = LastView::from_json(shared.store.lock().unwrap().get(VIEW_KEY).as_deref());

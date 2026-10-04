@@ -119,12 +119,14 @@ impl Controller {
             running.apply_prefs(&prefs);
         }
         if prefs.language != before.language {
-            crate::i18n::apply(crate::i18n::choose(
-                prefs.language,
-                crate::i18n::system().as_deref(),
-            ));
+            crate::i18n::apply(crate::i18n::pick(prefs.language));
             ui.global::<crate::Locale>().set_rtl(crate::i18n::rtl());
             self.rebuild_rows();
+            self.reload_sidebar();
+            self.update_heading();
+            if self.offline.get() && !ui.get_syncing() {
+                ui.set_sync_status(tr!("Offline: showing downloaded games").into());
+            }
             self.open_settings();
         }
     }

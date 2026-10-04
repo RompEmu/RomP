@@ -1192,6 +1192,8 @@ component GamePage inherits FocusScope {
                     shots-view := ScrollView {
                         height: 214px;
                         content-width: max(shot-row.preferred-width, self.visible-width);
+                        init => { if Locale.rtl { self.content-x = min(0px, self.visible-width - self.content-width); } }
+                        changed content-width => { if Locale.rtl { self.content-x = min(0px, self.visible-width - self.content-width); } }
                         content-height: self.visible-height;
                         shot-row := Row {
                             alignment: LayoutAlignment.start;
@@ -1226,6 +1228,8 @@ component GamePage inherits FocusScope {
                     ScrollView {
                         height: slot-row.preferred-height;
                         content-width: max(slot-row.preferred-width, self.visible-width);
+                        init => { if Locale.rtl { self.content-x = min(0px, self.visible-width - self.content-width); } }
+                        changed content-width => { if Locale.rtl { self.content-x = min(0px, self.visible-width - self.content-width); } }
                         content-height: self.visible-height;
                         slot-row := Row {
                             alignment: LayoutAlignment.start;
@@ -1279,6 +1283,8 @@ component GamePage inherits FocusScope {
                     ScrollView {
                         height: root.similar-shelf * 1px + 74px;
                         content-width: max(similar-row.preferred-width, self.visible-width);
+                        init => { if Locale.rtl { self.content-x = min(0px, self.visible-width - self.content-width); } }
+                        changed content-width => { if Locale.rtl { self.content-x = min(0px, self.visible-width - self.content-width); } }
                         content-height: self.visible-height;
                         similar-row := Row {
                             alignment: LayoutAlignment.start;

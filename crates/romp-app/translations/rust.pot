@@ -280,6 +280,10 @@ msgstr ""
 msgid "System"
 msgstr ""
 
+#: crates/romp-app/src/app/settings.rs crates/romp-app/src/app.rs
+msgid "Offline: showing downloaded games"
+msgstr ""
+
 #: crates/romp-app/src/app/settings.rs
 msgid "Keyboard"
 msgstr ""
@@ -372,10 +376,6 @@ msgstr ""
 
 #: crates/romp-app/src/app.rs
 msgid "Syncing…"
-msgstr ""
-
-#: crates/romp-app/src/app.rs
-msgid "Offline: showing downloaded games"
 msgstr ""
 
 #: crates/romp-app/src/app.rs

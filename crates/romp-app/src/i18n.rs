@@ -33,8 +33,12 @@ pub const LANGUAGES: [Language; 4] = [
 /// The preference for English; 0 follows the system, and from 2 on are `LANGUAGES`.
 pub const ENGLISH: u8 = 1;
 
-/// The chosen language, or else the system's if RomP has it; `None` is English.
-pub fn choose(preference: u8, system: Option<&str>) -> Option<&'static Language> {
+/// The chosen language, or else the system's if RomP has translations for it; `None` is English.
+pub fn choose(
+    preference: u8,
+    system: Option<&str>,
+    translated: impl Fn(&Language) -> bool,
+) -> Option<&'static Language> {
     if preference == ENGLISH {
         return None;
     }
@@ -46,7 +50,41 @@ pub fn choose(preference: u8, system: Option<&str>) -> Option<&'static Language>
     if base == PSEUDO.code {
         return Some(&PSEUDO);
     }
-    LANGUAGES.iter().find(|l| l.code == base)
+    LANGUAGES
+        .iter()
+        .find(|l| l.code == base)
+        .filter(|l| translated(l))
+}
+
+/// The language to use for a saved preference on this computer.
+pub fn pick(preference: u8) -> Option<&'static Language> {
+    choose(preference, system().as_deref(), has_translations)
+}
+
+/// Whether a language has any translated string yet, so a system set to it isn't shown English
+/// laid out for another language.
+fn has_translations(language: &Language) -> bool {
+    [catalog(language.code), slint_catalog(language.code)]
+        .into_iter()
+        .flatten()
+        .any(translated_any)
+}
+
+fn translated_any(po: &[u8]) -> bool {
+    std::str::from_utf8(po)
+        .ok()
+        .and_then(|text| rspolib::pofile(text).ok())
+        .is_some_and(|po| !po.translated_entries().is_empty())
+}
+
+fn slint_catalog(code: &str) -> Option<&'static [u8]> {
+    Some(match code {
+        "fr" => include_bytes!("../translations/fr/LC_MESSAGES/romp-app.po"),
+        "es" => include_bytes!("../translations/es/LC_MESSAGES/romp-app.po"),
+        "de" => include_bytes!("../translations/de/LC_MESSAGES/romp-app.po"),
+        "ar" => include_bytes!("../translations/ar/LC_MESSAGES/romp-app.po"),
+        _ => return None,
+    })
 }
 
 /// Every string stretched and accented, from `make pseudo`, to find text that gets cut off.
@@ -141,9 +179,49 @@ macro_rules! gettext_noop {
 mod tests {
     use super::*;
 
+    fn all(_: &Language) -> bool {
+        true
+    }
+
+    /// The placeholders in a string, with `{}` counted by position as `tr!` does.
+    fn placeholders(text: &str) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut position = 0;
+        let mut rest = text.replace("{{", "");
+        while let Some(start) = rest.find('{') {
+            let Some(end) = rest[start..].find('}') else {
+                break;
+            };
+            let name = rest[start + 1..start + end].trim().to_string();
+            if name.is_empty() {
+                found.push(position.to_string());
+                position += 1;
+            } else {
+                found.push(name);
+            }
+            rest = rest[start + end + 1..].to_string();
+        }
+        found.sort();
+        found
+    }
+
+    /// What's wrong with a translation's placeholders, if anything. A plural form may leave out
+    /// the count, as a language's "one" form often does, but must keep everything else.
+    fn placeholder_problem(source: &str, translated: &str, plural: bool) -> Option<String> {
+        let want = placeholders(source);
+        let got = placeholders(translated);
+        let ok = if plural {
+            got.iter().all(|p| want.contains(p))
+                && want.iter().filter(|p| *p != "n").all(|p| got.contains(p))
+        } else {
+            want == got
+        };
+        (!ok).then(|| format!("expected {want:?}, found {got:?} in {translated:?}"))
+    }
+
     #[test]
     fn system_locales_map_to_their_base_language() {
-        let code = |system: &str| choose(0, Some(system)).map(|l| l.code);
+        let code = |system: &str| choose(0, Some(system), all).map(|l| l.code);
         assert_eq!(code("fr-FR"), Some("fr"));
         assert_eq!(code("fr-CA"), Some("fr"));
         assert_eq!(code("es-419"), Some("es"));
@@ -152,18 +230,18 @@ mod tests {
         assert_eq!(code("AR"), Some("ar"));
         assert_eq!(code("en-US"), None);
         assert_eq!(code("zh-Hant"), None);
-        assert_eq!(choose(0, None).map(|l| l.code), None);
+        assert_eq!(choose(0, None, all).map(|l| l.code), None);
     }
 
     #[test]
     fn a_chosen_language_wins_over_the_system() {
-        assert_eq!(choose(4, Some("fr-FR")).map(|l| l.code), Some("de"));
-        assert_eq!(choose(2, None).map(|l| l.code), Some("fr"));
+        assert_eq!(choose(4, Some("fr-FR"), all).map(|l| l.code), Some("de"));
+        assert_eq!(choose(2, None, all).map(|l| l.code), Some("fr"));
     }
 
     #[test]
     fn english_can_be_chosen_over_a_system_language_romp_has() {
-        assert_eq!(choose(ENGLISH, Some("fr-FR")).map(|l| l.code), None);
+        assert_eq!(choose(ENGLISH, Some("fr-FR"), all).map(|l| l.code), None);
     }
 
     #[test]
@@ -244,15 +322,94 @@ msgstr "{1} : {0}"
     #[test]
     fn the_pseudo_language_is_only_chosen_by_name_in_debug_builds() {
         assert_eq!(
-            choose(0, Some("xx")).map(|l| l.code),
+            choose(0, Some("xx"), all).map(|l| l.code),
             cfg!(debug_assertions).then_some("xx")
         );
     }
 
     #[test]
     fn arabic_turns_the_layout_around() {
-        assert!(choose(5, None).is_some_and(|l| l.rtl));
-        assert!(!choose(2, None).is_some_and(|l| l.rtl));
-        assert!(!choose(ENGLISH, Some("ar")).is_some_and(|l| l.rtl));
+        assert!(choose(5, None, all).is_some_and(|l| l.rtl));
+        assert!(!choose(2, None, all).is_some_and(|l| l.rtl));
+        assert!(!choose(ENGLISH, Some("ar"), all).is_some_and(|l| l.rtl));
+    }
+
+    #[test]
+    fn the_system_language_is_only_followed_once_it_has_translations() {
+        let none = |_: &Language| false;
+        assert_eq!(choose(0, Some("ar_EG"), none).map(|l| l.code), None);
+        let only_french = |l: &Language| l.code == "fr";
+        assert_eq!(
+            choose(0, Some("fr-CA"), only_french).map(|l| l.code),
+            Some("fr")
+        );
+        assert_eq!(choose(0, Some("de-DE"), only_french).map(|l| l.code), None);
+        assert_eq!(
+            choose(2, None, none).map(|l| l.code),
+            Some("fr"),
+            "a chosen language still applies"
+        );
+    }
+
+    #[test]
+    fn a_catalog_with_only_its_header_has_no_translations() {
+        let header = TEST_PO.split("\n\n").next().unwrap();
+        assert!(!translated_any(header.as_bytes()));
+        assert!(translated_any(TEST_PO.as_bytes()));
+    }
+
+    #[test]
+    fn a_plural_missing_some_forms_falls_back_to_english() {
+        use tr::Translator;
+        let po = format!(
+            "{TEST_PO}\nmsgid \"{{n}} day\"\nmsgid_plural \"{{n}} days\"\nmsgstr[0] \"{{n}} jour\"\nmsgstr[1] \"\"\n"
+        );
+        let t = translator(po.as_bytes()).unwrap();
+        assert_eq!(t.ntranslate(5, "{n} day", "{n} days", None), "{n} days");
+        assert_eq!(t.ntranslate(1, "{n} day", "{n} days", None), "{n} day");
+    }
+
+    #[test]
+    fn a_translation_must_keep_its_placeholders() {
+        assert_eq!(
+            placeholder_problem("Sync failed: {e}", "Échec : {e}", false),
+            None
+        );
+        assert_eq!(placeholder_problem("{0} on {1}", "{1} : {0}", false), None);
+        assert_eq!(
+            placeholder_problem("Slot {}", "Emplacement {0}", false),
+            None
+        );
+        assert!(placeholder_problem("Sync failed: {e}", "Échec : {erreur}", false).is_some());
+        assert!(placeholder_problem("Sync failed: {e}", "Échec", false).is_some());
+        assert_eq!(
+            placeholder_problem("{n} minutes ago", "دقيقة واحدة", true),
+            None
+        );
+        assert!(placeholder_problem("{n} achievements for {title}", "{n} succès", true).is_some());
+    }
+
+    #[test]
+    fn shipped_translations_keep_their_placeholders() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("translations");
+        for language in &LANGUAGES {
+            for file in ["romp-app.po", "rust.po"] {
+                let path = root.join(language.code).join("LC_MESSAGES").join(file);
+                let po = rspolib::pofile(path.to_str().unwrap()).unwrap();
+                for entry in po.translated_entries() {
+                    let problem = match &entry.msgid_plural {
+                        Some(plural) => entry
+                            .msgstr_plural
+                            .iter()
+                            .find_map(|form| placeholder_problem(plural, form, true)),
+                        None => entry
+                            .msgstr
+                            .as_deref()
+                            .and_then(|text| placeholder_problem(&entry.msgid, text, false)),
+                    };
+                    assert_eq!(problem, None, "{}/{file}: {:?}", language.code, entry.msgid);
+                }
+            }
+        }
     }
 }
