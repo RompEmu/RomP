@@ -238,7 +238,7 @@ impl Controller {
                 .all(|(a, b)| a.key == b.key && a.player == b.player);
         if same_devices {
             for (i, row) in rows.into_iter().enumerate() {
-                if current.row_data(i).is_some_and(|r| r.active != row.active) {
+                if current.row_data(i).as_ref() != Some(&row) {
                     current.set_row_data(i, row);
                 }
             }
