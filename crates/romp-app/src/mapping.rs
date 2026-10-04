@@ -1,4 +1,5 @@
 use crate::gamepads::Button;
+use crate::gettext_noop;
 use crate::input::{A, B, DOWN, L, L2, L3, LEFT, R, R2, R3, RIGHT, SELECT, START, UP, X, Y};
 use crate::pad_labels::{Family, CHOICES};
 use romp_proto::msg::PadState;
@@ -17,12 +18,12 @@ pub const BUTTONS: [(u32, &str); 16] = [
     (R2, "R2"),
     (L3, "L3"),
     (R3, "R3"),
-    (START, "Start"),
-    (SELECT, "Select"),
-    (UP, "Up"),
-    (DOWN, "Down"),
-    (LEFT, "Left"),
-    (RIGHT, "Right"),
+    (START, gettext_noop!("Start")),
+    (SELECT, gettext_noop!("Select")),
+    (UP, gettext_noop!("Up")),
+    (DOWN, gettext_noop!("Down")),
+    (LEFT, gettext_noop!("Left")),
+    (RIGHT, gettext_noop!("Right")),
 ];
 
 const PHYSICAL: [Button; 17] = [
@@ -107,12 +108,24 @@ pub enum Hotkey {
 
 /// Each hotkey with the name it is saved under and the label people see.
 pub const HOTKEYS: [(Hotkey, &str, &str); 6] = [
-    (Hotkey::Pause, "pause", "Pause"),
-    (Hotkey::SaveState, "save", "Save state"),
-    (Hotkey::LoadState, "load", "Load state"),
-    (Hotkey::NextSlot, "next_slot", "Next save slot"),
-    (Hotkey::Fullscreen, "fullscreen", "Full screen"),
-    (Hotkey::Screenshot, "screenshot", "Screenshot"),
+    (Hotkey::Pause, "pause", gettext_noop!("Pause")),
+    (Hotkey::SaveState, "save", gettext_noop!("Save state")),
+    (Hotkey::LoadState, "load", gettext_noop!("Load state")),
+    (
+        Hotkey::NextSlot,
+        "next_slot",
+        gettext_noop!("Next save slot"),
+    ),
+    (
+        Hotkey::Fullscreen,
+        "fullscreen",
+        gettext_noop!("Full screen"),
+    ),
+    (
+        Hotkey::Screenshot,
+        "screenshot",
+        gettext_noop!("Screenshot"),
+    ),
 ];
 
 fn hotkey_entry(hotkey: Hotkey) -> (Hotkey, &'static str, &'static str) {
@@ -253,7 +266,7 @@ pub fn key_label(text: &str) -> String {
         (Key::Meta, "Cmd"),
     ];
     if text.is_empty() {
-        return "Not set".into();
+        return tr::tr!("Not set");
     }
     NAMES
         .iter()

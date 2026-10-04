@@ -38,7 +38,7 @@ pub fn name_of(options: &Options, device: u32) -> String {
     options
         .iter()
         .find(|(_, d)| *d == device)
-        .map_or_else(|| "Controller".into(), |(name, _)| name.clone())
+        .map_or_else(|| tr::tr!("Controller"), |(name, _)| name.clone())
 }
 
 pub fn uses_mouse(devices: &[u32]) -> bool {

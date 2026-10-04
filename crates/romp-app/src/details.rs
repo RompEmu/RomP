@@ -1,7 +1,20 @@
+use crate::gettext_noop;
 use crate::store::GameDetail;
+use tr::tr;
 
 const MONTHS: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    gettext_noop!("Jan"),
+    gettext_noop!("Feb"),
+    gettext_noop!("Mar"),
+    gettext_noop!("Apr"),
+    gettext_noop!("May"),
+    gettext_noop!("Jun"),
+    gettext_noop!("Jul"),
+    gettext_noop!("Aug"),
+    gettext_noop!("Sep"),
+    gettext_noop!("Oct"),
+    gettext_noop!("Nov"),
+    gettext_noop!("Dec"),
 ];
 
 pub fn human_size(bytes: i64) -> String {
@@ -25,14 +38,19 @@ fn date_parts(ms: i64) -> Option<(i64, u32, u32)> {
 
 pub fn release_date(ms: i64) -> Option<String> {
     let (y, m, d) = date_parts(ms)?;
-    Some(format!("{d} {} {y}", MONTHS[m as usize - 1]))
+    Some(tr!(
+        "{d} {month} {y}",
+        d,
+        month = crate::i18n::translate(MONTHS[m as usize - 1]),
+        y
+    ))
 }
 
 pub fn players(count: &str) -> Option<String> {
     match count.trim() {
         "" => None,
-        "1" => Some("1 player".into()),
-        n => Some(format!("{} players", n.replace('-', "–"))),
+        "1" => Some(tr!("1 player")),
+        n => Some(tr!("{} players", n.replace('-', "–"))),
     }
 }
 
@@ -103,23 +121,43 @@ fn list(one: &'static str, many: &'static str, items: &[String]) -> Option<(&'st
 pub fn facts(detail: &GameDetail) -> Vec<(&'static str, String)> {
     let meta = &detail.meta;
     let companies = if meta.developers.is_empty() && meta.publishers.is_empty() {
-        list("Company", "Companies", &meta.companies)
+        list(
+            gettext_noop!("Company"),
+            gettext_noop!("Companies"),
+            &meta.companies,
+        )
     } else {
         None
     };
     [
         release_ms(detail)
             .and_then(release_date)
-            .map(|d| ("Released", d)),
-        list("Genre", "Genres", &meta.genres),
-        list("Developer", "Developers", &meta.developers),
-        list("Publisher", "Publishers", &meta.publishers),
+            .map(|d| (gettext_noop!("Released"), d)),
+        list(
+            gettext_noop!("Genre"),
+            gettext_noop!("Genres"),
+            &meta.genres,
+        ),
+        list(
+            gettext_noop!("Developer"),
+            gettext_noop!("Developers"),
+            &meta.developers,
+        ),
+        list(
+            gettext_noop!("Publisher"),
+            gettext_noop!("Publishers"),
+            &meta.publishers,
+        ),
         companies,
-        list("Franchise", "Franchises", &meta.franchises),
+        list(
+            gettext_noop!("Franchise"),
+            gettext_noop!("Franchises"),
+            &meta.franchises,
+        ),
         meta.average_rating
             .filter(|r| *r > 0.0)
-            .map(|r| ("Rating", format!("{} / 100", r.round()))),
-        (detail.size_bytes > 0).then(|| ("Size", human_size(detail.size_bytes))),
+            .map(|r| (gettext_noop!("Rating"), format!("{} / 100", r.round()))),
+        (detail.size_bytes > 0).then(|| (gettext_noop!("Size"), human_size(detail.size_bytes))),
     ]
     .into_iter()
     .flatten()

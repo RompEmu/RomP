@@ -1,4 +1,5 @@
 use crate::cores::{core_for_platform, default_options, uses_vulkan};
+use crate::gettext_noop;
 use std::collections::BTreeMap;
 
 pub const STORE_KEY: &str = "console_settings";
@@ -29,9 +30,11 @@ const fn choice(label: &'static str, value: &'static str) -> Choice {
     Choice { label, value }
 }
 
-const RESOLUTION_DETAIL: &str = "Higher is sharper and needs a faster computer.";
-const ANISOTROPIC_DETAIL: &str = "Keeps textures sharp on floors and walls seen at an angle.";
-const WIDESCREEN_DETAIL: &str = "Shows a wider picture in games that have a widescreen patch.";
+const RESOLUTION_DETAIL: &str = gettext_noop!("Higher is sharper and needs a faster computer.");
+const ANISOTROPIC_DETAIL: &str =
+    gettext_noop!("Keeps textures sharp on floors and walls seen at an angle.");
+const WIDESCREEN_DETAIL: &str =
+    gettext_noop!("Shows a wider picture in games that have a widescreen patch.");
 
 static CONSOLES: &[Console] = &[
     Console {
@@ -42,10 +45,10 @@ static CONSOLES: &[Console] = &[
         settings: &[
             Setting {
                 key: "armsx2_upscale",
-                label: "Resolution",
+                label: gettext_noop!("Resolution"),
                 detail: RESOLUTION_DETAIL,
                 choices: &[
-                    choice("Native", "1x"),
+                    choice(gettext_noop!("Native"), "1x"),
                     choice("2x", "2x"),
                     choice("3x", "3x"),
                     choice("4x", "4x"),
@@ -54,10 +57,10 @@ static CONSOLES: &[Console] = &[
             },
             Setting {
                 key: "armsx2_anisotropic_filtering",
-                label: "Anisotropic filtering",
+                label: gettext_noop!("Anisotropic filtering"),
                 detail: ANISOTROPIC_DETAIL,
                 choices: &[
-                    choice("Off", "0"),
+                    choice(gettext_noop!("Off"), "0"),
                     choice("2x", "2"),
                     choice("4x", "4"),
                     choice("8x", "8"),
@@ -67,9 +70,12 @@ static CONSOLES: &[Console] = &[
             },
             Setting {
                 key: "armsx2_widescreen_patches",
-                label: "Widescreen",
+                label: gettext_noop!("Widescreen"),
                 detail: WIDESCREEN_DETAIL,
-                choices: &[choice("Off", "disabled"), choice("On", "enabled")],
+                choices: &[
+                    choice(gettext_noop!("Off"), "disabled"),
+                    choice(gettext_noop!("On"), "enabled"),
+                ],
                 default: 0,
             },
         ],
@@ -82,17 +88,20 @@ static CONSOLES: &[Console] = &[
         settings: &[
             Setting {
                 key: "pcsx2_upscale_multiplier",
-                label: "Resolution",
+                label: gettext_noop!("Resolution"),
                 detail: RESOLUTION_DETAIL,
-                choices: &[choice("Native", "1x (Native)"), choice("2x", "2x")],
+                choices: &[
+                    choice(gettext_noop!("Native"), "1x (Native)"),
+                    choice("2x", "2x"),
+                ],
                 default: 0,
             },
             Setting {
                 key: "pcsx2_anisotropic_filtering",
-                label: "Anisotropic filtering",
+                label: gettext_noop!("Anisotropic filtering"),
                 detail: ANISOTROPIC_DETAIL,
                 choices: &[
-                    choice("Off", "disabled"),
+                    choice(gettext_noop!("Off"), "disabled"),
                     choice("2x", "2x"),
                     choice("4x", "4x"),
                     choice("8x", "8x"),
@@ -102,9 +111,12 @@ static CONSOLES: &[Console] = &[
             },
             Setting {
                 key: "pcsx2_widescreen_hint",
-                label: "Widescreen",
+                label: gettext_noop!("Widescreen"),
                 detail: WIDESCREEN_DETAIL,
-                choices: &[choice("Off", "disabled"), choice("On", "enabled (16:9)")],
+                choices: &[
+                    choice(gettext_noop!("Off"), "disabled"),
+                    choice(gettext_noop!("On"), "enabled (16:9)"),
+                ],
                 default: 0,
             },
         ],
@@ -116,10 +128,10 @@ static CONSOLES: &[Console] = &[
         vulkan: true,
         settings: &[Setting {
             key: "mupen64plus-parallel-rdp-upscaling",
-            label: "Resolution",
+            label: gettext_noop!("Resolution"),
             detail: RESOLUTION_DETAIL,
             choices: &[
-                choice("Native", "1x"),
+                choice(gettext_noop!("Native"), "1x"),
                 choice("2x", "2x"),
                 choice("4x", "4x"),
             ],
@@ -133,10 +145,10 @@ static CONSOLES: &[Console] = &[
         vulkan: true,
         settings: &[Setting {
             key: "dolphin_efb_scale",
-            label: "Resolution",
+            label: gettext_noop!("Resolution"),
             detail: RESOLUTION_DETAIL,
             choices: &[
-                choice("Native", "1"),
+                choice(gettext_noop!("Native"), "1"),
                 choice("2x (720p)", "2"),
                 choice("3x (1080p)", "3"),
             ],
@@ -150,10 +162,10 @@ static CONSOLES: &[Console] = &[
         vulkan: true,
         settings: &[Setting {
             key: "beetle_psx_hw_internal_resolution",
-            label: "Resolution",
+            label: gettext_noop!("Resolution"),
             detail: RESOLUTION_DETAIL,
             choices: &[
-                choice("Native", "1x(native)"),
+                choice(gettext_noop!("Native"), "1x(native)"),
                 choice("2x", "2x"),
                 choice("4x", "4x"),
             ],
@@ -167,10 +179,10 @@ static CONSOLES: &[Console] = &[
         vulkan: true,
         settings: &[Setting {
             key: "ppsspp_internal_resolution",
-            label: "Resolution",
+            label: gettext_noop!("Resolution"),
             detail: RESOLUTION_DETAIL,
             choices: &[
-                choice("Native", "480x272"),
+                choice(gettext_noop!("Native"), "480x272"),
                 choice("2x", "960x544"),
                 choice("3x", "1440x816"),
                 choice("4x", "1920x1088"),
@@ -185,10 +197,10 @@ static CONSOLES: &[Console] = &[
         vulkan: true,
         settings: &[Setting {
             key: "reicast_internal_resolution",
-            label: "Resolution",
+            label: gettext_noop!("Resolution"),
             detail: RESOLUTION_DETAIL,
             choices: &[
-                choice("Native", "640x480"),
+                choice(gettext_noop!("Native"), "640x480"),
                 choice("2x", "1280x960"),
                 choice("3x", "1920x1440"),
             ],

@@ -42,7 +42,7 @@ impl Emulator {
 
     pub async fn install(&self, http: &reqwest::Client, releases: &str) -> Result<PathBuf, String> {
         let name = self.name;
-        let unreachable = |_| format!("Could not reach GitHub to download {name}");
+        let unreachable = |_| tr::tr!("Could not reach GitHub to download {name}", name);
         let release: Release = http
             .get(releases)
             .header(reqwest::header::ACCEPT, "application/vnd.github+json")
@@ -50,12 +50,12 @@ impl Emulator {
             .await
             .map_err(unreachable)?
             .error_for_status()
-            .map_err(|e| format!("{name} is not available right now ({e})"))?
+            .map_err(|e| tr::tr!("{name} is not available right now ({e})", name, e))?
             .json()
             .await
             .map_err(|e| e.to_string())?;
         let asset = (self.pick)(&release.assets)
-            .ok_or_else(|| format!("{name} has no download for this computer"))?;
+            .ok_or_else(|| tr::tr!("{name} has no download for this computer", name))?;
         let bytes = http
             .get(&asset.browser_download_url)
             .send()
@@ -72,10 +72,13 @@ impl Emulator {
         tokio::task::spawn_blocking(move || unpack(&bytes, &dir, &file))
             .await
             .map_err(|e| e.to_string())?
-            .map_err(|e| format!("Could not unpack {name}: {e}"))?;
+            .map_err(|e| tr::tr!("Could not unpack {name}: {e}", name, e))?;
         let exe = (self.exe_in)(&version_dir, &asset.name);
         if !exe.is_file() {
-            return Err(format!("The {name} download did not contain the emulator"));
+            return Err(tr::tr!(
+                "The {name} download did not contain the emulator",
+                name
+            ));
         }
         let manifest = Manifest {
             version: release.tag_name.clone(),

@@ -26,7 +26,7 @@ pub enum Error {
 pub fn server_candidates(input: &str) -> Result<Vec<Url>, String> {
     let input = input.trim().trim_end_matches('/');
     if input.is_empty() {
-        return Err("Enter your RomM server address.".into());
+        return Err(tr::tr!("Enter your RomM server address."));
     }
     let raw: Vec<String> = if input.contains("://") {
         vec![input.to_string()]
@@ -59,10 +59,11 @@ pub fn check_version(version: &str) -> Result<(), String> {
         .and_then(|m| m.parse::<u32>().ok())
     {
         Some(major) if major >= 5 => Ok(()),
-        Some(_) => Err(format!(
-            "This server runs RomM {version}. RomP needs RomM 5.0 or newer."
+        Some(_) => Err(tr::tr!(
+            "This server runs RomM {version}. RomP needs RomM 5.0 or newer.",
+            version
         )),
-        None => Err(format!("Unrecognised RomM version \"{version}\".")),
+        None => Err(tr::tr!("Unrecognised RomM version \"{version}\".", version)),
     }
 }
 
@@ -378,8 +379,8 @@ impl Client {
                     }
                 }
                 let lead = match pick.seed_rom_name.filter(|n| !n.is_empty()) {
-                    Some(seed) => format!("Because you played {seed}"),
-                    None => "Picked for you".to_string(),
+                    Some(seed) => tr::tr!("Because you played {seed}", seed),
+                    None => tr::tr!("Picked for you"),
                 };
                 let text = if values.is_empty() {
                     lead

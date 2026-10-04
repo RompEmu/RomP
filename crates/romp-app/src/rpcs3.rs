@@ -122,13 +122,13 @@ impl Home {
             .arg(pup)
             .stdin(std::process::Stdio::null())
             .output()
-            .map_err(|e| format!("Could not start RPCS3: {e}"))?;
+            .map_err(|e| tr::tr!("Could not start {name}: {e}", name = "RPCS3", e))?;
         if self.firmware_installed() {
             return Ok(());
         }
         let stderr = String::from_utf8_lossy(&output.stderr);
         tracing::warn!("RPCS3 firmware install failed: {stderr}");
-        Err("RPCS3 could not install the PS3 system software.".into())
+        Err(tr::tr!("RPCS3 could not install the PS3 system software."))
     }
 
     pub fn write_input(&self, text: &str) -> std::io::Result<()> {
@@ -163,8 +163,9 @@ pub fn boot_path(rom: &Path) -> Result<&Path, String> {
         .extension()
         .map(|e| format!(".{}", e.to_string_lossy()))
         .unwrap_or_else(|| name.clone());
-    Err(format!(
-        "RomP plays PS3 games stored as a game folder, an ISO, or a zip or 7z of one, and this one is a {kind} file."
+    Err(tr::tr!(
+        "RomP plays PS3 games stored as a game folder, an ISO, or a zip or 7z of one, and this one is a {kind} file.",
+        kind
     ))
 }
 
@@ -205,7 +206,7 @@ pub fn unpack_game(archive: &Path) -> Result<PathBuf, String> {
     let (Some(parent), Some(stem), Some(name)) =
         (archive.parent(), archive.file_stem(), archive.file_name())
     else {
-        return Err("The download has no name".into());
+        return Err(tr::tr!("The download has no name"));
     };
     let dir = parent.join(stem);
     let mut unpacking = stem.to_os_string();
@@ -219,10 +220,10 @@ pub fn unpack_game(archive: &Path) -> Result<PathBuf, String> {
         &name.to_string_lossy(),
         &unpacking,
     )
-    .map_err(|e| format!("Could not unpack the game: {e}"))
+    .map_err(|e| tr::tr!("Could not unpack the game: {e}", e))
     .and_then(|()| {
         find_boot(&unpacking)
-            .ok_or_else(|| "The archive has no PS3 game folder or ISO in it".into())
+            .ok_or_else(|| tr::tr!("The archive has no PS3 game folder or ISO in it"))
     });
     let boot = match unpacked {
         Ok(boot) => boot,

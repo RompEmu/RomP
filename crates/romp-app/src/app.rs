@@ -33,6 +33,7 @@ use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 use tokio::sync::Semaphore;
 use tokio::task::AbortHandle;
+use tr::tr;
 
 const PARALLEL_DOWNLOADS: usize = 6;
 const OFFLINE_RETRY: Duration = Duration::from_secs(60);
@@ -477,8 +478,8 @@ impl Controller {
                 self.enter_library(client.with_token(token));
                 return;
             }
-            (PollOutcome::Denied, _) => "The request was declined.",
-            _ => "The code expired.",
+            (PollOutcome::Denied, _) => tr!("The request was declined."),
+            _ => tr!("The code expired."),
         };
         ui.set_pair_failed(true);
         ui.set_pair_status(message.into());
@@ -668,7 +669,7 @@ impl Controller {
     fn needs_repair(&self) {
         let Some(ui) = self.ui() else { return };
         ui.set_connect_error(
-            "This device was signed out by the server. Pair it again to continue.".into(),
+            tr!("This device was signed out by the server. Pair it again to continue.").into(),
         );
         ui.set_screen(SCREEN_CONNECT);
     }
@@ -1017,7 +1018,7 @@ impl Controller {
             return;
         }
         ui.set_syncing(true);
-        ui.set_sync_status("Syncing…".into());
+        ui.set_sync_status(tr!("Syncing…").into());
         let generation = self.sync_generation.get() + 1;
         self.sync_generation.set(generation);
         let cancel = Arc::new(AtomicBool::new(false));
@@ -1061,9 +1062,9 @@ impl Controller {
             Err(Error::Unauthorized) => return self.needs_repair(),
             Err(Error::Unreachable) => {
                 self.set_offline(true);
-                ui.set_sync_status("Offline: showing downloaded games".into());
+                ui.set_sync_status(tr!("Offline: showing downloaded games").into());
             }
-            Err(e) => ui.set_sync_status(format!("Sync failed: {e}").into()),
+            Err(e) => ui.set_sync_status(tr!("Sync failed: {e}", e).into()),
         }
         self.reload_sidebar();
         self.reload_games();
@@ -1079,7 +1080,7 @@ async fn begin_pairing(
         (identity::device_id(&store), identity::device_name())
     };
     let mut last_error =
-        String::from("Could not reach the server. Check the address and that RomM is running.");
+        tr!("Could not reach the server. Check the address and that RomM is running.");
     for base in candidates {
         let client = Client::new(base);
         match client.heartbeat().await {
@@ -1087,15 +1088,14 @@ async fn begin_pairing(
                 check_version(&hb.system.version)?;
                 return match client.device_init(&device_id, &name).await {
                     Ok(auth) => Ok((client, auth)),
-                    Err(Error::Status(404)) => Err(
+                    Err(Error::Status(404)) => Err(tr!(
                         "This server does not support device sign-in. Update RomM to 5.0 or newer."
-                            .into(),
-                    ),
-                    Err(e) => Err(format!("Could not start sign-in: {e}.")),
+                    )),
+                    Err(e) => Err(tr!("Could not start sign-in: {e}.", e)),
                 };
             }
             Err(Error::Unreachable) => {}
-            Err(e) => last_error = format!("That doesn't look like a RomM server ({e})."),
+            Err(e) => last_error = tr!("That doesn't look like a RomM server ({e}).", e),
         }
     }
     Err(last_error)

@@ -140,7 +140,7 @@ pub fn missing(platform_slug: &str, system_dir: &Path) -> Vec<String> {
 }
 
 pub fn missing_message(missing: &[String]) -> String {
-    format!(
+    tr::tr!(
         "This game needs BIOS files your server doesn't have: {}. Add them to this platform's firmware in RomM.",
         missing.join("; ")
     )

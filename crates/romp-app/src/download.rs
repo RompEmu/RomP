@@ -3,6 +3,7 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::io::AsyncWriteExt;
+use tr::tr;
 use url::Url;
 
 #[derive(Debug)]
@@ -18,12 +19,12 @@ pub enum DownloadError {
 impl std::fmt::Display for DownloadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Network(Error::Unreachable) => write!(f, "Could not reach the server"),
-            Self::Network(e) => write!(f, "Download failed: {e}"),
-            Self::Io(e) => write!(f, "Could not save the file: {e}"),
-            Self::HashMismatch => write!(f, "The downloaded file is corrupted; try again"),
-            Self::Cancelled => write!(f, "Download cancelled"),
-            Self::UnsafePath => write!(f, "The server sent an invalid file path"),
+            Self::Network(Error::Unreachable) => f.write_str(&tr!("Could not reach the server")),
+            Self::Network(e) => f.write_str(&tr!("Download failed: {e}", e)),
+            Self::Io(e) => f.write_str(&tr!("Could not save the file: {e}", e)),
+            Self::HashMismatch => f.write_str(&tr!("The downloaded file is corrupted; try again")),
+            Self::Cancelled => f.write_str(&tr!("Download cancelled")),
+            Self::UnsafePath => f.write_str(&tr!("The server sent an invalid file path")),
             Self::Unpack(e) => write!(f, "{e}"),
         }
     }

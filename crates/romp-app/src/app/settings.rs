@@ -3,6 +3,7 @@ use crate::achievements::popups;
 use crate::console_settings::{self, Chosen};
 use crate::cores::core_for_platform;
 use crate::details::human_size;
+use crate::i18n::translate;
 use crate::mapping::{self, Assigned, BUTTONS, HOTKEYS};
 use crate::pad_labels::{Family, CHOICES};
 use crate::players::KEYBOARD;
@@ -14,6 +15,7 @@ use crate::{
 };
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::Duration;
+use tr::tr;
 
 const SECTION_PLAYERS: i32 = 2;
 const SECTION_STORAGE: i32 = 3;
@@ -22,10 +24,13 @@ const SECTION_LOOKS: i32 = 5;
 
 pub(super) const SHORTCUTS: &str = "shortcuts";
 
-const KEYBOARD_HINT: &str = "Choose a button, then press the key you want for it.";
-const SHORTCUTS_HINT: &str =
-    "Choose a shortcut, then press the key you want for it. Esc always opens the game menu.";
-const PAD_HINT: &str = "Choose a button, then press the controller button you want for it.";
+const KEYBOARD_HINT: &str =
+    crate::gettext_noop!("Choose a button, then press the key you want for it.");
+const SHORTCUTS_HINT: &str = crate::gettext_noop!(
+    "Choose a shortcut, then press the key you want for it. Esc always opens the game menu."
+);
+const PAD_HINT: &str =
+    crate::gettext_noop!("Choose a button, then press the controller button you want for it.");
 
 impl Controller {
     pub(super) fn save_players(&self) {
@@ -46,7 +51,7 @@ impl Controller {
         let names = |list: &[&str]| {
             ModelRc::new(VecModel::from(
                 list.iter()
-                    .map(|s| slint::SharedString::from(*s))
+                    .map(|s| slint::SharedString::from(translate(s)))
                     .collect::<Vec<_>>(),
             ))
         };
@@ -182,8 +187,8 @@ impl Controller {
         let before = players.clone();
         let mut rows = vec![DeviceRow {
             key: KEYBOARD.into(),
-            name: "Keyboard".into(),
-            detail: "Built in".into(),
+            name: tr!("Keyboard").into(),
+            detail: tr!("Built in").into(),
             player: i32::from(players.player(KEYBOARD).unwrap_or(0)),
             active: false,
         }];
@@ -193,7 +198,7 @@ impl Controller {
                 active: active.contains(&pad.key),
                 key: pad.key.into(),
                 name: pad.name.into(),
-                detail: "Controller".into(),
+                detail: tr!("Controller").into(),
                 player: i32::from(player.unwrap_or(0)),
             });
         }
@@ -253,11 +258,11 @@ impl Controller {
         let mappings = self.mappings.borrow();
         let hints: Vec<KeyHint> = std::iter::once(KeyHint {
             keys: "Esc".into(),
-            action: "Game menu".into(),
+            action: tr!("Game menu").into(),
         })
         .chain(HOTKEYS.iter().map(|(hotkey, _, label)| KeyHint {
             keys: mapping::combo_label(&mappings.hotkey_key(*hotkey)).into(),
-            action: (*label).into(),
+            action: translate(label).into(),
         }))
         .collect();
         ui.set_settings_keys(ModelRc::new(VecModel::from(hints)));
@@ -266,14 +271,14 @@ impl Controller {
     pub(super) fn customize(&self, device: String) {
         let Some(ui) = self.ui() else { return };
         let title = if device == SHORTCUTS {
-            "Shortcuts".to_string()
+            tr!("Shortcuts")
         } else if device == KEYBOARD {
-            "Keyboard".to_string()
+            tr!("Keyboard")
         } else {
             let pads = self.gamepads.borrow().connected();
             pads.into_iter()
                 .find(|p| p.key == device)
-                .map_or("Controller".into(), |p| p.name)
+                .map_or_else(|| tr!("Controller"), |p| p.name)
         };
         ui.set_remap_title(title.into());
         *self.remap_device.borrow_mut() = Some(device);
@@ -295,14 +300,18 @@ impl Controller {
                 .iter()
                 .enumerate()
                 .map(|(i, (hotkey, _, label))| RemapRow {
-                    name: (*label).into(),
+                    name: translate(label).into(),
                     binding: mapping::combo_label(&mappings.hotkey_key(*hotkey)).into(),
                     waiting: waiting == Some(i as u32),
                 })
                 .collect();
             ui.set_remap_rows(ModelRc::new(VecModel::from(rows)));
             ui.set_remap_waiting(waiting.is_some());
-            ui.set_remap_hint(notice.unwrap_or(SHORTCUTS_HINT).into());
+            ui.set_remap_hint(
+                notice
+                    .map_or_else(|| translate(SHORTCUTS_HINT), str::to_string)
+                    .into(),
+            );
             ui.set_remap_labels_shown(false);
             return;
         }
@@ -316,8 +325,8 @@ impl Controller {
             .map_or_else(Default::default, |pad| pad.family);
         let family = mappings.family(model, detected);
         let automatic = match detected.choice() {
-            Some(i) => format!("Automatic ({})", CHOICES[i].2),
-            None => "Automatic".into(),
+            Some(i) => tr!("Automatic ({})", translate(CHOICES[i].2)),
+            None => tr!("Automatic"),
         };
         let choices: Vec<slint::SharedString> = std::iter::once(automatic)
             .chain(CHOICES.iter().map(|(_, _, label)| (*label).to_string()))
@@ -334,11 +343,14 @@ impl Controller {
         let rows: Vec<RemapRow> = BUTTONS
             .iter()
             .map(|(button, name)| RemapRow {
-                name: (*name).into(),
+                name: translate(name).into(),
                 binding: if keyboard {
                     mapping::key_label(&mappings.key_for(*button))
                 } else {
-                    crate::pad_labels::name(family, mappings.pad_button(model, *button)).to_string()
+                    translate(crate::pad_labels::name(
+                        family,
+                        mappings.pad_button(model, *button),
+                    ))
                 }
                 .into(),
                 waiting: waiting == Some(*button),
@@ -346,7 +358,10 @@ impl Controller {
             .collect();
         ui.set_remap_rows(ModelRc::new(VecModel::from(rows)));
         ui.set_remap_waiting(waiting.is_some());
-        let hint = notice.unwrap_or(if keyboard { KEYBOARD_HINT } else { PAD_HINT });
+        let hint = notice.map_or_else(
+            || translate(if keyboard { KEYBOARD_HINT } else { PAD_HINT }),
+            str::to_string,
+        );
         ui.set_remap_hint(hint.into());
     }
 
@@ -396,12 +411,13 @@ impl Controller {
         };
         let notice = match outcome {
             (Assigned::Reserved, _) => {
-                return self.show_remap(Some(
-                    "Esc always opens the game menu. Choose a different key.",
-                ));
+                return self.show_remap(Some(&tr!(
+                    "Esc always opens the game menu. Choose a different key."
+                )));
             }
-            (Assigned::Swapped(other), previous) => Some(format!(
-                "{other} now uses {}.",
+            (Assigned::Swapped(other), previous) => Some(tr!(
+                "{0} now uses {1}.",
+                translate(&other),
                 mapping::combo_label(&previous)
             )),
             (Assigned::Set, _) => None,
@@ -514,13 +530,13 @@ impl Controller {
                         .iter()
                         .map(|setting| ConsoleOption {
                             key: setting.key.into(),
-                            label: setting.label.into(),
-                            detail: setting.detail.into(),
+                            label: translate(setting.label).into(),
+                            detail: translate(setting.detail).into(),
                             choices: ModelRc::new(VecModel::from(
                                 setting
                                     .choices
                                     .iter()
-                                    .map(|c| c.label.into())
+                                    .map(|c| translate(c.label).into())
                                     .collect::<Vec<slint::SharedString>>(),
                             )),
                             current: console_settings::selected(setting, &chosen) as i32,
@@ -544,11 +560,11 @@ impl Controller {
                 let settings: Vec<LookSetting> = crate::looks::rows(&choice, &p.slug)
                     .into_iter()
                     .map(|row| LookSetting {
-                        label: crate::looks::row_label(row).into(),
+                        label: translate(crate::looks::row_label(row)).into(),
                         choices: ModelRc::new(VecModel::from(
                             crate::looks::row_choices(row, &p.slug)
                                 .into_iter()
-                                .map(slint::SharedString::from)
+                                .map(|c| slint::SharedString::from(translate(c)))
                                 .collect::<Vec<_>>(),
                         )),
                         current: crate::looks::row_selected(&choice, &p.slug, row) as i32,

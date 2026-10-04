@@ -18,6 +18,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
+use tr::tr;
 
 pub type SavePorts = Box<dyn Fn(Vec<(u8, u32)>)>;
 pub type VolumeChanged = Box<dyn Fn(u8)>;
@@ -366,7 +367,7 @@ impl Game {
             let key = if self.computer { "F12" } else { "Esc" };
             flash(
                 self.primary(),
-                format!("Mouse captured. Press {key} to release it."),
+                tr!("Mouse captured. Press {key} to release it.", key),
             );
         }
     }
@@ -461,7 +462,7 @@ impl Game {
     /// Saves the frame on screen off the UI thread; `screenshot_saved` picks up the result.
     fn capture(&self, rgba: &[u8], shown: Option<(u32, u32, f32)>) {
         let Some((width, height, aspect)) = shown else {
-            return flash(self.primary(), "The game hasn't drawn anything yet".into());
+            return flash(self.primary(), tr!("The game hasn't drawn anything yet"));
         };
         let (pixels, width, height) =
             crate::rotation::rotate(rgba, width, height, self.rotation.get());
@@ -483,10 +484,10 @@ impl Game {
         while let Ok(saved) = self.screenshots.1.try_recv() {
             match saved {
                 Ok(path) => {
-                    flash(self.primary(), "Screenshot saved".into());
+                    flash(self.primary(), tr!("Screenshot saved"));
                     (self.screenshot_taken)(path);
                 }
-                Err(e) => flash(self.primary(), format!("Couldn't save the screenshot: {e}")),
+                Err(e) => flash(self.primary(), tr!("Couldn't save the screenshot: {e}", e)),
             }
         }
     }
@@ -563,8 +564,8 @@ impl Game {
         let rows: Vec<LookRow> = crate::looks::rows(&choice, &options.platform)
             .into_iter()
             .map(|row| LookRow {
-                label: crate::looks::row_label(row).into(),
-                value: crate::looks::row_value(&choice, row).into(),
+                label: crate::i18n::translate(crate::looks::row_label(row)).into(),
+                value: crate::i18n::translate(crate::looks::row_value(&choice, row)).into(),
             })
             .collect();
         let rows = ModelRc::new(VecModel::from(rows));
@@ -578,7 +579,7 @@ impl Game {
                 crate::looks::Look::Smooth => window.set_sharp(false),
                 _ => {}
             }
-            window.set_look_label(crate::looks::label(choice.look).into());
+            window.set_look_label(crate::i18n::translate(crate::looks::label(choice.look)).into());
             window.set_look_rows(rows.clone());
             window.window().request_redraw();
         }
@@ -755,7 +756,7 @@ impl Game {
         if self.hardcore.get() {
             return flash(
                 self.primary(),
-                "Loading states is off in hardcore mode".into(),
+                tr!("Loading states is off in hardcore mode"),
             );
         }
         self.send(&AppMsg::LoadSlot(slot));
@@ -788,7 +789,9 @@ impl Game {
         if let Some(link) = self.achievements.borrow_mut().as_mut() {
             link.set_level(Level::from_index(self.popups.get()));
         }
-        let label = |list: &[&str], i: u8| list.get(usize::from(i)).copied().unwrap_or("").into();
+        let label = |list: &[&str], i: u8| {
+            crate::i18n::translate(list.get(usize::from(i)).copied().unwrap_or("")).into()
+        };
         for window in &self.windows {
             window.set_popups_label(label(&LEVELS, self.popups.get()));
             window.set_corner_label(label(&CORNERS, self.corner.get()));
@@ -868,7 +871,7 @@ impl Game {
                     has_badge: badge.is_some(),
                     badge: badge.unwrap_or_default(),
                     unlocked: a.unlocked,
-                    note: note.unwrap_or_default().into(),
+                    note: crate::i18n::translate(note.unwrap_or_default()).into(),
                 }
             })
             .collect();
@@ -879,7 +882,7 @@ impl Game {
     }
 
     fn show_slot(&self, slot: u8) {
-        flash(self.primary(), format!("Save slot {slot}"));
+        flash(self.primary(), tr!("Save slot {slot}", slot));
     }
 
     fn set_menu_focus(&self, focus: i32) {
@@ -971,7 +974,7 @@ impl Game {
             self.pickable_ports()
                 .into_iter()
                 .map(|port| PortRow {
-                    label: format!("Port {}", port + 1).into(),
+                    label: tr!("Port {}", port + 1).into(),
                     device: ports::name_of(&options[port], devices[port]).into(),
                 })
                 .collect()
@@ -1249,7 +1252,7 @@ pub fn launch(
     ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());
     ui.set_has_achievements(tracks_achievements);
     ui.set_hardcore(hardcore);
-    ui.set_achievements_label("Not started yet".into());
+    ui.set_achievements_label(tr!("Not started yet").into());
     {
         let mappings = opts.mappings.borrow();
         let label = |hotkey| crate::mapping::combo_label(&mappings.hotkey_key(hotkey)).into();
@@ -1261,7 +1264,7 @@ pub fn launch(
         ui.set_screenshot_key(label(Hotkey::Screenshot));
     }
     ui.set_has_menu(true);
-    ui.set_status("Starting…".into());
+    ui.set_status(tr!("Starting…").into());
     let mut windows = vec![ui];
     if opts.split_screens {
         let window = GameWindow::new()?;
@@ -1399,8 +1402,8 @@ pub fn launch(
                         flash(
                             ui,
                             match player {
-                                Some(p) => format!("{} → Player {p}", pad.name),
-                                None => format!(
+                                Some(p) => tr!("{name} → Player {p}", name = pad.name, p),
+                                None => tr!(
                                     "{} connected. Choose its player in Settings.",
                                     pad.name
                                 ),
@@ -1411,10 +1414,13 @@ pub fn launch(
                 known.retain(|k| keys.contains(k));
                 first_poll = false;
                 let inputs = pads.states(&mappings.borrow(), nintendo);
-                let guide = pads.family_in_use(&mappings.borrow()).map_or("Guide", |family| {
-                    crate::pad_labels::name(family, crate::gamepads::Button::Mode)
-                });
-                if ui.get_guide_name() != guide {
+                let guide = crate::i18n::translate(
+                    pads.family_in_use(&mappings.borrow())
+                        .map_or("Guide", |family| {
+                            crate::pad_labels::name(family, crate::gamepads::Button::Mode)
+                        }),
+                );
+                if ui.get_guide_name() != guide.as_str() {
                     ui.set_guide_name(guide.into());
                 }
                 let states = inputs
@@ -1552,7 +1558,7 @@ pub fn launch(
                         tracing::warn!("setting aside the automatic save: {e}");
                     }
                     ui.set_status(
-                        "The game couldn't continue from where you left off, so that automatic save was set aside. Start the game again to play from the beginning or from a save slot.".into(),
+                        tr!("The game couldn't continue from where you left off, so that automatic save was set aside. Start the game again to play from the beginning or from a save slot.").into(),
                     );
                 }
                 if started_now {
@@ -1568,7 +1574,7 @@ pub fn launch(
                 if started_now && game.computer {
                     flash(
                         ui,
-                        "Your keyboard goes to the game. Press F12 for the menu.".into(),
+                        tr!("Your keyboard goes to the game. Press {key} for the menu.", key = "F12"),
                     );
                 }
             }
@@ -1861,17 +1867,17 @@ fn handle_event(
         SessionEvent::Runner(RunnerMsg::StateWritten { slot, ok }) => flash(
             ui,
             if ok {
-                format!("Saved to slot {slot}")
+                tr!("Saved to slot {slot}", slot)
             } else {
-                format!("Could not save slot {slot}")
+                tr!("Could not save slot {slot}", slot)
             },
         ),
         SessionEvent::Runner(RunnerMsg::StateLoaded { slot, ok }) => flash(
             ui,
             if ok {
-                format!("Loaded slot {slot}")
+                tr!("Loaded slot {slot}", slot)
             } else {
-                format!("Slot {slot} is empty or unreadable")
+                tr!("Slot {slot} is empty or unreadable", slot)
             },
         ),
         SessionEvent::Runner(RunnerMsg::Exited { error: Some(error) }) => {
@@ -1880,7 +1886,7 @@ fn handle_event(
         SessionEvent::Runner(_) => {}
         SessionEvent::Ended { code: Some(0), .. } => finish(),
         SessionEvent::Ended { code, log_tail } => {
-            let code = code.map_or("a signal".to_string(), |c| format!("code {c}"));
+            let code = code.map_or(tr!("a signal"), |c| tr!("code {}", c));
             let log = log_tail
                 .iter()
                 .rev()
@@ -1889,7 +1895,8 @@ fn handle_event(
                 .cloned()
                 .collect::<Vec<_>>()
                 .join("\n");
-            ui.set_status(format!("The emulator stopped ({code}).\n{log}").into());
+            let stopped = tr!("The emulator stopped ({code}).", code);
+            ui.set_status(format!("{stopped}\n{log}").into());
         }
     }
 }

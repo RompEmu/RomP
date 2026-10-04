@@ -63,8 +63,8 @@ msgstr ""
 msgid "RomP works with RomM 5.0 or newer."
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Back"
 msgstr ""
 
@@ -108,7 +108,7 @@ msgid_plural "{n} games"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "New collection"
 msgstr ""
 
@@ -120,7 +120,7 @@ msgstr ""
 msgid "favorite"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Downloaded"
 msgstr ""
 
@@ -128,8 +128,8 @@ msgstr ""
 msgid "On server"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Offline"
 msgstr ""
 
@@ -145,17 +145,17 @@ msgstr ""
 msgid "Delete…"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Signed in"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "About"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Settings"
 msgstr ""
 
@@ -191,7 +191,7 @@ msgstr ""
 msgid "Download"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Cancel"
 msgstr ""
 
@@ -272,8 +272,8 @@ msgstr ""
 msgid "Similar in your library"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Close"
 msgstr ""
 
@@ -372,8 +372,8 @@ msgstr ""
 msgid "Pair again"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Sign out"
 msgstr ""
 
@@ -425,7 +425,7 @@ msgstr ""
 msgid "Where popups and notes appear over the game."
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Sign in"
 msgstr ""
 
@@ -453,7 +453,7 @@ msgstr ""
 msgid "Button pressed"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
 msgid "Customize…"
 msgstr ""
 
@@ -616,7 +616,7 @@ msgstr ""
 msgid "{} on GitHub"
 msgstr ""
 
-#: crates/romp-app/ui/game.slint crates/romp-app/ui/game.slint
+#: crates/romp-app/ui/game.slint
 msgid "Paused"
 msgstr ""
 
@@ -624,7 +624,7 @@ msgstr ""
 msgid "Running"
 msgstr ""
 
-#: crates/romp-app/ui/game.slint crates/romp-app/ui/game.slint
+#: crates/romp-app/ui/game.slint
 msgid "Resume"
 msgstr ""
 

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tr::tr;
 
 /// How much a game has been played: across every device RomM knows of, plus this computer's unsent time.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,10 +31,10 @@ impl PlayStats {
 fn duration(ms: i64) -> String {
     let minutes = ms / 60_000;
     match (minutes / 60, minutes % 60) {
-        (0, 0) => "under a minute".into(),
-        (0, m) => format!("{m} min"),
-        (h, 0) => format!("{h} h"),
-        (h, m) => format!("{h} h {m} min"),
+        (0, 0) => tr!("under a minute"),
+        (0, m) => tr!("{m} min", m),
+        (h, 0) => tr!("{h} h", h),
+        (h, m) => tr!("{h} h {m} min", h, m),
     }
 }
 
@@ -42,12 +43,8 @@ pub fn describe(stats: &PlayStats, now: SystemTime) -> String {
     if stats.sessions == 0 {
         return String::new();
     }
-    let sessions = if stats.sessions == 1 {
-        "1 session".to_string()
-    } else {
-        format!("{} sessions", stats.sessions)
-    };
-    let mut parts = vec![format!("Played {}", duration(stats.total_ms)), sessions];
+    let sessions = tr!("{n} session" | "{n} sessions" % stats.sessions);
+    let mut parts = vec![tr!("Played {}", duration(stats.total_ms)), sessions];
     if let Some(ms) = stats.last_played_ms {
         let when = crate::slots::when(
             UNIX_EPOCH + Duration::from_millis(u64::try_from(ms).unwrap_or(0)),
@@ -58,7 +55,7 @@ pub fn describe(stats: &PlayStats, now: SystemTime) -> String {
             .next()
             .map(|c| c.to_lowercase().chain(chars).collect())
             .unwrap_or_default();
-        parts.push(format!("last played {when}"));
+        parts.push(tr!("last played {when}", when));
     }
     parts.join(" · ")
 }

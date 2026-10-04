@@ -36,7 +36,7 @@ impl TokenStore for Keychain {
     fn save(&self, server: &str, token: &str) -> Result<(), String> {
         keyring::Entry::new(self.service, server)
             .and_then(|e| e.set_password(token))
-            .map_err(|e| format!("Could not store the sign-in in the keychain: {e}"))
+            .map_err(|e| tr::tr!("Could not store the sign-in in the keychain: {e}", e))
     }
 
     fn delete(&self, server: &str) {

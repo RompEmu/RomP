@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use tr::tr;
 
 const SIMILAR_LIMIT: u32 = 12;
 
@@ -300,7 +301,7 @@ impl Controller {
             details::facts(&detail)
                 .into_iter()
                 .map(|(label, value)| crate::Fact {
-                    label: label.into(),
+                    label: crate::i18n::translate(label).into(),
                     value: value.into(),
                 })
                 .collect::<Vec<_>>(),
@@ -314,11 +315,11 @@ impl Controller {
         self.refresh_collection_controls(detail.id);
         ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
-            ui.set_game_status(format!("RomP can't play {} games yet.", detail.platform).into());
+            ui.set_game_status(tr!("RomP can't play {} games yet.", detail.platform).into());
         } else if self.downloading_id().is_some_and(|d| d != detail.id) {
-            ui.set_game_status("Another download is in progress.".into());
+            ui.set_game_status(tr!("Another download is in progress.").into());
         } else if self.offline.get() && downloaded_path(&detail).is_none() {
-            ui.set_game_status("Connect to your server to download this game.".into());
+            ui.set_game_status(tr!("Connect to your server to download this game.").into());
         }
     }
 
@@ -397,7 +398,7 @@ impl Controller {
         self.download_fraction.set(0.0);
         if let Some(ui) = self.ui() {
             ui.set_game_progress(0.0);
-            ui.set_game_status("Downloading…".into());
+            ui.set_game_status(tr!("Downloading…").into());
         }
         self.refresh_game_page(false);
         let covers = self.shared.covers.clone();
@@ -414,7 +415,7 @@ impl Controller {
             let mut result = download_game(&client, id, &roms, &progress, &cancel).await;
             if let Ok(path) = &result {
                 if detail.platform_slug == rpcs3::PLATFORM && rpcs3::is_archive(path) {
-                    on_ui(move |c| c.game_status(id, "Unpacking…".into()));
+                    on_ui(move |c| c.game_status(id, tr!("Unpacking…")));
                     let archive = path.clone();
                     result = tokio::task::spawn_blocking(move || rpcs3::unpack_game(&archive))
                         .await
@@ -481,7 +482,7 @@ impl Controller {
                 }
             }
             Err(DownloadError::Cancelled) => {
-                "Download paused. Choose Download to continue.".to_string()
+                tr!("Download paused. Choose Download to continue.")
             }
             Err(e) => e.to_string(),
         };
@@ -510,11 +511,11 @@ impl Controller {
             return;
         };
         if self.running.borrow().is_some() || self.preparing.get() {
-            ui.set_game_status("A game is already running.".into());
+            ui.set_game_status(tr!("A game is already running.").into());
             return;
         }
         if self.syncing_game.get() == Some(detail.id) {
-            ui.set_game_status("Still syncing your saves. Try again in a moment.".into());
+            ui.set_game_status(tr!("Still syncing your saves. Try again in a moment.").into());
             return;
         }
         let Some(rom) = downloaded_path(&detail) else {
@@ -531,7 +532,7 @@ impl Controller {
         };
         self.requested_slot.set(slot);
         self.preparing.set(true);
-        ui.set_game_status("Getting ready…".into());
+        ui.set_game_status(tr!("Getting ready…").into());
         let cores = self.shared.cores.clone();
         let http = self.shared.http.clone();
         let client = self.client.borrow().clone();
@@ -554,7 +555,7 @@ impl Controller {
                 Some(path) => Ok(path),
                 None => {
                     let name = core.name;
-                    on_ui(move |c| c.game_status(id, format!("Installing {name}…")));
+                    on_ui(move |c| c.game_status(id, tr!("Installing {name}…", name)));
                     cores.install(&http, base, core).await
                 }
             };
@@ -562,7 +563,9 @@ impl Controller {
             let core_path = match core_path {
                 Ok(path) if !crate::cores::system_files_present(core, &system) => {
                     let name = core.name;
-                    on_ui(move |c| c.game_status(id, format!("Installing {name}'s system files…")));
+                    on_ui(move |c| {
+                        c.game_status(id, tr!("Installing {name}'s system files…", name));
+                    });
                     crate::cores::install_system_files(
                         &http,
                         crate::cores::SYSTEM_FILES,
@@ -599,7 +602,7 @@ impl Controller {
             }
             let sram = match (&client, sync) {
                 (Some(client), Some((device, game))) => {
-                    on_ui(move |c| c.game_status(id, "Syncing your save…".into()));
+                    on_ui(move |c| c.game_status(id, tr!("Syncing your save…")));
                     Some(saves::sync_sram(client, &device, &game).await)
                 }
                 _ => None,
@@ -610,7 +613,7 @@ impl Controller {
 
     fn play_with_xemu(&self, detail: GameDetail, rom: PathBuf) {
         self.preparing.set(true);
-        self.game_status(detail.id, "Getting ready…".into());
+        self.game_status(detail.id, tr!("Getting ready…"));
         let http = self.shared.http.clone();
         let client = self.client.borrow().clone();
         let offline = self.offline.get();
@@ -620,7 +623,7 @@ impl Controller {
             let exe = match xemu.installed() {
                 Some(exe) => Ok(exe),
                 None => {
-                    on_ui(move |c| c.game_status(id, "Installing xemu…".into()));
+                    on_ui(move |c| c.game_status(id, tr!("Installing {name}…", name = "xemu")));
                     xemu.install(&http, xemu::RELEASES).await
                 }
             };
@@ -675,7 +678,7 @@ impl Controller {
             Err(e) => {
                 return self.game_status(
                     detail.id,
-                    format!("Could not set up the Xbox hard disk: {e}"),
+                    tr!("Could not set up the Xbox hard disk: {e}", e),
                 )
             }
         };
@@ -700,7 +703,10 @@ impl Controller {
         };
         let config_path = save_dir.join("xemu.toml");
         if let Err(e) = std::fs::write(&config_path, xemu::config_toml(&config)) {
-            return self.game_status(detail.id, format!("Could not write xemu's settings: {e}"));
+            return self.game_status(
+                detail.id,
+                tr!("Could not write {name}'s settings: {e}", name = "xemu", e),
+            );
         }
         let id = detail.id;
         let on_exit = move |code: Option<i32>, log: Vec<String>| {
@@ -715,13 +721,16 @@ impl Controller {
                 self.record_play(detail.id);
                 *self.playing.borrow_mut() = Some(detail);
             }
-            Err(e) => self.game_status(detail.id, format!("Could not start xemu: {e}")),
+            Err(e) => self.game_status(
+                detail.id,
+                tr!("Could not start {name}: {e}", name = "xemu", e),
+            ),
         }
     }
 
     fn play_with_rpcs3(&self, detail: GameDetail, rom: PathBuf) {
         self.preparing.set(true);
-        self.game_status(detail.id, "Getting ready…".into());
+        self.game_status(detail.id, tr!("Getting ready…"));
         let http = self.shared.http.clone();
         let client = self.client.borrow().clone();
         let offline = self.offline.get();
@@ -731,10 +740,13 @@ impl Controller {
             let exe = match (emulator.installed(), rpcs3::releases()) {
                 (Some(exe), _) => Ok(exe),
                 (None, Some(releases)) => {
-                    on_ui(move |c| c.game_status(id, "Installing RPCS3…".into()));
+                    on_ui(move |c| c.game_status(id, tr!("Installing {name}…", name = "RPCS3")));
                     emulator.install(&http, &releases).await
                 }
-                (None, None) => Err("RPCS3 has no download for this computer".into()),
+                (None, None) => Err(tr!(
+                    "{name} has no download for this computer",
+                    name = "RPCS3"
+                )),
             };
             let system = paths::system_dir();
             let mut missing = bios::missing(&detail.platform_slug, &system);
@@ -758,7 +770,7 @@ impl Controller {
             let ready = match (exe, pup) {
                 (Ok(exe), Some(pup)) if !home.firmware_installed() => {
                     on_ui(move |c| {
-                        c.game_status(id, "Installing the PS3 system software…".into());
+                        c.game_status(id, tr!("Installing the PS3 system software…"));
                     });
                     tokio::task::spawn_blocking(move || {
                         home.install_firmware(&exe, &pup).map(|()| exe)
@@ -818,7 +830,10 @@ impl Controller {
             .and_then(|()| std::fs::write(&config_path, config))
             .and_then(|()| home.write_input(&input));
         if let Err(e) = written {
-            return self.game_status(detail.id, format!("Could not write RPCS3's settings: {e}"));
+            return self.game_status(
+                detail.id,
+                tr!("Could not write {name}'s settings: {e}", name = "RPCS3", e),
+            );
         }
         let id = detail.id;
         let on_exit = move |code: Option<i32>, log: Vec<String>| {
@@ -833,7 +848,10 @@ impl Controller {
                 self.record_play(detail.id);
                 *self.playing.borrow_mut() = Some(detail);
             }
-            Err(e) => self.game_status(detail.id, format!("Could not start RPCS3: {e}")),
+            Err(e) => self.game_status(
+                detail.id,
+                tr!("Could not start {name}: {e}", name = "RPCS3", e),
+            ),
         }
     }
 
@@ -1027,7 +1045,10 @@ impl Controller {
                 self.record_play(detail.id);
                 *self.playing.borrow_mut() = Some(detail);
             }
-            Err(e) => self.game_status(detail.id, format!("Could not start the game: {e:#}")),
+            Err(e) => self.game_status(
+                detail.id,
+                tr!("Could not start the game: {e}", e = format!("{e:#}")),
+            ),
         }
     }
 
@@ -1057,7 +1078,7 @@ impl Controller {
             return;
         };
         if self.running.borrow().is_some() || self.preparing.get() {
-            return self.game_status(detail.id, "Close the running game first.".into());
+            return self.game_status(detail.id, tr!("Close the running game first."));
         }
         if let Some(dir) = download_dir(&detail) {
             let _ = std::fs::remove_dir_all(dir);

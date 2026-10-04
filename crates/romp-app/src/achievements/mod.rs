@@ -161,11 +161,7 @@ pub fn badge_url(a: &AchievementInfo) -> &str {
 }
 
 pub fn row_detail(a: &AchievementInfo) -> String {
-    let points = if a.points == 1 {
-        "1 point".to_string()
-    } else {
-        format!("{} points", a.points)
-    };
+    let points = tr::tr!("{n} point" | "{n} points" % a.points);
     let mut parts = vec![a.description.clone(), points];
     if !a.unlocked && !a.progress.is_empty() {
         parts.push(a.progress.clone());
@@ -176,10 +172,10 @@ pub fn row_detail(a: &AchievementInfo) -> String {
 
 pub fn summary(list: &[AchievementInfo]) -> String {
     if list.is_empty() {
-        return "No achievements for this game".into();
+        return tr::tr!("No achievements for this game");
     }
     let earned = list.iter().filter(|a| a.unlocked).count();
-    format!("{earned} of {} earned", list.len())
+    tr::tr!("{earned} of {total} earned", earned, total = list.len())
 }
 
 /// A game's achievements as RomM stores them, marked with what RomM knows the player earned.
@@ -370,13 +366,13 @@ pub async fn sign_in(
         .body(form)
         .send()
         .await
-        .map_err(|_| "Could not reach RetroAchievements".to_string())?
+        .map_err(|_| tr::tr!("Could not reach RetroAchievements"))?
         .json()
         .await
-        .map_err(|_| "RetroAchievements sent an answer RomP did not understand".to_string())?;
+        .map_err(|_| tr::tr!("RetroAchievements sent an answer RomP did not understand"))?;
     if !reply.success || reply.token.is_empty() {
         return Err(if reply.error.is_empty() {
-            "RetroAchievements did not accept the sign-in".into()
+            tr::tr!("RetroAchievements did not accept the sign-in")
         } else {
             reply.error
         });

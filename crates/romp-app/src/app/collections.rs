@@ -5,11 +5,24 @@ use crate::romm::types::RemoteCollection;
 use crate::store::{CollectionItem, CollectionKind, Scope};
 use crate::{Membership, SidebarEntry};
 use slint::{Image, Model, ModelRc, VecModel};
+use tr::tr;
 
 const AUTO_SECTIONS: [(&str, &str, CollectionKind); 3] = [
-    ("series", "SERIES", CollectionKind::Series),
-    ("franchises", "FRANCHISES", CollectionKind::Franchise),
-    ("genres", "GENRES", CollectionKind::Genre),
+    (
+        "series",
+        crate::gettext_noop!("Series"),
+        CollectionKind::Series,
+    ),
+    (
+        "franchises",
+        crate::gettext_noop!("Franchises"),
+        CollectionKind::Franchise,
+    ),
+    (
+        "genres",
+        crate::gettext_noop!("Genres"),
+        CollectionKind::Genre,
+    ),
 ];
 
 const PAIR_KEY: &str = "pair";
@@ -51,20 +64,20 @@ fn header(section: &str, label: &str, expanded: bool, can_add: bool) -> SidebarE
         key: format!("section:{section}").into(),
         expanded,
         can_add,
-        ..item("", label, 0, "")
+        ..item("", &label.to_uppercase(), 0, "")
     }
 }
 
 pub(super) fn heading_for(key: &str, entries: &[(String, String)]) -> String {
     match key {
-        "all" => "All games".into(),
-        "favorites" | PAIR_KEY => "Favorites".into(),
-        RECENT_KEY => "Recently played".into(),
-        FOR_YOU_KEY => "For you".into(),
+        "all" => tr!("All games"),
+        "favorites" | PAIR_KEY => tr!("Favorites"),
+        RECENT_KEY => tr!("Recently played"),
+        FOR_YOU_KEY => tr!("For you"),
         _ => entries
             .iter()
             .find(|(k, _)| k == key)
-            .map_or_else(|| "Games".into(), |(_, name)| name.clone()),
+            .map_or_else(|| tr!("Games"), |(_, name)| name.clone()),
     }
 }
 
@@ -78,9 +91,8 @@ pub(super) fn games_label(count: usize) -> String {
         grouped.push(c);
     }
     match count {
-        0 => "No games".into(),
-        1 => "1 game".into(),
-        _ => format!("{grouped} games"),
+        0 => tr!("No games"),
+        _ => tr!("{0} game" | "{0} games" % count, grouped),
     }
 }
 
@@ -164,7 +176,7 @@ impl Controller {
         };
         let expanded = self.expanded.borrow().clone();
         let total: i64 = platforms.iter().map(|p| p.count).sum();
-        let mut entries = vec![item("all", "All games", total, "")];
+        let mut entries = vec![item("all", &tr!("All games"), total, "")];
         let mut keys = vec!["all".to_string()];
         if show_collections {
             let favorites = collections
@@ -173,19 +185,19 @@ impl Controller {
             let key = favorites.map_or("favorites", |f| f.key.as_str());
             entries.push(item(
                 key,
-                "Favorites",
+                &tr!("Favorites"),
                 favorites.map_or(0, |f| f.count),
                 "♥",
             ));
             keys.push(key.to_string());
         } else if self.client.borrow().is_some() {
-            entries.push(item(PAIR_KEY, "Favorites", -1, "♥"));
+            entries.push(item(PAIR_KEY, &tr!("Favorites"), -1, "♥"));
         }
         if recent > 0 {
             entries.push(SidebarEntry {
                 has_icon: true,
                 icon: recent_icon(),
-                ..item(RECENT_KEY, "Recently played", recent, "")
+                ..item(RECENT_KEY, &tr!("Recently played"), recent, "")
             });
             keys.push(RECENT_KEY.to_string());
         }
@@ -193,13 +205,13 @@ impl Controller {
             entries.push(SidebarEntry {
                 has_icon: true,
                 icon: for_you_icon(),
-                ..item(FOR_YOU_KEY, "For you", for_you, "")
+                ..item(FOR_YOU_KEY, &tr!("For you"), for_you, "")
             });
             keys.push(FOR_YOU_KEY.to_string());
         }
 
         let open = expanded.contains("platforms");
-        entries.push(header("platforms", "PLATFORMS", open, false));
+        entries.push(header("platforms", &tr!("Platforms"), open, false));
         let mut missing_icons = Vec::new();
         for p in platforms {
             let key = format!("p:{}", p.id);
@@ -233,7 +245,7 @@ impl Controller {
             .collect();
         if show_collections && (can_edit || !listed.is_empty()) {
             let open = expanded.contains("collections");
-            entries.push(header("collections", "COLLECTIONS", open, can_edit));
+            entries.push(header("collections", &tr!("Collections"), open, can_edit));
             for c in listed {
                 keys.push(c.key.clone());
                 if !open {
@@ -250,8 +262,8 @@ impl Controller {
             }
         }
         if !show_collections && self.client.borrow().is_some() {
-            entries.push(header("collections", "COLLECTIONS", true, false));
-            entries.push(item(PAIR_KEY, "Pair again to show them", -1, ""));
+            entries.push(header("collections", &tr!("Collections"), true, false));
+            entries.push(item(PAIR_KEY, &tr!("Pair again to show them"), -1, ""));
         }
         for (section, label, kind) in AUTO_SECTIONS {
             let members: Vec<&CollectionItem> =
@@ -260,7 +272,7 @@ impl Controller {
                 continue;
             }
             let open = expanded.contains(section);
-            entries.push(header(section, label, open, false));
+            entries.push(header(section, &crate::i18n::translate(label), open, false));
             for c in members {
                 keys.push(c.key.clone());
                 if open {
@@ -410,7 +422,7 @@ impl Controller {
                         .unwrap()
                         .set_member(&item.key, rom_id, !member);
                     c.collections_changed(&item.key);
-                    c.report(format!("Couldn't update \"{}\": {e}.", item.name));
+                    c.report(tr!("Couldn't update \"{0}\": {1}.", item.name, e));
                 }
             });
         });
@@ -434,7 +446,7 @@ impl Controller {
     ) {
         let created = match result {
             Ok(created) => created,
-            Err(e) => return self.report(format!("Couldn't create the collection: {e}.")),
+            Err(e) => return self.report(tr!("Couldn't create the collection: {e}.", e)),
         };
         let kind = if favorite {
             CollectionKind::Favorites
@@ -473,28 +485,27 @@ impl Controller {
         };
         let (title, message, asks_name, value, confirm, destructive) = match &action {
             DialogAction::Create { .. } => (
-                "New collection".to_string(),
+                tr!("New collection"),
                 String::new(),
                 true,
                 String::new(),
-                "Create",
+                tr!("Create"),
                 false,
             ),
             DialogAction::Rename(key) => (
-                "Rename collection".to_string(),
+                tr!("Rename collection"),
                 String::new(),
                 true,
                 name_of(key),
-                "Rename",
+                tr!("Rename"),
                 false,
             ),
             DialogAction::Delete(key) => (
-                format!("Delete \"{}\"?", name_of(key)),
-                "The collection is removed from your RomM server. Its games stay in your library."
-                    .to_string(),
+                tr!("Delete \"{}\"?", name_of(key)),
+                tr!("The collection is removed from your RomM server. Its games stay in your library."),
                 false,
                 String::new(),
-                "Delete",
+                tr!("Delete"),
                 true,
             ),
         };
@@ -567,7 +578,7 @@ impl Controller {
                         .unwrap()
                         .rename_collection(&key, &item.name);
                     c.collections_changed(&key);
-                    c.report(format!("Couldn't rename \"{}\": {e}.", item.name));
+                    c.report(tr!("Couldn't rename \"{0}\": {1}.", item.name, e));
                 }
             });
         });
@@ -586,7 +597,7 @@ impl Controller {
                     c.shared.store.lock().unwrap().delete_collection(&key);
                     c.collections_changed(&key);
                 }
-                Err(e) => c.report(format!("Couldn't delete \"{}\": {e}.", item.name)),
+                Err(e) => c.report(tr!("Couldn't delete \"{0}\": {1}.", item.name, e)),
             });
         });
     }

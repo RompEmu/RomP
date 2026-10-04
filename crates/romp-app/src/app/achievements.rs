@@ -119,11 +119,11 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         let username = username.trim().to_string();
         if username.is_empty() || password.is_empty() {
-            ui.set_ra_status("Enter your RetroAchievements username and password.".into());
+            ui.set_ra_status(tr::tr!("Enter your RetroAchievements username and password.").into());
             return;
         }
         ui.set_ra_busy(true);
-        ui.set_ra_status("Signing in…".into());
+        ui.set_ra_status(tr::tr!("Signing in…").into());
         let http = self.shared.http.clone();
         self.shared.rt.spawn(async move {
             let result = achievements::sign_in(

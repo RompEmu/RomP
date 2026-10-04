@@ -3,6 +3,7 @@ use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
+use tr::tr;
 
 /// What a game needs to track achievements, gathered by the app before it starts.
 pub struct Launch {
@@ -34,11 +35,7 @@ fn toast(title: impl Into<String>, detail: impl Into<String>, seconds: u64) -> T
 }
 
 fn points(n: u32) -> String {
-    if n == 1 {
-        "1 point".into()
-    } else {
-        format!("{n} points")
-    }
+    tr!("{n} point" | "{n} points" % n)
 }
 
 /// The popup, if any, for something that happened while tracking achievements.
@@ -49,15 +46,15 @@ pub fn toast_for(event: &AchievementEvent) -> Option<Toast> {
             achievements,
         } => toast(
             "RetroAchievements",
-            match achievements {
-                1 => format!("1 achievement for {title}"),
-                n => format!("{n} achievements for {title}"),
-            },
+            tr!(
+                "{n} achievement for {title}" | "{n} achievements for {title}" % *achievements,
+                title
+            ),
             4,
         ),
         AchievementEvent::SignInFailed(reason) => toast(
-            "RetroAchievements sign-in failed",
-            format!("{reason}. Sign in again in Settings."),
+            tr!("RetroAchievements sign-in failed"),
+            tr!("{reason}. Sign in again in Settings.", reason),
             6,
         ),
         AchievementEvent::Unlocked {
@@ -73,36 +70,42 @@ pub fn toast_for(event: &AchievementEvent) -> Option<Toast> {
             badge_url,
             ..
         } => Toast {
-            title: format!("Unlocked: {title}"),
+            title: tr!("Unlocked: {title}", title),
             detail: format!("{description} · {}", points(*p)),
             badge_url: (!badge_url.is_empty()).then(|| badge_url.clone()),
             seconds: 5,
         },
-        AchievementEvent::Mastered => toast("Game mastered", "Every achievement is yours.", 6),
+        AchievementEvent::Mastered => {
+            toast(tr!("Game mastered"), tr!("Every achievement is yours."), 6)
+        }
         AchievementEvent::LeaderboardStarted { title, .. } => {
-            toast("Leaderboard attempt started", title.clone(), 3)
+            toast(tr!("Leaderboard attempt started"), title.clone(), 3)
         }
         AchievementEvent::LeaderboardFailed { title } => {
-            toast("Leaderboard attempt failed", title.clone(), 3)
+            toast(tr!("Leaderboard attempt failed"), title.clone(), 3)
         }
         AchievementEvent::LeaderboardSubmitted { title, score } => toast(
-            "Leaderboard score submitted",
+            tr!("Leaderboard score submitted"),
             format!("{title}: {score}"),
             4,
         ),
         AchievementEvent::Offline => toast(
-            "RetroAchievements is unreachable",
-            "Unlocks will be sent when it's back.",
+            tr!("RetroAchievements is unreachable"),
+            tr!("Unlocks will be sent when it's back."),
             5,
         ),
-        AchievementEvent::Online => toast("RetroAchievements is back", "Unlocks were sent.", 3),
+        AchievementEvent::Online => toast(
+            tr!("RetroAchievements is back"),
+            tr!("Unlocks were sent."),
+            3,
+        ),
         AchievementEvent::HardcoreOff(reason) => toast(
-            "Hardcore is off for this game",
-            format!("Because {reason}."),
+            tr!("Hardcore is off for this game"),
+            tr!("Because {reason}.", reason),
             6,
         ),
         AchievementEvent::ServerError(message) => {
-            toast("RetroAchievements error", message.clone(), 5)
+            toast(tr!("RetroAchievements error"), message.clone(), 5)
         }
         AchievementEvent::GameUnavailable(_)
         | AchievementEvent::SignedIn
@@ -124,8 +127,17 @@ pub enum Level {
     Off,
 }
 
-pub const LEVELS: [&str; 3] = ["All", "Quiet", "Off"];
-pub const CORNERS: [&str; 4] = ["Top right", "Top left", "Bottom right", "Bottom left"];
+pub const LEVELS: [&str; 3] = [
+    crate::gettext_noop!("All"),
+    crate::gettext_noop!("Quiet"),
+    crate::gettext_noop!("Off"),
+];
+pub const CORNERS: [&str; 4] = [
+    crate::gettext_noop!("Top right"),
+    crate::gettext_noop!("Top left"),
+    crate::gettext_noop!("Bottom right"),
+    crate::gettext_noop!("Bottom left"),
+];
 
 impl Level {
     pub fn from_index(index: u8) -> Self {
@@ -238,7 +250,7 @@ pub struct Link {
 }
 
 const CHIP_SHOWN: Duration = Duration::from_millis(2500);
-const UNLOCKED: &str = "Unlocked while playing";
+const UNLOCKED: &str = crate::gettext_noop!("Unlocked while playing");
 
 const PROGRESS_SHOWN: Duration = Duration::from_secs(3);
 

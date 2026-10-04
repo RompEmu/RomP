@@ -398,7 +398,7 @@ pub async fn install_system_files(
         .get(format!("{base}/{zip_name}"))
         .send()
         .await
-        .map_err(|_| "Could not reach the download server".to_string())?;
+        .map_err(|_| tr::tr!("Could not reach the download server"))?;
     if !resp.status().is_success() {
         return Err(format!(
             "{}'s system files are not available ({})",
@@ -452,7 +452,7 @@ async fn published_checksum(http: &reqwest::Client, url: &str) -> Result<String,
         .send()
         .await
         .and_then(reqwest::Response::error_for_status)
-        .map_err(|_| "Could not check the core download".to_string())?
+        .map_err(|_| tr::tr!("Could not check the core download"))?
         .text()
         .await
         .map_err(|e| e.to_string())?;
@@ -512,10 +512,10 @@ impl Cores {
             .get(&url)
             .send()
             .await
-            .map_err(|_| "Could not reach the core download server".to_string())?;
+            .map_err(|_| tr::tr!("Could not reach the core download server"))?;
         if !resp.status().is_success() {
-            return Err(format!(
-                "{} is not available for this computer ({})",
+            return Err(tr::tr!(
+                "{0} is not available for this computer ({1})",
                 core.name,
                 resp.status()
             ));
@@ -530,7 +530,7 @@ impl Cores {
         if core.id == ARMSX2.id {
             version = published_checksum(http, &url).await?;
             if !version.eq_ignore_ascii_case(&sha256_hex(&zip_bytes)) {
-                return Err("The core download did not match its checksum".into());
+                return Err(tr::tr!("The core download did not match its checksum"));
             }
         }
         let file = lib_file(core);

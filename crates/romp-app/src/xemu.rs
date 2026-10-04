@@ -390,7 +390,7 @@ impl Xemu {
             .get(url)
             .send()
             .await
-            .map_err(|_| "Could not reach GitHub to download the Xbox hard disk".to_string())?
+            .map_err(|_| tr::tr!("Could not reach GitHub to download the Xbox hard disk"))?
             .error_for_status()
             .map_err(|e| e.to_string())?
             .bytes()

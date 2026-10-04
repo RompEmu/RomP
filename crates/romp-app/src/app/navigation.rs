@@ -1,5 +1,7 @@
 use super::{with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::gamepads::Button;
+use crate::gettext_noop;
+use crate::i18n::translate;
 use crate::input::{A, B, DOWN, L, LEFT, R, RIGHT, START, UP, X};
 use crate::mapping::BUTTONS;
 use crate::navigation::{move_in_grid, Dir};
@@ -64,7 +66,7 @@ impl Controller {
                 keys: ModelRc::new(VecModel::from(
                     keys.iter().map(|k| pad_key(*k)).collect::<Vec<_>>(),
                 )),
-                action: (*action).into(),
+                action: translate(action).into(),
             })
             .collect();
         ui.set_pad_hints(ModelRc::new(VecModel::from(rows)));
@@ -203,19 +205,25 @@ fn hints(screen: i32, family: Family) -> Vec<Hint> {
     let shoulders = vec![key(Button::LeftTrigger), key(Button::RightTrigger)];
     match screen {
         SCREEN_LIBRARY => vec![
-            (vec![Badge::Text("D-pad")], "Move"),
-            (vec![key(family.confirm())], "Open"),
-            (shoulders, "Change list"),
-            (vec![key(Button::Start)], "Settings"),
+            (
+                vec![Badge::Text(gettext_noop!("D-pad"))],
+                gettext_noop!("Move"),
+            ),
+            (vec![key(family.confirm())], gettext_noop!("Open")),
+            (shoulders, gettext_noop!("Change list")),
+            (vec![key(Button::Start)], gettext_noop!("Settings")),
         ],
         SCREEN_GAME => vec![
-            (vec![key(family.confirm())], "Play or download"),
-            (vec![key(Button::North)], "Favorite"),
-            (vec![key(family.back())], "Back"),
+            (
+                vec![key(family.confirm())],
+                gettext_noop!("Play or download"),
+            ),
+            (vec![key(Button::North)], gettext_noop!("Favorite")),
+            (vec![key(family.back())], gettext_noop!("Back")),
         ],
         SCREEN_SETTINGS => vec![
-            (shoulders, "Change section"),
-            (vec![key(family.back())], "Back"),
+            (shoulders, gettext_noop!("Change section")),
+            (vec![key(family.back())], gettext_noop!("Back")),
         ],
         _ => Vec::new(),
     }
@@ -224,7 +232,7 @@ fn hints(screen: i32, family: Family) -> Vec<Hint> {
 fn pad_key(badge: Badge) -> crate::PadKey {
     match badge {
         Badge::Text(text) => crate::PadKey {
-            text: text.into(),
+            text: translate(text).into(),
             shape: "".into(),
         },
         Badge::Shape(shape) => crate::PadKey {

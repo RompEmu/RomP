@@ -1,3 +1,4 @@
+use crate::gettext_noop;
 use crate::shading::Stage;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -13,19 +14,35 @@ pub enum Look {
 }
 
 pub const LOOKS: [(Look, &str); 4] = [
-    (Look::Sharp, "Sharp pixels"),
-    (Look::Smooth, "Smooth"),
+    (Look::Sharp, gettext_noop!("Sharp pixels")),
+    (Look::Smooth, gettext_noop!("Smooth")),
     (Look::Crt, "CRT"),
-    (Look::Handheld, "Handheld screen"),
+    (Look::Handheld, gettext_noop!("Handheld screen")),
 ];
 
-pub const SCREEN: [&str; 2] = ["TV", "Monitor"];
-pub const CURVATURE: [&str; 3] = ["Off", "Subtle", "Strong"];
-pub const SCANLINES: [&str; 3] = ["Light", "Medium", "Strong"];
-pub const MASK: [&str; 3] = ["Off", "Light", "Strong"];
-pub const MODELS: [&str; 3] = ["Pocket", "Original green", "Backlit"];
-pub const COLOURS: [&str; 2] = ["Original", "Vivid"];
-pub const DITHERING: [&str; 2] = ["Blend", "Off"];
+pub const SCREEN: [&str; 2] = [gettext_noop!("TV"), gettext_noop!("Monitor")];
+pub const CURVATURE: [&str; 3] = [
+    gettext_noop!("Off"),
+    gettext_noop!("Subtle"),
+    gettext_noop!("Strong"),
+];
+pub const SCANLINES: [&str; 3] = [
+    gettext_noop!("Light"),
+    gettext_noop!("Medium"),
+    gettext_noop!("Strong"),
+];
+pub const MASK: [&str; 3] = [
+    gettext_noop!("Off"),
+    gettext_noop!("Light"),
+    gettext_noop!("Strong"),
+];
+pub const MODELS: [&str; 3] = [
+    gettext_noop!("Pocket"),
+    gettext_noop!("Original green"),
+    gettext_noop!("Backlit"),
+];
+pub const COLOURS: [&str; 2] = [gettext_noop!("Original"), gettext_noop!("Vivid")];
+pub const DITHERING: [&str; 2] = [gettext_noop!("Blend"), gettext_noop!("Off")];
 
 /// The fine adjustments of a CRT look, each an index into its list of steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -225,14 +242,14 @@ pub fn rows(choice: &Choice, platform: &str) -> Vec<Row> {
 
 pub fn row_label(row: Row) -> &'static str {
     match row {
-        Row::Style => "Style",
-        Row::Screen => "Screen",
-        Row::Curvature => "Curvature",
-        Row::Scanlines => "Scanlines",
-        Row::Mask => "Mask",
-        Row::Model => "Model",
-        Row::Colours => "Colours",
-        Row::Dithering => "Dithering",
+        Row::Style => gettext_noop!("Style"),
+        Row::Screen => gettext_noop!("Screen"),
+        Row::Curvature => gettext_noop!("Curvature"),
+        Row::Scanlines => gettext_noop!("Scanlines"),
+        Row::Mask => gettext_noop!("Mask"),
+        Row::Model => gettext_noop!("Model"),
+        Row::Colours => gettext_noop!("Colours"),
+        Row::Dithering => gettext_noop!("Dithering"),
     }
 }
 

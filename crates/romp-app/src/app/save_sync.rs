@@ -7,6 +7,7 @@ use crate::saves::{self, GameSaves, Keep, SramConflict, SramOutcome};
 use crate::store::{GameDetail, Store};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tr::tr;
 
 pub(super) struct PendingLaunch {
     pub detail: GameDetail,
@@ -27,10 +28,10 @@ pub(super) fn conflict_text(conflict: &SramConflict) -> String {
                     .replace('T', " ")
                     .replace("+00:00", " UTC")
             })
-            .unwrap_or_else(|| "unknown".into())
+            .unwrap_or_else(|| tr!("unknown"))
     };
-    format!(
-        "This computer: {}. Server: {}. The one you don't choose is kept as a backup.",
+    tr!(
+        "This computer: {0}. Server: {1}. The one you don't choose is kept as a backup.",
         when(&conflict.local_updated_at),
         when(&conflict.server_updated_at)
     )
@@ -68,15 +69,17 @@ impl Controller {
     pub(super) fn update_pairing_prompt(&self) {
         let signed_in = self.client.borrow().is_some();
         let prompt = if self.sync_device().is_none() {
-            Some("Pair again to turn on save sync")
+            Some(tr!("Pair again to turn on save sync"))
         } else if !self.has_scope("collections.write") {
-            Some("Pair again to use favorites and collections")
+            Some(tr!("Pair again to use favorites and collections"))
         } else if !self.has_scope("roms.user.write") {
-            Some("Pair again to share when you last played")
+            Some(tr!("Pair again to share when you last played"))
         } else if !self.has_scope("roms.user.read") {
-            Some("Pair again to see how long you've played")
+            Some(tr!("Pair again to see how long you've played"))
         } else if self.ra_account().is_some() && !self.has_scope("me.write") {
-            Some("Pair again to keep RetroAchievements progress current in RomM")
+            Some(tr!(
+                "Pair again to keep RetroAchievements progress current in RomM"
+            ))
         } else {
             None
         };
@@ -151,7 +154,7 @@ impl Controller {
         };
         if let Some(ui) = self.ui() {
             ui.set_save_conflict(false);
-            ui.set_game_status("Syncing your save…".into());
+            ui.set_game_status(tr!("Syncing your save…").into());
         }
         let conflict = pending.conflict.clone();
         self.shared.rt.spawn(async move {
@@ -180,8 +183,10 @@ impl Controller {
             self.shared.store.lock().unwrap().add_pending(detail.id);
             return self.game_status(
                 detail.id,
-                "Save sync is off. Choose \"Pair again to turn on save sync\" in the library."
-                    .into(),
+                tr!(
+                    "Save sync is off. Choose \"{}\" in the library.",
+                    tr!("Pair again to turn on save sync")
+                ),
             );
         };
         let client = self.client.borrow().clone();
@@ -189,7 +194,7 @@ impl Controller {
             self.shared.store.lock().unwrap().add_pending(detail.id);
             return self.game_status(
                 detail.id,
-                "Saves will sync when the server is reachable.".into(),
+                tr!("Saves will sync when the server is reachable."),
             );
         };
         let store = self.shared.store.clone();
@@ -206,17 +211,16 @@ impl Controller {
         self.syncing_game.set(None);
         let status = match result {
             Ok(SramOutcome::Conflict(_)) => {
-                "A newer save is on the server. You'll be asked which to keep next time you play."
-                    .to_string()
+                tr!("A newer save is on the server. You'll be asked which to keep next time you play.")
             }
-            Ok(_) => "Saves synced.".to_string(),
+            Ok(_) => tr!("Saves synced."),
             Err(Error::Unreachable) => {
                 self.shared.store.lock().unwrap().add_pending(id);
-                "Saves will sync when the server is reachable.".to_string()
+                tr!("Saves will sync when the server is reachable.")
             }
             Err(e) => {
                 tracing::warn!("syncing saves for {id}: {e}");
-                format!("Couldn't sync saves: {e}.")
+                tr!("Couldn't sync saves: {e}.", e)
             }
         };
         self.game_status(id, status);

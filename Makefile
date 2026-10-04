@@ -137,7 +137,11 @@ XTR := xtr@0.1.11
 
 # Line numbers and dates would change the templates whenever code moves.
 define tidy_pot
-	sed -E -e '/^"POT-Creation-Date:/d' -e '/^#: /s/:[0-9]+( |$$)/\1/g' $(1) > $(1).tmp && mv $(1).tmp $(1)
+	awk '/^"POT-Creation-Date:/ { next } \
+		/^#: / { n = split($$0, refs, " "); out = "#:"; split("", seen); \
+			for (i = 2; i <= n; i++) { sub(/:[0-9]+$$/, "", refs[i]); if (!seen[refs[i]]++) out = out " " refs[i] } \
+			print out; next } \
+		{ print }' $(1) > $(1).tmp && mv $(1).tmp $(1)
 endef
 
 translation-tools:
@@ -147,7 +151,8 @@ translation-tools:
 translations: translation-tools
 	slint-tr-extractor --no-default-translation-context -d romp-app -o $(TRANSLATIONS)/romp-app.pot crates/romp-app/ui/*.slint
 	$(call tidy_pot,$(TRANSLATIONS)/romp-app.pot)
-	xtr --add-location file -o $(TRANSLATIONS)/rust.pot crates/romp-app/src/main.rs
+	# xtr follows modules from main.rs but misses one of two modules with the same name.
+	xtr --add-location file -o $(TRANSLATIONS)/rust.pot $$(find crates/romp-app/src -name '*.rs' | sort)
 	$(call tidy_pot,$(TRANSLATIONS)/rust.pot)
 
 translations-check: translations

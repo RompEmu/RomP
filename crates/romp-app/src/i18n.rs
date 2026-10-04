@@ -56,10 +56,14 @@ fn catalog(code: &str) -> Option<&'static [u8]> {
     })
 }
 
-/// `tr`'s own `.po` reader can't read from memory, but its `.mo` one can.
+/// `tr`'s own `.po` reader can't read from memory, but its `.mo` one can. It also only finds
+/// the plural rule when nothing follows the `;` before it, which no translation tool writes.
 fn translator(po: &[u8]) -> Option<tr::MoTranslator> {
     use rspolib::prelude::*;
-    let po = rspolib::pofile(std::str::from_utf8(po).ok()?).ok()?;
+    let mut po = rspolib::pofile(std::str::from_utf8(po).ok()?).ok()?;
+    if let Some(rule) = po.metadata.get_mut("Plural-Forms") {
+        *rule = rule.split(';').map(str::trim).collect::<Vec<_>>().join(";");
+    }
     let mo = rspolib::MOFile::from(&po);
     tr::MoTranslator::from_vec_u8(mo.as_bytes().into_owned()).ok()
 }
@@ -96,7 +100,6 @@ pub fn apply(language: Option<&'static Language>) {
 }
 
 /// Translates a string from a `const` list, which was marked with `gettext_noop!`.
-#[expect(dead_code, reason = "lists of names use this once translated")]
 pub fn translate(english: &str) -> String {
     tr::internal::with_translator(module_path!(), |t| t.translate(english, None).into_owned())
 }
@@ -176,7 +179,8 @@ msgstr "{1} : {0}"
     #[test]
     fn every_language_ships_both_catalogs() {
         for language in &LANGUAGES {
-            assert!(catalog(language.code).is_some(), "{}", language.code);
+            let po = catalog(language.code).expect(language.code);
+            assert!(translator(po).is_some(), "{} loads", language.code);
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("translations")
                 .join(language.code)
@@ -184,5 +188,21 @@ msgstr "{1} : {0}"
             assert!(dir.join("romp-app.po").is_file(), "{}", language.code);
             assert!(dir.join("rust.po").is_file(), "{}", language.code);
         }
+    }
+
+    #[test]
+    fn counts_use_the_languages_plural_rule() {
+        use tr::Translator;
+        let po = format!(
+            "{TEST_PO}\nmsgid \"{{n}} game\"\nmsgid_plural \"{{n}} games\"\nmsgstr[0] \"{{n}} jeu\"\nmsgstr[1] \"{{n}} jeux\"\n"
+        );
+        let t = translator(po.as_bytes()).unwrap();
+        assert_eq!(t.ntranslate(1, "{n} game", "{n} games", None), "{n} jeu");
+        assert_eq!(t.ntranslate(2, "{n} game", "{n} games", None), "{n} jeux");
+        assert_eq!(
+            t.ntranslate(0, "{n} game", "{n} games", None),
+            "{n} jeu",
+            "French counts 0 as one"
+        );
     }
 }

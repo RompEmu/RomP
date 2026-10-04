@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
+use tr::tr;
 
 /// The automatic save made when a game closes, which "continue" loads.
 pub const AUTO: u8 = 0;
@@ -35,9 +36,9 @@ impl SlotInfo {
 
     pub fn label(&self) -> String {
         if self.slot == AUTO {
-            "Where you left off".into()
+            tr!("Where you left off")
         } else {
-            format!("Slot {}", self.slot)
+            tr!("Slot {}", self.slot)
         }
     }
 }
@@ -67,22 +68,15 @@ pub fn when(saved_at: SystemTime, now: SystemTime) -> String {
         .duration_since(saved_at)
         .unwrap_or(Duration::ZERO)
         .as_secs();
-    let plural = |n: u64, unit: &str| {
-        if n == 1 {
-            format!("1 {unit} ago")
-        } else {
-            format!("{n} {unit}s ago")
-        }
-    };
     match age {
-        0..60 => "Just now".into(),
-        60..3_600 => plural(age / 60, "minute"),
-        3_600..86_400 => plural(age / 3_600, "hour"),
-        86_400..172_800 => "Yesterday".into(),
-        172_800..2_592_000 => plural(age / 86_400, "day"),
+        0..60 => tr!("Just now"),
+        60..3_600 => tr!("{n} minute ago" | "{n} minutes ago" % age / 60),
+        3_600..86_400 => tr!("{n} hour ago" | "{n} hours ago" % age / 3_600),
+        86_400..172_800 => tr!("Yesterday"),
+        172_800..2_592_000 => tr!("{n} day ago" | "{n} days ago" % age / 86_400),
         _ => {
             let date = crate::sync::iso_utc(saved_at);
-            format!("On {}", &date[..10])
+            tr!("On {}", &date[..10])
         }
     }
 }
@@ -98,7 +92,7 @@ pub fn card(info: &SlotInfo, now: SystemTime, current: Option<u8>) -> crate::Slo
         label: info.label().into(),
         detail: info
             .saved_at
-            .map_or_else(|| "Empty".to_string(), |t| when(t, now))
+            .map_or_else(|| tr!("Empty"), |t| when(t, now))
             .into(),
         has_thumbnail: thumbnail.is_some(),
         thumbnail: thumbnail.unwrap_or_default(),
