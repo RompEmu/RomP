@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-04
+
 ### Fixed
 
 - The Linux AppImage and tarball start on Linux systems from Ubuntu 22.04 and Debian 12 on, instead of needing the newest ones. The AppImage is now named without "linux", as AppImages are.
@@ -194,7 +196,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/RompEmu/RomP/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/RompEmu/RomP/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/RompEmu/RomP/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/RompEmu/RomP/compare/v0.8.0...v0.9.0
