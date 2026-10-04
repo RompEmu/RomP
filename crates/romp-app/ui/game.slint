@@ -177,7 +177,7 @@ component ChipButton inherits Rectangle {
         padding-right: 10px;
         spacing: 6px;
         alignment: center;
-        Image {
+        if root.icon.width > 0: Image {
             source: root.icon;
             width: 16px;
             height: 16px;
@@ -416,6 +416,7 @@ component GameMenu inherits Rectangle {
 component SlotTile inherits Rectangle {
     in property <SlotCard> card;
     in property <bool> focused;
+    in property <bool> load-focused;
     in property <bool> hardcore;
     callback save(int);
     callback load(int);
@@ -437,10 +438,17 @@ component SlotTile inherits Rectangle {
         Text { text: root.card.detail; font-size: Theme.font-small; color: Theme.text-muted; }
         HorizontalLayout {
             spacing: 6px;
-            Button { text: @tr("Save"); clicked => { root.save(root.card.slot); } }
-            Button {
+            ChipButton {
+                text: @tr("Save");
+                horizontal-stretch: 1;
+                focused: root.focused && !root.load-focused;
+                clicked => { root.save(root.card.slot); }
+            }
+            ChipButton {
                 text: @tr("Load");
+                horizontal-stretch: 1;
                 enabled: !root.card.empty && !root.hardcore;
+                focused: root.focused && root.load-focused;
                 clicked => { root.load(root.card.slot); }
             }
         }
@@ -518,6 +526,7 @@ export component GameWindow inherits Window {
     in property <bool> slots-open;
     in property <[SlotCard]> slot-cards;
     in property <int> slots-focus;
+    in property <bool> slots-focus-load;
     callback open-slots();
     callback close-slots();
     callback save-slot(int);
@@ -720,7 +729,7 @@ export component GameWindow inherits Window {
                             horizontal-stretch: 1;
                             Text { text: @tr("Save states"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
                             Text {
-                                text: root.hardcore ? @tr("Hardcore mode: you can save, but not load.") : @tr("A loads, X saves, B closes.");
+                                text: root.hardcore ? @tr("Hardcore mode: you can save, but not load.") : @tr("Choose Save or Load on a slot.");
                                 font-size: Theme.font-small;
                                 color: Theme.text-muted;
                             }
@@ -729,13 +738,13 @@ export component GameWindow inherits Window {
                     }
                     HorizontalLayout {
                         spacing: 12px;
-                        SlotTile { card: root.slot-cards[0]; focused: root.slots-focus == 1; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
-                        SlotTile { card: root.slot-cards[1]; focused: root.slots-focus == 2; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[0]; focused: root.slots-focus == 1; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[1]; focused: root.slots-focus == 2; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
                     }
                     HorizontalLayout {
                         spacing: 12px;
-                        SlotTile { card: root.slot-cards[2]; focused: root.slots-focus == 3; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
-                        SlotTile { card: root.slot-cards[3]; focused: root.slots-focus == 4; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[2]; focused: root.slots-focus == 3; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[3]; focused: root.slots-focus == 4; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
                     }
                 }
             }

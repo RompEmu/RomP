@@ -229,6 +229,7 @@ struct Game {
     save_dir: PathBuf,
     slots_open: Cell<bool>,
     slots_focus: Cell<u8>,
+    slots_load: Cell<bool>,
     thumbnail_wanted: Cell<Option<u8>>,
     thumbnail_frame: Cell<u32>,
     recent_thumbnail: RefCell<Option<image::RgbaImage>>,
@@ -275,17 +276,29 @@ fn menu_move(focus: i32, button: u32, items: i32) -> Option<i32> {
     }
 }
 
-/// Moves around the 2×2 grid of save slots, stopping at its edges.
-fn slot_grid_move(slot: u8, button: u32) -> u8 {
+/// Moves between the Save and Load buttons of the 2×2 grid of save slots, stopping at its
+/// edges and skipping Load on slots that can't be loaded.
+fn slot_button_move(
+    slot: u8,
+    load: bool,
+    button: u32,
+    loadable: impl Fn(u8) -> bool,
+) -> (u8, bool) {
     let (row, col) = ((slot.max(1) - 1) / 2, (slot.max(1) - 1) % 2);
-    let (row, col) = match button {
-        input::LEFT => (row, col.saturating_sub(1)),
-        input::RIGHT => (row, (col + 1).min(1)),
-        input::UP => (row.saturating_sub(1), col),
-        input::DOWN => ((row + 1).min(1), col),
-        _ => (row, col),
+    let at = |row: u8, column: u8| (row * 2 + column / 2 + 1, column % 2 == 1);
+    let usable = |(slot, load): (u8, bool)| !load || loadable(slot);
+    let column = col * 2 + u8::from(load);
+    let found = match button {
+        input::LEFT => (0..column).rev().map(|c| at(row, c)).find(|f| usable(*f)),
+        input::RIGHT => (column + 1..4).map(|c| at(row, c)).find(|f| usable(*f)),
+        input::UP | input::DOWN => {
+            let row = if button == input::UP { 0 } else { 1 };
+            let (slot, load) = at(row, column);
+            Some((slot, load && loadable(slot)))
+        }
+        _ => None,
     };
-    row * 2 + col + 1
+    found.unwrap_or((slot, load))
 }
 
 /// Command-W on a Mac, which Slint reports as Control there, and Control-W elsewhere.
@@ -624,6 +637,7 @@ impl Game {
     fn open_slots(&self) {
         self.slots_open.set(true);
         self.slots_focus.set(self.controls.borrow().slot());
+        self.slots_load.set(false);
         self.show_slots();
         self.primary().set_slots_open(true);
     }
@@ -633,10 +647,19 @@ impl Game {
         self.primary().set_slots_open(false);
     }
 
-    fn focus_slot(&self, slot: u8) {
+    fn focus_slot(&self, slot: u8, load: bool) {
         self.slots_focus.set(slot.clamp(1, input::SLOTS));
-        self.primary()
-            .set_slots_focus(i32::from(self.slots_focus.get()));
+        self.slots_load.set(load);
+        let ui = self.primary();
+        ui.set_slots_focus(i32::from(self.slots_focus.get()));
+        ui.set_slots_focus_load(load);
+    }
+
+    fn loadable(&self, slot: u8) -> bool {
+        !self.hardcore.get()
+            && crate::slots::read(&self.save_dir, [slot])
+                .first()
+                .is_some_and(|info| !info.is_empty())
     }
 
     fn show_slots(&self) {
@@ -649,6 +672,7 @@ impl Game {
         let ui = self.primary();
         ui.set_slot_cards(ModelRc::new(VecModel::from(cards)));
         ui.set_slots_focus(i32::from(self.slots_focus.get()));
+        ui.set_slots_focus_load(self.slots_load.get());
     }
 
     /// Saves to `slot`, which becomes the current one, with a picture of the game as it is now.
@@ -1011,13 +1035,15 @@ impl Game {
             return;
         }
         if self.slots_open.get() {
-            let focus = self.slots_focus.get();
+            let (focus, load) = (self.slots_focus.get(), self.slots_load.get());
             match button {
                 input::LEFT | input::RIGHT | input::UP | input::DOWN => {
-                    self.focus_slot(slot_grid_move(focus, button));
+                    let (slot, load) =
+                        slot_button_move(focus, load, button, |slot| self.loadable(slot));
+                    self.focus_slot(slot, load);
                 }
-                input::A | input::START => self.load_from(focus),
-                input::X => self.save_slot(focus),
+                input::A | input::START if load => self.load_from(focus),
+                input::A | input::START => self.save_slot(focus),
                 input::B => self.close_slots(),
                 _ => {}
             }
@@ -1321,6 +1347,7 @@ pub fn launch(
             save_dir: opts.save_dir.clone(),
             slots_open: Cell::new(false),
             slots_focus: Cell::new(1),
+            slots_load: Cell::new(false),
             thumbnail_wanted: Cell::new(None),
             thumbnail_frame: Cell::new(0),
             recent_thumbnail: RefCell::new(None),
@@ -1954,15 +1981,37 @@ mod tests {
     }
 
     #[test]
-    fn slot_focus_moves_around_the_grid_and_stops_at_its_edges() {
-        assert_eq!(slot_grid_move(1, input::RIGHT), 2);
-        assert_eq!(slot_grid_move(2, input::RIGHT), 2);
-        assert_eq!(slot_grid_move(2, input::DOWN), 4);
-        assert_eq!(slot_grid_move(4, input::LEFT), 3);
-        assert_eq!(slot_grid_move(3, input::LEFT), 3);
-        assert_eq!(slot_grid_move(3, input::UP), 1);
-        assert_eq!(slot_grid_move(2, input::UP), 2);
-        assert_eq!(slot_grid_move(4, input::DOWN), 4);
+    fn slot_focus_moves_between_save_and_load_and_stops_at_the_edges() {
+        let all = |_: u8| true;
+        assert_eq!(slot_button_move(1, false, input::RIGHT, all), (1, true));
+        assert_eq!(slot_button_move(1, true, input::RIGHT, all), (2, false));
+        assert_eq!(slot_button_move(2, true, input::RIGHT, all), (2, true));
+        assert_eq!(slot_button_move(2, false, input::LEFT, all), (1, true));
+        assert_eq!(slot_button_move(1, false, input::LEFT, all), (1, false));
+        assert_eq!(slot_button_move(2, true, input::DOWN, all), (4, true));
+        assert_eq!(slot_button_move(4, false, input::DOWN, all), (4, false));
+        assert_eq!(slot_button_move(3, true, input::UP, all), (1, true));
+        assert_eq!(slot_button_move(1, true, input::UP, all), (1, true));
+    }
+
+    #[test]
+    fn slot_focus_skips_load_where_nothing_can_be_loaded() {
+        let only_two = |slot: u8| slot == 2;
+        assert_eq!(
+            slot_button_move(1, false, input::RIGHT, only_two),
+            (2, false)
+        );
+        assert_eq!(
+            slot_button_move(2, false, input::RIGHT, only_two),
+            (2, true)
+        );
+        assert_eq!(
+            slot_button_move(2, false, input::LEFT, only_two),
+            (1, false)
+        );
+        assert_eq!(slot_button_move(2, true, input::DOWN, only_two), (4, false));
+        let none = |_: u8| false;
+        assert_eq!(slot_button_move(2, false, input::RIGHT, none), (2, false));
     }
 
     #[test]
