@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Fixed
+
+- Controllers that macOS looks after itself, such as the Switch Pro Controller over Bluetooth, now work in games and menus instead of showing as connected but doing nothing. RomP reads controllers through SDL now, which also knows more controllers on every system. Button layouts and player choices carry over, except for Xbox controllers on Windows, which need their player chosen again once.
+
 ## [0.10.0] - 2026-10-02
 
 ### Added

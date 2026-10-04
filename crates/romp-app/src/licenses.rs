@@ -35,6 +35,11 @@ const RCHEEVOS: Notice = notice(
     "MIT",
     "https://github.com/RetroAchievements/rcheevos/blob/develop/LICENSE",
 );
+const SDL: Notice = notice(
+    "SDL",
+    "zlib",
+    "https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt",
+);
 const MOLTENVK: Notice = notice(
     "MoltenVK",
     "Apache-2.0",
@@ -248,6 +253,7 @@ pub fn notices() -> Vec<Notice> {
         notices.push(MOLTENVK);
     }
     notices.push(RCHEEVOS);
+    notices.push(SDL);
     notices.push(SLINT);
     notices
 }
@@ -268,6 +274,7 @@ mod tests {
         let names: Vec<_> = notices().iter().map(|n| n.name).collect();
         assert_eq!(names[0], "RomP");
         assert!(names.contains(&"Slint"));
+        assert!(names.contains(&"SDL"));
         assert!(notices().iter().all(|n| n.url.starts_with("https://")));
     }
 }
