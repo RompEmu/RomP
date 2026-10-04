@@ -4,6 +4,14 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- Settings → General has a Language choice: System, English, Français, Español, Deutsch and العربية. Translations are on their way from Crowdin; until a language has some, it shows English, and RomP only follows the system's language once it has. In Arabic the interface reads right to left.
+
+### Changed
+
+- Text uses the Inter font, the same on every system, and IBM Plex Sans Arabic in Arabic.
+
 ## [0.11.1] - 2026-10-04
 
 ### Fixed
