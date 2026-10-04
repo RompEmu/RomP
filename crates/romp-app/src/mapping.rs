@@ -24,24 +24,24 @@ pub const BUTTONS: [(u32, &str); 16] = [
     (RIGHT, "Right"),
 ];
 
-const PHYSICAL: [(Button, &str); 17] = [
-    (Button::South, "Bottom face button"),
-    (Button::East, "Right face button"),
-    (Button::West, "Left face button"),
-    (Button::North, "Top face button"),
-    (Button::LeftTrigger, "Left bumper"),
-    (Button::RightTrigger, "Right bumper"),
-    (Button::LeftTrigger2, "Left trigger"),
-    (Button::RightTrigger2, "Right trigger"),
-    (Button::LeftThumb, "Left stick press"),
-    (Button::RightThumb, "Right stick press"),
-    (Button::Start, "Start"),
-    (Button::Select, "Select"),
-    (Button::DPadUp, "D-pad up"),
-    (Button::DPadDown, "D-pad down"),
-    (Button::DPadLeft, "D-pad left"),
-    (Button::DPadRight, "D-pad right"),
-    (Button::Mode, "Guide"),
+const PHYSICAL: [Button; 17] = [
+    Button::South,
+    Button::East,
+    Button::West,
+    Button::North,
+    Button::LeftTrigger,
+    Button::RightTrigger,
+    Button::LeftTrigger2,
+    Button::RightTrigger2,
+    Button::LeftThumb,
+    Button::RightThumb,
+    Button::Start,
+    Button::Select,
+    Button::DPadUp,
+    Button::DPadDown,
+    Button::DPadLeft,
+    Button::DPadRight,
+    Button::Mode,
 ];
 
 pub fn name(button: u32) -> &'static str {
@@ -56,23 +56,12 @@ fn physical_name(button: Button) -> String {
 }
 
 fn physical_named(name: &str) -> Option<Button> {
-    PHYSICAL
-        .iter()
-        .map(|(b, _)| *b)
-        .find(|b| physical_name(*b) == name)
-}
-
-pub fn physical_label(button: Button) -> &'static str {
-    PHYSICAL
-        .iter()
-        .find(|(b, _)| *b == button)
-        .map_or("Unknown", |(_, label)| label)
+    PHYSICAL.into_iter().find(|b| physical_name(*b) == name)
 }
 
 pub fn default_physical(button: u32) -> Button {
     PHYSICAL
-        .iter()
-        .map(|(b, _)| *b)
+        .into_iter()
         .find(|b| crate::input::retro_button(*b) == Some(button))
         .unwrap_or(Button::Unknown)
 }
@@ -658,7 +647,6 @@ mod tests {
         assert_eq!(key_label(&key(Key::F12)), "F12");
         assert_eq!(key_label(&key(Key::Escape)), "Esc");
         assert_eq!(key_label(""), "Not set");
-        assert_eq!(physical_label(Button::South), "Bottom face button");
         assert_eq!(name(L2), "L2");
     }
 }

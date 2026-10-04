@@ -26,6 +26,7 @@ mod looks;
 mod mapping;
 mod mouse;
 mod navigation;
+mod pad_labels;
 mod paths;
 mod play;
 mod play_stats;

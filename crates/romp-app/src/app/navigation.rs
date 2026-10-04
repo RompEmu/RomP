@@ -1,9 +1,11 @@
 use super::{with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
+use crate::gamepads::Button;
 use crate::input::{A, B, DOWN, L, LEFT, R, RIGHT, START, UP, X};
-use crate::mapping::{stick_to_dpad, BUTTONS};
+use crate::mapping::BUTTONS;
 use crate::navigation::{move_in_grid, Dir};
+use crate::pad_labels::{badge, Badge, Family};
 use slint::ComponentHandle;
-use slint::{Model, Timer, TimerMode};
+use slint::{Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::{Duration, Instant};
 
 const SETTINGS_SECTIONS: i32 = 4;
@@ -23,17 +25,15 @@ impl Controller {
             self.nav_repeat.borrow_mut().update(0, DPAD, Instant::now());
             return;
         }
-        let (inputs, connected) = {
+        let (inputs, family) = {
             let mut gamepads = self.gamepads.borrow_mut();
             gamepads.poll();
             let inputs = gamepads.states(&self.mappings.borrow(), false);
-            let connected = !inputs.is_empty();
-            (inputs, connected)
+            let family = (!inputs.is_empty()).then(|| gamepads.family_in_use().unwrap_or_default());
+            (inputs, family)
         };
-        self.update_pad_hints(connected);
-        let buttons = inputs
-            .iter()
-            .fold(0u16, |b, p| b | stick_to_dpad(p.state).buttons);
+        self.update_pad_hints(family);
+        let buttons = inputs.iter().fold(0u16, |b, p| b | p.menu.buttons);
         let pressed = self
             .nav_repeat
             .borrow_mut()
@@ -45,23 +45,28 @@ impl Controller {
         }
     }
 
-    fn update_pad_hints(&self, connected: bool) {
+    fn update_pad_hints(&self, family: Option<Family>) {
         let Some(ui) = self.ui() else { return };
-        let hints = if !connected || ui.get_dialog_open() || ui.get_remap_open() {
-            ""
-        } else {
-            match ui.get_screen() {
-                SCREEN_LIBRARY => {
-                    "D-pad  Move    A  Open    LB / RB  Change list    Start  Settings"
-                }
-                SCREEN_GAME => "A  Play or download    X  Favorite    B  Back",
-                SCREEN_SETTINGS => "LB / RB  Change section    B  Back",
-                _ => "",
+        let hints = match family {
+            Some(family) if !ui.get_dialog_open() && !ui.get_remap_open() => {
+                hints(ui.get_screen(), family)
             }
+            _ => Vec::new(),
         };
-        if ui.get_pad_hints() != hints {
-            ui.set_pad_hints(hints.into());
+        if *self.pad_hints.borrow() == hints {
+            return;
         }
+        let rows: Vec<crate::PadHint> = hints
+            .iter()
+            .map(|(keys, action)| crate::PadHint {
+                keys: ModelRc::new(VecModel::from(
+                    keys.iter().map(|k| pad_key(*k)).collect::<Vec<_>>(),
+                )),
+                action: (*action).into(),
+            })
+            .collect();
+        ui.set_pad_hints(ModelRc::new(VecModel::from(rows)));
+        *self.pad_hints.borrow_mut() = hints;
     }
 
     pub(super) fn mouse_back(&self, window: slint::winit_030::winit::window::WindowId) {
@@ -185,5 +190,68 @@ impl Controller {
         self.nav_card.set(None);
         self.select(keys[next].clone());
         self.focus_card(Some(0));
+    }
+}
+
+/// The buttons in a hint and what pressing them does.
+pub(super) type Hint = (Vec<Badge>, &'static str);
+
+fn hints(screen: i32, family: Family) -> Vec<Hint> {
+    let key = |button: Button| badge(family, button);
+    let shoulders = vec![key(Button::LeftTrigger), key(Button::RightTrigger)];
+    match screen {
+        SCREEN_LIBRARY => vec![
+            (vec![Badge::Text("D-pad")], "Move"),
+            (vec![key(family.confirm())], "Open"),
+            (shoulders, "Change list"),
+            (vec![key(Button::Start)], "Settings"),
+        ],
+        SCREEN_GAME => vec![
+            (vec![key(family.confirm())], "Play or download"),
+            (vec![key(Button::North)], "Favorite"),
+            (vec![key(family.back())], "Back"),
+        ],
+        SCREEN_SETTINGS => vec![
+            (shoulders, "Change section"),
+            (vec![key(family.back())], "Back"),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn pad_key(badge: Badge) -> crate::PadKey {
+    match badge {
+        Badge::Text(text) => crate::PadKey {
+            text: text.into(),
+            shape: "".into(),
+        },
+        Badge::Shape(shape) => crate::PadKey {
+            text: "".into(),
+            shape: shape.key().into(),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pad_labels::Shape;
+
+    #[test]
+    fn hints_name_the_buttons_of_the_controller_in_use() {
+        let library = hints(SCREEN_LIBRARY, Family::Xbox);
+        assert_eq!(library[1], (vec![Badge::Text("A")], "Open"));
+        assert_eq!(
+            library[2],
+            (vec![Badge::Text("LB"), Badge::Text("RB")], "Change list")
+        );
+        let game = hints(SCREEN_GAME, Family::Ps5);
+        assert_eq!(
+            game[0],
+            (vec![Badge::Shape(Shape::Cross)], "Play or download")
+        );
+        assert_eq!(game[2], (vec![Badge::Shape(Shape::Circle)], "Back"));
+        let settings = hints(SCREEN_SETTINGS, Family::Nintendo);
+        assert_eq!(settings[1], (vec![Badge::Text("B")], "Back"));
     }
 }

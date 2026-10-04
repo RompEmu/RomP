@@ -304,6 +304,13 @@ impl Controller {
             ui.set_remap_hint(notice.unwrap_or(SHORTCUTS_HINT).into());
             return;
         }
+        let family = self
+            .gamepads
+            .borrow()
+            .connected()
+            .into_iter()
+            .find(|pad| pad.key == device)
+            .map_or_else(Default::default, |pad| pad.family);
         let rows: Vec<RemapRow> = BUTTONS
             .iter()
             .map(|(button, name)| RemapRow {
@@ -311,7 +318,8 @@ impl Controller {
                 binding: if keyboard {
                     mapping::key_label(&mappings.key_for(*button))
                 } else {
-                    mapping::physical_label(
+                    crate::pad_labels::name(
+                        family,
                         mappings.pad_button(mapping::model_of(&device), *button),
                     )
                     .to_string()

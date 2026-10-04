@@ -14,11 +14,39 @@ export struct ConsoleGroup { name: string, options: [ConsoleOption] }
 export struct LookSetting { label: string, choices: [string], current: int }
 export struct LookConsole { slug: string, name: string, settings: [LookSetting] }
 export struct KeyHint { keys: string, action: string }
+export struct PadKey { text: string, shape: string }
+export struct PadHint { keys: [PadKey], action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
 export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool, aspect: float }
 export struct GameRow { cards: [GameCard], shelf: float }
 export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
+
+/// A controller button in a hint: its printed label, or a PlayStation symbol.
+component PadBadge inherits Rectangle {
+    in property <PadKey> key;
+    height: 20px;
+    width: max(20px, badge-text.preferred-width + 10px);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.border-subtle;
+    background: Theme.hover;
+    badge-text := Text {
+        text: root.key.shape == "" ? root.key.text : "";
+        font-size: Theme.font-caption;
+        font-weight: 600;
+        color: Theme.text-secondary;
+    }
+    if root.key.shape != "": Image {
+        width: 12px;
+        height: 12px;
+        colorize: Theme.text-secondary;
+        source: root.key.shape == "cross" ? @image-url("icons/pad-cross.svg")
+            : root.key.shape == "circle" ? @image-url("icons/pad-circle.svg")
+            : root.key.shape == "square" ? @image-url("icons/pad-square.svg")
+            : @image-url("icons/pad-triangle.svg");
+    }
+}
 
 export global Brand {
     out property <string> name: "RomP";
@@ -2152,7 +2180,7 @@ export component AppWindow inherits Window {
     in-out property <length> grid-scroll <=> library.scroll-y;
     in property <float> grid-focus-top;
     in property <float> grid-focus-bottom;
-    in property <string> pad-hints;
+    in property <[PadHint]> pad-hints;
     in property <bool> dialog-open;
     in property <string> dialog-title;
     in property <string> dialog-message;
@@ -2384,16 +2412,28 @@ export component AppWindow inherits Window {
         reset => { root.remap-reset(); }
         close => { root.remap-close(); }
     }
-    if root.pad-hints != "" && !root.dialog-open: Rectangle {
+    if root.pad-hints.length > 0 && !root.dialog-open: Rectangle {
         x: parent.width - self.width - 16px;
         y: parent.height - self.height - 12px;
-        width: hints-text.preferred-width + 24px;
+        width: hints-row.preferred-width;
         height: 30px;
         border-radius: 15px;
         background: Theme.scrim-strong;
         border-width: 1px;
         border-color: Theme.border-subtle;
-        hints-text := Text { text: root.pad-hints; color: Theme.text-secondary; font-size: Theme.font-small; }
+        hints-row := HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 12px;
+            spacing: 14px;
+            for hint in root.pad-hints: HorizontalLayout {
+                spacing: 5px;
+                for key in hint.keys: VerticalLayout {
+                    alignment: center;
+                    PadBadge { key: key; }
+                }
+                Text { text: hint.action; color: Theme.text-secondary; font-size: Theme.font-small; vertical-alignment: center; }
+            }
+        }
     }
     if root.about-open: AboutDialog {
         version: root.app-version;

@@ -1095,7 +1095,7 @@ impl Game {
             self.toggle_menu();
         }
         self.menu_combo.set(combo);
-        let buttons = inputs.iter().fold(0u16, |b, p| b | p.state.buttons);
+        let buttons = inputs.iter().fold(0u16, |b, p| b | p.menu.buttons);
         let pressed = buttons & !self.pad_buttons.replace(buttons);
         if self.menu_open.get() {
             for (button, _) in crate::mapping::BUTTONS {
@@ -1410,6 +1410,12 @@ pub fn launch(
                 known.retain(|k| keys.contains(k));
                 first_poll = false;
                 let inputs = pads.states(&mappings.borrow(), nintendo);
+                let guide = pads.family_in_use().map_or("Guide", |family| {
+                    crate::pad_labels::name(family, crate::gamepads::Button::Mode)
+                });
+                if ui.get_guide_name() != guide {
+                    ui.set_guide_name(guide.into());
+                }
                 let states = inputs
                     .iter()
                     .map(|p| (players.player(&p.key), p.state))

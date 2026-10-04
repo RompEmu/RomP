@@ -1,8 +1,9 @@
 use crate::input;
 use crate::mapping::{self, Mappings, BUTTONS};
+use crate::pad_labels::Family;
 use romp_proto::msg::PadState;
 use sdl3::event::Event;
-use sdl3::gamepad::{Axis, Button as SdlButton};
+use sdl3::gamepad::{Axis, Button as SdlButton, GamepadType};
 use sdl3::joystick::JoystickId;
 use sdl3::{EventPump, GamepadSubsystem};
 use std::collections::HashMap;
@@ -14,6 +15,7 @@ const ACTIVE_FOR: Duration = Duration::from_millis(600);
 pub struct PadInfo {
     pub key: String,
     pub name: String,
+    pub family: Family,
 }
 
 pub fn pad_keys(uuids: &[[u8; 16]], names: &[&str]) -> Vec<String> {
@@ -38,6 +40,8 @@ pub fn pad_keys(uuids: &[[u8; 16]], names: &[&str]) -> Vec<String> {
 pub struct PadInput {
     pub key: String,
     pub state: PadState,
+    /// What menus see, which remaps and the Nintendo swap leave alone.
+    pub menu: PadState,
     pub guide: bool,
 }
 
@@ -97,6 +101,36 @@ fn from_sdl(button: SdlButton) -> Option<Button> {
         .map(|(ours, _)| *ours)
 }
 
+fn family(kind: GamepadType) -> Family {
+    match kind {
+        GamepadType::Xbox360 => Family::Xbox360,
+        GamepadType::XboxOne => Family::Xbox,
+        GamepadType::PS3 => Family::Ps3,
+        GamepadType::PS4 => Family::Ps4,
+        GamepadType::PS5 => Family::Ps5,
+        GamepadType::NintendoSwitchPro
+        | GamepadType::NintendoSwitchJoyconLeft
+        | GamepadType::NintendoSwitchJoyconRight
+        | GamepadType::NintendoSwitchJoyconPair => Family::Nintendo,
+        GamepadType::Unknown | GamepadType::Standard => Family::Other,
+    }
+}
+
+/// The default layout, with A on the button the family confirms with.
+fn menu_buttons(pressed: impl Fn(Button) -> bool, family: Family) -> u16 {
+    BUTTONS
+        .iter()
+        .map(|(button, _)| *button)
+        .filter(|button| {
+            pressed(match *button {
+                input::A => family.confirm(),
+                input::B => family.back(),
+                other => mapping::default_physical(other),
+            })
+        })
+        .fold(0, |buttons, button| buttons | 1 << button)
+}
+
 fn axis_value(raw: i16) -> f32 {
     f32::from(raw) / 32767.0
 }
@@ -119,6 +153,7 @@ struct Pad {
     id: JoystickId,
     uuid: [u8; 16],
     name: String,
+    family: Family,
     triggers: [bool; 2],
     gamepad: sdl3::gamepad::Gamepad,
 }
@@ -198,11 +233,13 @@ impl Sdl {
             gamepad.product_version().unwrap_or(0),
         );
         let name = gamepad.name().unwrap_or_else(|| "Controller".into());
+        let family = family(gamepad.r#type());
         tracing::info!("controller connected: {name}");
         self.pads.push(Pad {
             id,
             uuid,
             name,
+            family,
             triggers: [false; 2],
             gamepad,
         });
@@ -286,6 +323,7 @@ impl Gamepads {
             .map(|(key, pad)| PadInfo {
                 key,
                 name: pad.name.clone(),
+                family: pad.family,
             })
             .collect()
     }
@@ -296,6 +334,10 @@ impl Gamepads {
             .zip(self.pads())
             .map(|(key, pad)| {
                 let mut state = pad_state(pad, mappings, mapping::model_of(&key));
+                let menu = mapping::stick_to_dpad(PadState {
+                    buttons: menu_buttons(|b| pad.pressed(b), pad.family),
+                    axes: state.axes,
+                });
                 if mappings.stick_dpad {
                     state = mapping::stick_to_dpad(state);
                 }
@@ -305,10 +347,19 @@ impl Gamepads {
                 PadInput {
                     key,
                     state,
+                    menu,
                     guide: pad.pressed(Button::Mode),
                 }
             })
             .collect()
+    }
+
+    /// The family of the controller used last, for naming its buttons.
+    pub fn family_in_use(&self) -> Option<Family> {
+        self.pads()
+            .iter()
+            .max_by_key(|p| self.active.get(&p.id))
+            .map(|p| p.family)
     }
 
     pub fn take_presses(&mut self) -> Vec<(String, Button)> {
@@ -385,6 +436,18 @@ mod tests {
             [bus, 0, 0, 0, 0x7e, 0x05, 0, 0, 0x09, 0x20, 0, 0, version, 0, 0, 0]
         );
         assert_eq!(model_uuid(0x03, 0, 0, 0), [0; 16]);
+    }
+
+    #[test]
+    fn menus_take_the_bottom_button_as_a_except_on_nintendo_pads() {
+        let bottom = |b: Button| b == Button::South;
+        assert_eq!(menu_buttons(bottom, Family::Xbox), 1 << input::A);
+        assert_eq!(menu_buttons(bottom, Family::Nintendo), 1 << input::B);
+        let top_and_up = |b: Button| matches!(b, Button::North | Button::DPadUp);
+        assert_eq!(
+            menu_buttons(top_and_up, Family::Ps4),
+            1 << input::X | 1 << input::UP
+        );
     }
 
     #[test]

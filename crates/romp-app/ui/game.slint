@@ -215,6 +215,7 @@ component GameMenu inherits Rectangle {
     in property <string> save-key: "F5";
     in property <string> load-key: "F7";
     in property <string> slot-key: "F6";
+    in property <string> guide-name: "Guide";
     in property <string> fullscreen-key: "F11";
     in property <string> screenshot-key: "F12";
     callback cycle-port(int, int);
@@ -400,7 +401,7 @@ component GameMenu inherits Rectangle {
                 clicked => { root.quit(); }
             }
             Text {
-                text: root.keyboard ? @tr("{} next slot  ·  Guide opens this menu", root.slot-key) : @tr("Keyboard goes to the game  ·  Guide opens this menu");
+                text: root.keyboard ? @tr("{} next slot  ·  {} opens this menu", root.slot-key, root.guide-name) : @tr("Keyboard goes to the game  ·  {} opens this menu", root.guide-name);
                 color: Theme.text-subtle;
                 font-size: Theme.font-caption;
                 horizontal-alignment: center;
@@ -498,6 +499,7 @@ export component GameWindow inherits Window {
     in property <string> save-key: "F5";
     in property <string> load-key: "F7";
     in property <string> slot-key: "F6";
+    in property <string> guide-name: "Guide";
     in property <string> fullscreen-key: "F11";
     in property <string> screenshot-key: "F12";
     in property <[PortRow]> ports;
@@ -679,6 +681,7 @@ export component GameWindow inherits Window {
             save-key: root.save-key;
             load-key: root.load-key;
             slot-key: root.slot-key;
+            guide-name: root.guide-name;
             fullscreen-key: root.fullscreen-key;
             screenshot-key: root.screenshot-key;
             has-achievements: root.has-achievements;
