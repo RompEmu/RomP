@@ -488,6 +488,7 @@ component LookPanel inherits Rectangle {
 }
 
 export component GameWindow inherits Window {
+    default-font-family: Locale.font;
     in property <string> game-title: "RomP";
     in property <string> game-name;
     in property <bool> has-menu;

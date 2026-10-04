@@ -172,7 +172,7 @@ component SetupTitle inherits VerticalLayout {
         color: Theme.text-secondary;
         horizontal-alignment: center;
         wrap: word-wrap;
-        line-height-factor: 1.35;
+        line-height-factor: 1.15;
     }
 }
 
@@ -195,7 +195,7 @@ component Feature inherits HorizontalLayout {
         spacing: 2px;
         horizontal-stretch: 1;
         Text { horizontal-alignment: Locale.start; text: root.title; font-size: Theme.font-body-large; font-weight: 600; color: Theme.text-strong; }
-        Text { horizontal-alignment: Locale.start; text: root.text; font-size: Theme.font-body; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.3; }
+        Text { horizontal-alignment: Locale.start; text: root.text; font-size: Theme.font-body; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.1; }
     }
     if Locale.rtl: VerticalLayout {
         alignment: start;
@@ -1153,9 +1153,9 @@ component GamePage inherits FocusScope {
                             spacing: 11px;
                             for fact in root.facts: HorizontalLayout {
                                 spacing: 18px;
-                                if !Locale.rtl: Text { horizontal-alignment: Locale.start; text: fact.label; width: 150px; font-size: Theme.font-body-large; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.3; }
-                                Text { horizontal-alignment: Locale.start; text: fact.value; font-size: Theme.font-body-large; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; line-height-factor: 1.3; }
-                                if Locale.rtl: Text { horizontal-alignment: Locale.start; text: fact.label; width: 150px; font-size: Theme.font-body-large; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.3; }
+                                if !Locale.rtl: Text { horizontal-alignment: Locale.start; text: fact.label; width: 150px; font-size: Theme.font-body-large; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.1; }
+                                Text { horizontal-alignment: Locale.start; text: fact.value; font-size: Theme.font-body-large; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; line-height-factor: 1.1; }
+                                if Locale.rtl: Text { horizontal-alignment: Locale.start; text: fact.label; width: 150px; font-size: Theme.font-body-large; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.1; }
                             }
                         }
                     }
@@ -1181,7 +1181,7 @@ component GamePage inherits FocusScope {
                             max-width: 720px;
                             wrap: word-wrap;
                             font-size: Theme.font-subtitle;
-                            line-height-factor: 1.55;
+                            line-height-factor: 1.3;
                             color: Theme.text-secondary;
                         }
                     }
@@ -2008,7 +2008,7 @@ component AboutDialog inherits Rectangle {
                     color: Theme.text-secondary;
                     horizontal-alignment: center;
                     wrap: word-wrap;
-                    line-height-factor: 1.4;
+                    line-height-factor: 1.2;
                 }
                 Rectangle { height: 20px; }
                 Row {
@@ -2034,7 +2034,7 @@ component AboutDialog inherits Rectangle {
                     font-size: Theme.font-small;
                     color: Theme.text-muted;
                     wrap: word-wrap;
-                    line-height-factor: 1.3;
+                    line-height-factor: 1.1;
                 }
                 ScrollView {
                     vertical-stretch: 1;
@@ -2078,6 +2078,7 @@ component AboutDialog inherits Rectangle {
 }
 
 export component AppWindow inherits Window {
+    default-font-family: Locale.font;
     title: Brand.name;
     icon: @image-url("icons/app-icon.png");
     background: Theme.background;

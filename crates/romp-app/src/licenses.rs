@@ -40,6 +40,16 @@ const SDL: Notice = notice(
     "zlib",
     "https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt",
 );
+const INTER: Notice = notice(
+    "Inter",
+    "SIL Open Font License 1.1",
+    "https://github.com/rsms/inter/blob/master/LICENSE.txt",
+);
+const PLEX_ARABIC: Notice = notice(
+    "IBM Plex Sans Arabic",
+    "SIL Open Font License 1.1",
+    "https://github.com/IBM/plex/blob/master/LICENSE.txt",
+);
 const MOLTENVK: Notice = notice(
     "MoltenVK",
     "Apache-2.0",
@@ -252,6 +262,8 @@ pub fn notices() -> Vec<Notice> {
     if cfg!(target_os = "macos") {
         notices.push(MOLTENVK);
     }
+    notices.push(PLEX_ARABIC);
+    notices.push(INTER);
     notices.push(RCHEEVOS);
     notices.push(SDL);
     notices.push(SLINT);
@@ -275,6 +287,8 @@ mod tests {
         assert_eq!(names[0], "RomP");
         assert!(names.contains(&"Slint"));
         assert!(names.contains(&"SDL"));
+        assert!(names.contains(&"Inter"));
+        assert!(names.contains(&"IBM Plex Sans Arabic"));
         assert!(notices().iter().all(|n| n.url.starts_with("https://")));
     }
 }
