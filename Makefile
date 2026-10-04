@@ -17,7 +17,7 @@ MACOS_ZIP := $(DIST)/RomP-$(RELEASE)-macos-$(ARCH).zip
 LINUX_NAME := RomP-$(RELEASE)-linux-$(ARCH)
 LINUX_TAR := $(DIST)/$(LINUX_NAME).tar.gz
 APPDIR := $(DIST)/RomP.AppDir
-APPIMAGE := $(DIST)/$(LINUX_NAME).AppImage
+APPIMAGE := $(DIST)/RomP-$(RELEASE)-$(ARCH).AppImage
 APPIMAGETOOL ?= appimagetool
 WINDOWS_NAME := RomP-$(RELEASE)-windows-$(ARCH)
 WINDOWS_ZIP := $(DIST)/$(WINDOWS_NAME).zip
@@ -46,7 +46,7 @@ ditto -c -k --keepParent $(APP) $(MACOS_ZIP)
 $(call checksum,$(MACOS_ZIP))
 endef
 
-.PHONY: build app appimage dist dist-macos dist-linux dist-windows clean
+.PHONY: build app appimage glibc-check dist dist-macos dist-linux dist-windows clean
 .PHONY: check fmt-check clippy test deny machete typos workflows release-notes update-rcheevos
 
 build:
@@ -97,6 +97,16 @@ appimage: build
 	ARCH=$(ARCH) $(APPIMAGETOOL) --no-appstream $(APPDIR) $(APPIMAGE)
 	rm -rf $(APPDIR)
 	$(call checksum,$(APPIMAGE))
+
+# The oldest supported Ubuntu LTS has this one; a newer requirement wouldn't start there.
+GLIBC_MAX := 2.35
+
+glibc-check:
+	@for bin in $(BIN)/romp $(BIN)/romp-runner; do \
+		need=$$(objdump -T $$bin | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -n 1); \
+		echo "$$bin needs glibc $$need"; \
+		[ "$$(printf '%s\n' $$need $(GLIBC_MAX) | sort -V | tail -n 1)" = "$(GLIBC_MAX)" ] || { echo "that's newer than $(GLIBC_MAX)"; exit 1; }; \
+	done
 
 dist-linux: appimage
 	rm -rf $(DIST)/$(LINUX_NAME) $(LINUX_TAR)

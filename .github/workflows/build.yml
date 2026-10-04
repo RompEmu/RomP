@@ -29,8 +29,9 @@ jobs:
         include:
           - name: macOS
             os: macos-latest
+          # The oldest supported Ubuntu LTS, so the Linux build runs on it and everything newer.
           - name: Linux
-            os: ubuntu-latest
+            os: ubuntu-22.04
           - name: Windows
             os: windows-latest
     defaults:
@@ -63,6 +64,9 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           APPIMAGE_EXTRACT_AND_RUN: 1
+      - name: Check the glibc the Linux build needs
+        if: runner.os == 'Linux'
+        run: make glibc-check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: romp-${{ runner.os }}

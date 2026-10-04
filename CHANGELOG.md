@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Fixed
+
+- The Linux AppImage and tarball start on Linux systems from Ubuntu 22.04 and Debian 12 on, instead of needing the newest ones. The AppImage is now named without "linux", as AppImages are.
+
 ## [0.11.0] - 2026-10-04
 
 ### Added
