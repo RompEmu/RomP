@@ -181,6 +181,7 @@ pub fn run() -> anyhow::Result<()> {
         prefs.language,
         crate::i18n::system().as_deref(),
     ));
+    ui.global::<crate::Locale>().set_rtl(crate::i18n::rtl());
     let placement = Placement::from_json(shared.store.lock().unwrap().get(WINDOW_KEY).as_deref());
     let last_view = LastView::from_json(shared.store.lock().unwrap().get(VIEW_KEY).as_deref());
     let mappings = crate::mapping::Mappings::from_json(
@@ -865,7 +866,7 @@ impl Controller {
         }
     }
 
-    fn rebuild_rows(&self) {
+    pub(super) fn rebuild_rows(&self) {
         let focus = self.nav_card.get();
         let mut lib = self.library.borrow_mut();
         lib.covers.clear();
@@ -876,7 +877,7 @@ impl Controller {
             .map(|r| {
                 let range = row_range(r, total, lib.columns);
                 let start = range.start;
-                let cards: Vec<GameCard> = lib.games[range]
+                let mut cards: Vec<GameCard> = lib.games[range]
                     .iter()
                     .enumerate()
                     .map(|(j, g)| GameCard {
@@ -891,6 +892,9 @@ impl Controller {
                         aspect: crate::details::box_aspect(&g.platform_slug),
                     })
                     .collect();
+                if crate::i18n::rtl() {
+                    cards.reverse();
+                }
                 GameRow {
                     shelf: crate::details::shelf_height(cards.iter().map(|c| c.aspect)),
                     cards: ModelRc::new(VecModel::from(cards)),
@@ -961,7 +965,10 @@ impl Controller {
         let lib = self.library.borrow();
         let index = lib.games.iter().position(|g| g.id == id)?;
         let columns = lib.columns.max(1);
-        Some((index / columns, index % columns))
+        let row = index / columns;
+        let row_len = crate::grid::row_range(row, lib.games.len(), columns).len();
+        let column = crate::grid::shown_column(index % columns, row_len, crate::i18n::rtl());
+        Some((row, column))
     }
 
     fn set_card_cover(&self, id: i64, image: Option<Image>) {

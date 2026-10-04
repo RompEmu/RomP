@@ -14,6 +14,15 @@ pub fn row_range(row: usize, items: usize, columns: usize) -> Range<usize> {
     start..(start + columns).min(items)
 }
 
+/// Where a card sits in its row on screen: rows run right to left when the layout is mirrored.
+pub fn shown_column(column: usize, row_len: usize, rtl: bool) -> usize {
+    if rtl {
+        row_len.saturating_sub(1 + column)
+    } else {
+        column
+    }
+}
+
 pub const ROW_CHROME: f32 = 76.0;
 
 pub fn row_span(shelves: &[f32], row: usize) -> Option<(f32, f32)> {
@@ -162,5 +171,13 @@ mod tests {
         assert!(!r.contains(1));
         assert!(r.contains(2) && r.contains(3) && r.contains(4));
         assert_eq!(r.rows().count(), 3);
+    }
+
+    #[test]
+    fn rows_run_right_to_left_when_the_layout_is_mirrored() {
+        assert_eq!(shown_column(0, 4, false), 0);
+        assert_eq!(shown_column(0, 4, true), 3);
+        assert_eq!(shown_column(3, 4, true), 0);
+        assert_eq!(shown_column(1, 2, true), 0);
     }
 }

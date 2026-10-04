@@ -49,3 +49,17 @@ export global Theme {
     out property <length> radius: 8px;
     out property <length> radius-large: 12px;
 }
+
+/// Which way the interface reads; right to left in Arabic.
+export global Locale {
+    in property <bool> rtl;
+    out property <TextHorizontalAlignment> start: rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+    out property <TextHorizontalAlignment> end: rtl ? TextHorizontalAlignment.left : TextHorizontalAlignment.right;
+}
+
+/// A row whose items run right to left in Arabic, otherwise like a HorizontalLayout.
+export component Row inherits FlexboxLayout {
+    flex-direction: Locale.rtl ? FlexboxLayoutDirection.row-reverse : FlexboxLayoutDirection.row;
+    flex-wrap: FlexboxLayoutWrap.no-wrap;
+    alignment: LayoutAlignment.stretch;
+}

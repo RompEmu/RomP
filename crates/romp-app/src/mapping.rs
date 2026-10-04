@@ -444,6 +444,15 @@ pub fn model_of(pad_key: &str) -> &str {
     pad_key.rsplit_once('#').map_or(pad_key, |(model, _)| model)
 }
 
+/// A menu button as the person sees it: left and right trade places when the layout is mirrored.
+pub fn as_seen(button: u32, rtl: bool) -> u32 {
+    match button {
+        LEFT if rtl => RIGHT,
+        RIGHT if rtl => LEFT,
+        other => other,
+    }
+}
+
 fn swap_bits(buttons: u16, a: u32, b: u32) -> u16 {
     let bit_a = buttons >> a & 1;
     let bit_b = buttons >> b & 1;
@@ -704,5 +713,13 @@ mod tests {
         assert_eq!(key_label(&key(Key::Escape)), "Esc");
         assert_eq!(key_label(""), "Not set");
         assert_eq!(name(L2), "L2");
+    }
+
+    #[test]
+    fn menus_take_left_and_right_as_seen_when_reading_right_to_left() {
+        assert_eq!(as_seen(LEFT, true), RIGHT);
+        assert_eq!(as_seen(RIGHT, true), LEFT);
+        assert_eq!(as_seen(UP, true), UP);
+        assert_eq!(as_seen(LEFT, false), LEFT);
     }
 }

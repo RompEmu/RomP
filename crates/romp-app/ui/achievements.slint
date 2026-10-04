@@ -1,4 +1,4 @@
-import { Theme } from "theme.slint";
+import { Locale, Row, Theme } from "theme.slint";
 
 export struct AchievementRow { title: string, detail: string, badge: image, has-badge: bool, unlocked: bool, note: string }
 
@@ -8,7 +8,7 @@ export component AchievementItem inherits HorizontalLayout {
     spacing: 12px;
     padding-top: 6px;
     padding-bottom: 6px;
-    Rectangle {
+    if !Locale.rtl: Rectangle {
         width: 40px;
         height: 40px;
         border-radius: 6px;
@@ -25,24 +25,38 @@ export component AchievementItem inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         spacing: 2px;
-        Text {
+        Text { horizontal-alignment: Locale.start;
             text: root.entry.title;
             font-weight: 600;
             font-size: Theme.font-body;
             color: root.entry.unlocked ? Theme.text-strong : Theme.text-secondary;
             wrap: word-wrap;
         }
-        Text {
+        Text { horizontal-alignment: Locale.start;
             text: root.entry.detail;
             font-size: Theme.font-small;
             color: Theme.text-muted;
             wrap: word-wrap;
         }
-        if root.entry.note != "": Text {
+        if root.entry.note != "": Text { horizontal-alignment: Locale.start;
             text: root.entry.note;
             font-size: Theme.font-small;
             font-weight: 600;
             color: Theme.accent;
+        }
+    }
+    if Locale.rtl: Rectangle {
+        width: 40px;
+        height: 40px;
+        border-radius: 6px;
+        background: Theme.surface-muted;
+        clip: true;
+        if root.entry.has-badge: Image {
+            width: parent.width;
+            height: parent.height;
+            source: root.entry.badge;
+            image-fit: cover;
+            opacity: root.entry.unlocked ? 1.0 : 0.55;
         }
     }
 }

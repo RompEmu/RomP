@@ -1,4 +1,4 @@
-import { Theme } from "theme.slint";
+import { Locale, Row, Theme } from "theme.slint";
 import { AchievementItem, AchievementRow } from "achievements.slint";
 import { SlotCard, SlotPicture } from "slots.slint";
 import { Button, ScrollView } from "std-widgets.slint";
@@ -14,7 +14,7 @@ component KeyCap inherits Rectangle {
     border-width: 1px;
     border-color: root.on-accent ? Theme.accent-foreground.with-alpha(0.35) : Theme.border-subtle;
     background: root.on-accent ? Theme.accent-foreground.with-alpha(0.08) : Theme.hover;
-    cap-text := Text {
+    cap-text := Text { horizontal-alignment: Locale.start;
         text: root.text;
         font-size: Theme.font-caption;
         font-weight: 600;
@@ -39,7 +39,8 @@ component MenuRow inherits Rectangle {
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
     touch := TouchArea { clicked => { root.clicked(); } }
-    HorizontalLayout {
+    Row {
+        cross-axis-alignment: CrossAxisAlignment.center;
         padding-left: 12px;
         padding-right: 10px;
         spacing: 12px;
@@ -47,10 +48,9 @@ component MenuRow inherits Rectangle {
             source: root.icon;
             width: 18px;
             height: 18px;
-            y: (parent.height - self.height) / 2;
             colorize: root.danger ? Theme.danger : root.focused || touch.has-hover ? Theme.text-strong : Theme.text-secondary;
         }
-        Text {
+        Text { horizontal-alignment: Locale.start;
             text: root.text;
             vertical-alignment: center;
             horizontal-stretch: 1;
@@ -76,7 +76,7 @@ component StepButton inherits Rectangle {
     accessible-role: button;
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
-    Text { text: root.text; font-size: Theme.font-title; color: touch.has-hover ? Theme.text-strong : Theme.text-secondary; }
+    Text { horizontal-alignment: Locale.start; text: root.text; font-size: Theme.font-title; color: touch.has-hover ? Theme.text-strong : Theme.text-secondary; }
     touch := TouchArea { clicked => { root.clicked(); } }
 }
 
@@ -94,7 +94,7 @@ component AchievementToast inherits Rectangle {
     toast-row := HorizontalLayout {
         padding: 10px;
         spacing: 12px;
-        if root.has-badge: Image {
+        if root.has-badge && !Locale.rtl: Image {
             source: root.badge;
             width: 48px;
             height: 48px;
@@ -103,8 +103,14 @@ component AchievementToast inherits Rectangle {
         VerticalLayout {
             alignment: center;
             spacing: 2px;
-            Text { text: root.title; color: Theme.text-strong; font-size: Theme.font-body-large; font-weight: 700; wrap: word-wrap; }
-            Text { text: root.detail; color: Theme.text-secondary; font-size: Theme.font-body; wrap: word-wrap; }
+            Text { horizontal-alignment: Locale.start; text: root.title; color: Theme.text-strong; font-size: Theme.font-body-large; font-weight: 700; wrap: word-wrap; }
+            Text { horizontal-alignment: Locale.start; text: root.detail; color: Theme.text-secondary; font-size: Theme.font-body; wrap: word-wrap; }
+        }
+        if root.has-badge && Locale.rtl: Image {
+            source: root.badge;
+            width: 48px;
+            height: 48px;
+            image-fit: contain;
         }
     }
 }
@@ -119,11 +125,11 @@ component Stepper inherits Rectangle {
     background: root.focused ? Theme.accent-soft : transparent;
     border-width: root.focused ? 1px : 0px;
     border-color: Theme.accent;
-    HorizontalLayout {
+    Row {
         padding-left: 12px;
         padding-right: 5px;
         spacing: 4px;
-        Text {
+        Text { horizontal-alignment: Locale.start;
             text: root.label;
             vertical-alignment: center;
             horizontal-stretch: 1;
@@ -133,7 +139,7 @@ component Stepper inherits Rectangle {
         }
         VerticalLayout {
             alignment: center;
-            StepButton { text: "‹"; clicked => { root.step(-1); } }
+            StepButton { text: Locale.rtl ? "›" : "‹"; clicked => { root.step(-1); } }
         }
         Text {
             text: root.value;
@@ -147,7 +153,7 @@ component Stepper inherits Rectangle {
         }
         VerticalLayout {
             alignment: center;
-            StepButton { text: "›"; clicked => { root.step(1); } }
+            StepButton { text: Locale.rtl ? "‹" : "›"; clicked => { root.step(1); } }
         }
     }
 }
@@ -172,7 +178,8 @@ component ChipButton inherits Rectangle {
     accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.clicked(); } }
     touch := TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
-    chip := HorizontalLayout {
+    chip := Row {
+        cross-axis-alignment: CrossAxisAlignment.center;
         padding-left: 10px;
         padding-right: 10px;
         spacing: 6px;
@@ -181,10 +188,9 @@ component ChipButton inherits Rectangle {
             source: root.icon;
             width: 16px;
             height: 16px;
-            y: (parent.height - self.height) / 2;
             colorize: root.focused || touch.has-hover ? Theme.text-strong : Theme.text-secondary;
         }
-        Text {
+        Text { horizontal-alignment: Locale.start;
             text: root.text;
             vertical-alignment: center;
             font-size: Theme.font-body;
@@ -254,12 +260,12 @@ component GameMenu inherits Rectangle {
             padding: 12px;
             padding-top: 14px;
             spacing: 2px;
-            HorizontalLayout {
+            Row {
                 padding-left: 6px;
                 padding-right: 6px;
                 padding-bottom: 8px;
                 spacing: 8px;
-                Text {
+                Text { horizontal-alignment: Locale.start;
                     text: root.name;
                     color: Theme.text-strong;
                     font-size: Theme.font-subtitle;
@@ -277,14 +283,14 @@ component GameMenu inherits Rectangle {
                         background: root.paused ? Theme.warning : Theme.success;
                     }
                 }
-                Text {
+                Text { horizontal-alignment: Locale.start;
                     text: root.paused ? @tr("Paused") : @tr("Running");
                     color: Theme.text-muted;
                     font-size: Theme.font-small;
                     vertical-alignment: center;
                 }
             }
-            HorizontalLayout {
+            Row {
                 spacing: 6px;
                 Rectangle {
                     height: 34px;
@@ -297,7 +303,8 @@ component GameMenu inherits Rectangle {
                     accessible-label: @tr("Resume");
                     accessible-action-default => { root.resume(); }
                     resume-touch := TouchArea { clicked => { root.resume(); } }
-                    HorizontalLayout {
+                    Row {
+                        cross-axis-alignment: CrossAxisAlignment.center;
                         padding-left: 12px;
                         padding-right: 10px;
                         spacing: 12px;
@@ -305,10 +312,9 @@ component GameMenu inherits Rectangle {
                             source: @image-url("icons/play.svg");
                             width: 18px;
                             height: 18px;
-                            y: (parent.height - self.height) / 2;
                             colorize: Theme.accent-foreground;
                         }
-                        Text {
+                        Text { horizontal-alignment: Locale.start;
                             text: @tr("Resume");
                             vertical-alignment: center;
                             horizontal-stretch: 1;
@@ -348,7 +354,7 @@ component GameMenu inherits Rectangle {
                 focused: root.focused-item == 4;
                 clicked => { root.open-look(); }
             }
-            if root.hardcore: Text {
+            if root.hardcore: Text { horizontal-alignment: Locale.start;
                 text: @tr("Hardcore mode: loading states is off.");
                 color: Theme.text-subtle;
                 font-size: Theme.font-caption;
@@ -431,13 +437,13 @@ component SlotTile inherits Rectangle {
         padding: 8px;
         spacing: 6px;
         SlotPicture { card: root.card; height: self.width * 0.62; }
-        HorizontalLayout {
+        Row {
             spacing: 6px;
-            Text { text: root.card.label; font-weight: 700; font-size: Theme.font-body; color: Theme.text-strong; }
-            if root.card.current: Text { text: @tr("current"); font-size: Theme.font-caption; color: Theme.accent; vertical-alignment: center; }
+            Text { horizontal-alignment: Locale.start; text: root.card.label; font-weight: 700; font-size: Theme.font-body; color: Theme.text-strong; }
+            if root.card.current: Text { horizontal-alignment: Locale.start; text: @tr("current"); font-size: Theme.font-caption; color: Theme.accent; vertical-alignment: center; }
         }
-        Text { text: root.card.detail; font-size: Theme.font-small; color: Theme.text-muted; }
-        HorizontalLayout {
+        Text { horizontal-alignment: Locale.start; text: root.card.detail; font-size: Theme.font-small; color: Theme.text-muted; }
+        Row {
             spacing: 6px;
             ChipButton {
                 text: @tr("Save");
@@ -471,10 +477,10 @@ component LookPanel inherits Rectangle {
     look-box := VerticalLayout {
         padding: 12px;
         spacing: 4px;
-        HorizontalLayout {
+        Row {
             padding-left: 6px;
             padding-bottom: 4px;
-            Text { text: @tr("Look"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; vertical-alignment: center; horizontal-stretch: 1; }
+            Text { horizontal-alignment: Locale.start; text: @tr("Look"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; vertical-alignment: center; horizontal-stretch: 1; }
             Button { text: @tr("Done"); clicked => { root.close(); } }
         }
         for row[i] in root.rows: Stepper { label: row.label; value: row.value; focused: root.focused-row == i; step(d) => { root.step(i, d); } }
@@ -651,7 +657,7 @@ export component GameWindow inherits Window {
             border-color: Theme.border-subtle;
             drop-shadow-blur: 16px;
             drop-shadow-color: Theme.shadow;
-            paused-row := HorizontalLayout {
+            paused-row := Row {
                 padding-left: 14px;
                 padding-right: 8px;
                 spacing: 8px;
@@ -659,7 +665,7 @@ export component GameWindow inherits Window {
                     alignment: center;
                     Rectangle { width: 7px; height: 7px; border-radius: 3.5px; background: Theme.warning; }
                 }
-                Text { text: @tr("Paused"); vertical-alignment: center; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
+                Text { horizontal-alignment: Locale.start; text: @tr("Paused"); vertical-alignment: center; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
                 VerticalLayout {
                     alignment: center;
                     KeyCap { text: root.menu-key == "Esc" ? root.pause-key : root.menu-key; }
@@ -726,12 +732,12 @@ export component GameWindow inherits Window {
                 slots-box := VerticalLayout {
                     padding: 16px;
                     spacing: 12px;
-                    HorizontalLayout {
+                    Row {
                         spacing: 8px;
                         VerticalLayout {
                             horizontal-stretch: 1;
-                            Text { text: @tr("Save states"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
-                            Text {
+                            Text { horizontal-alignment: Locale.start; text: @tr("Save states"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
+                            Text { horizontal-alignment: Locale.start;
                                 text: root.hardcore ? @tr("Hardcore mode: you can save, but not load.") : @tr("Choose Save or Load on a slot.");
                                 font-size: Theme.font-small;
                                 color: Theme.text-muted;
@@ -741,13 +747,13 @@ export component GameWindow inherits Window {
                     }
                     HorizontalLayout {
                         spacing: 12px;
-                        SlotTile { card: root.slot-cards[0]; focused: root.slots-focus == 1; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
-                        SlotTile { card: root.slot-cards[1]; focused: root.slots-focus == 2; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[Locale.rtl ? 1 : 0]; focused: root.slots-focus == (Locale.rtl ? 2 : 1); load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[Locale.rtl ? 0 : 1]; focused: root.slots-focus == (Locale.rtl ? 1 : 2); load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
                     }
                     HorizontalLayout {
                         spacing: 12px;
-                        SlotTile { card: root.slot-cards[2]; focused: root.slots-focus == 3; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
-                        SlotTile { card: root.slot-cards[3]; focused: root.slots-focus == 4; load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[Locale.rtl ? 3 : 2]; focused: root.slots-focus == (Locale.rtl ? 4 : 3); load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
+                        SlotTile { card: root.slot-cards[Locale.rtl ? 2 : 3]; focused: root.slots-focus == (Locale.rtl ? 3 : 4); load-focused: root.slots-focus-load; hardcore: root.hardcore; save(slot) => { root.save-slot(slot); } load(slot) => { root.load-slot(slot); } }
                     }
                 }
             }
@@ -767,12 +773,12 @@ export component GameWindow inherits Window {
                 VerticalLayout {
                     padding: 16px;
                     spacing: 10px;
-                    HorizontalLayout {
+                    Row {
                         spacing: 8px;
                         VerticalLayout {
                             horizontal-stretch: 1;
-                            Text { text: @tr("Achievements"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
-                            Text { text: root.achievements-label; font-size: Theme.font-small; color: Theme.text-muted; }
+                            Text { horizontal-alignment: Locale.start; text: @tr("Achievements"); font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
+                            Text { horizontal-alignment: Locale.start; text: root.achievements-label; font-size: Theme.font-small; color: Theme.text-muted; }
                         }
                         Button { text: @tr("Close"); clicked => { root.close-achievements(); } }
                     }
@@ -812,7 +818,7 @@ export component GameWindow inherits Window {
                         padding-bottom: 5px;
                         spacing: 6px;
                         Image { source: @image-url("icons/trophy.svg"); width: 14px; height: 14px; colorize: Theme.text-strong; y: (parent.height - self.height) / 2; }
-                        Text { text: root.chip-text; max-width: 300px; overflow: elide; color: Theme.text-strong; font-size: Theme.font-small; font-weight: 600; vertical-alignment: center; }
+                        Text { horizontal-alignment: Locale.start; text: root.chip-text; max-width: 300px; overflow: elide; color: Theme.text-strong; font-size: Theme.font-small; font-weight: 600; vertical-alignment: center; }
                     }
                 }
             }
@@ -820,30 +826,30 @@ export component GameWindow inherits Window {
                 height: progress-row.preferred-height;
                 background: Theme.scrim-strong;
                 border-radius: 8px;
-                progress-row := HorizontalLayout {
+                progress-row := Row {
                     padding: 8px;
                     spacing: 8px;
                     if root.has-progress-badge: Image { source: root.progress-badge; width: 32px; height: 32px; }
                     VerticalLayout {
                         alignment: center;
-                        Text { text: root.progress-title; color: Theme.text-strong; font-size: Theme.font-small; font-weight: 600; overflow: elide; }
-                        Text { text: root.progress-detail; color: Theme.text-secondary; font-size: Theme.font-small; }
+                        Text { horizontal-alignment: Locale.start; text: root.progress-title; color: Theme.text-strong; font-size: Theme.font-small; font-weight: 600; overflow: elide; }
+                        Text { horizontal-alignment: Locale.start; text: root.progress-detail; color: Theme.text-secondary; font-size: Theme.font-small; }
                     }
                 }
             }
-            if root.challenge-badges.length > 0: HorizontalLayout {
+            if root.challenge-badges.length > 0: Row {
                 alignment: achievement-column.left ? start : end;
                 spacing: 4px;
                 for badge in root.challenge-badges: Image { source: badge; width: 32px; height: 32px; }
             }
-            for tracker in root.trackers: HorizontalLayout {
+            for tracker in root.trackers: Row {
                 alignment: achievement-column.left ? start : end;
                 Rectangle {
                     width: tracker-text.preferred-width + 16px;
                     height: tracker-text.preferred-height + 8px;
                     background: Theme.scrim-strong;
                     border-radius: 6px;
-                    tracker-text := Text { text: tracker; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
+                    tracker-text := Text { horizontal-alignment: Locale.start; text: tracker; color: Theme.text-strong; font-size: Theme.font-body; font-weight: 600; }
                 }
             }
             if !achievement-column.top && root.toast-title != "": AchievementToast { title: root.toast-title; detail: root.toast-detail; badge: root.toast-badge; has-badge: root.toast-has-badge; }
@@ -856,7 +862,7 @@ export component GameWindow inherits Window {
             height: label.preferred-height + 16px;
             background: Theme.scrim-strong;
             border-radius: 6px;
-            label := Text {
+            label := Text { horizontal-alignment: Locale.start;
                 x: 8px;
                 width: parent.width - 16px;
                 text: root.status;

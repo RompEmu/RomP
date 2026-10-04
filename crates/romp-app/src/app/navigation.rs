@@ -87,6 +87,7 @@ impl Controller {
     }
 
     fn nav_button(&self, button: u32) {
+        let button = crate::mapping::as_seen(button, crate::i18n::rtl());
         let Some(ui) = self.ui() else { return };
         if ui.get_dialog_open() {
             if button == B {

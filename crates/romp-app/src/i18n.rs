@@ -4,10 +4,6 @@ pub struct Language {
     pub code: &'static str,
     /// The language's name in itself, as the Language setting lists it.
     pub name: &'static str,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "right-to-left layouts read this")
-    )]
     pub rtl: bool,
 }
 
@@ -61,8 +57,8 @@ const PSEUDO: Language = Language {
     rtl: false,
 };
 
-/// `None` is English.
-static CURRENT: RwLock<Option<&'static Language>> = RwLock::new(None);
+/// `None` is English; `Some` once a language has been applied.
+static CURRENT: RwLock<Option<Option<&'static Language>>> = RwLock::new(None);
 
 fn catalog(code: &str) -> Option<&'static [u8]> {
     Some(match code {
@@ -100,9 +96,19 @@ pub fn system() -> Option<String> {
         .or_else(sys_locale::get_locale)
 }
 
-#[expect(dead_code, reason = "right-to-left layouts read this")]
+/// Whether the interface reads right to left; debug builds force it with `ROMP_RTL`.
+pub fn rtl() -> bool {
+    current().is_some_and(|l| l.rtl)
+        || cfg!(debug_assertions) && std::env::var_os("ROMP_RTL").is_some()
+}
+
 pub fn current() -> Option<&'static Language> {
-    *CURRENT.read().unwrap()
+    CURRENT.read().unwrap().flatten()
+}
+
+/// Whether a language has been applied yet, which games started from the library rely on.
+pub fn applied() -> bool {
+    CURRENT.read().unwrap().is_some()
 }
 
 /// Switches what Slint and `tr!` show. Call it after the first window exists.
@@ -115,7 +121,7 @@ pub fn apply(language: Option<&'static Language>) {
     if let Err(e) = slint::select_bundled_translation(language.map_or("", |l| l.code)) {
         tracing::warn!("choosing the interface language: {e:?}");
     }
-    *CURRENT.write().unwrap() = language;
+    *CURRENT.write().unwrap() = Some(language);
 }
 
 /// Translates a string from a `const` list, which was marked with `gettext_noop!`.
@@ -241,5 +247,12 @@ msgstr "{1} : {0}"
             choose(0, Some("xx")).map(|l| l.code),
             cfg!(debug_assertions).then_some("xx")
         );
+    }
+
+    #[test]
+    fn arabic_turns_the_layout_around() {
+        assert!(choose(5, None).is_some_and(|l| l.rtl));
+        assert!(!choose(2, None).is_some_and(|l| l.rtl));
+        assert!(!choose(ENGLISH, Some("ar")).is_some_and(|l| l.rtl));
     }
 }

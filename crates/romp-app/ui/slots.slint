@@ -1,4 +1,4 @@
-import { Theme } from "theme.slint";
+import { Locale, Row, Theme } from "theme.slint";
 
 export struct SlotCard { slot: int, label: string, detail: string, thumbnail: image, has-thumbnail: bool, empty: bool, current: bool }
 
@@ -15,7 +15,7 @@ export component SlotPicture inherits Rectangle {
         image-fit: cover;
         image-rendering: pixelated;
     }
-    if !root.card.has-thumbnail: Text {
+    if !root.card.has-thumbnail: Text { horizontal-alignment: Locale.start;
         text: root.card.empty ? @tr("Empty") : @tr("No picture");
         color: Theme.text-subtle;
         font-size: Theme.font-small;

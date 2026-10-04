@@ -1024,6 +1024,7 @@ impl Game {
     }
 
     fn menu_button(&self, button: u32) {
+        let button = crate::mapping::as_seen(button, crate::i18n::rtl());
         if self.look_open.get() {
             let rows = self.look_rows().len() as i32;
             let focus = self.look_focus.get();
@@ -1245,7 +1246,9 @@ pub fn launch(
     let session = Session::start(&cfg)?;
 
     let ui = GameWindow::new()?;
-    crate::i18n::apply(crate::i18n::choose(0, crate::i18n::system().as_deref()));
+    if !crate::i18n::applied() {
+        crate::i18n::apply(crate::i18n::choose(0, crate::i18n::system().as_deref()));
+    }
     ui.set_game_title(format!("{} — RomP", opts.title).into());
     ui.set_game_name(opts.title.clone().into());
     ui.set_mouse_mode(opts.mouse);
@@ -1272,6 +1275,7 @@ pub fn launch(
         windows.push(window);
     }
     for window in &windows {
+        window.global::<crate::Locale>().set_rtl(crate::i18n::rtl());
         window.set_volume(i32::from(opts.prefs.volume));
     }
 

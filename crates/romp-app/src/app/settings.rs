@@ -123,6 +123,8 @@ impl Controller {
                 prefs.language,
                 crate::i18n::system().as_deref(),
             ));
+            ui.global::<crate::Locale>().set_rtl(crate::i18n::rtl());
+            self.rebuild_rows();
             self.open_settings();
         }
     }
