@@ -47,7 +47,7 @@ $(call checksum,$(MACOS_ZIP))
 endef
 
 .PHONY: build app appimage glibc-check dist dist-macos dist-linux dist-windows clean
-.PHONY: check fmt-check clippy test deny machete typos workflows release-notes update-rcheevos
+.PHONY: check fmt-check clippy test deny machete typos workflows translation-tools translations translations-check pseudo release-notes update-rcheevos
 
 build:
 	cargo build --release --locked
@@ -129,7 +129,29 @@ dist-windows: build
 clean:
 	rm -rf $(DIST)
 
-check: fmt-check clippy test deny machete typos workflows
+check: fmt-check clippy test deny machete typos workflows translations-check
+
+TRANSLATIONS := crates/romp-app/translations
+SLINT_TR := slint-tr-extractor@1.18.1
+XTR := xtr@0.1.11
+
+# Line numbers and dates would change the templates whenever code moves.
+define tidy_pot
+	sed -E -e '/^"POT-Creation-Date:/d' -e '/^#: /s/:[0-9]+( |$$)/\1/g' $(1) > $(1).tmp && mv $(1).tmp $(1)
+endef
+
+translation-tools:
+	@command -v slint-tr-extractor > /dev/null || cargo install --locked $(SLINT_TR)
+	@command -v xtr > /dev/null || cargo install --locked $(XTR)
+
+translations: translation-tools
+	slint-tr-extractor --no-default-translation-context -d romp-app -o $(TRANSLATIONS)/romp-app.pot crates/romp-app/ui/*.slint
+	$(call tidy_pot,$(TRANSLATIONS)/romp-app.pot)
+	xtr --add-location file -o $(TRANSLATIONS)/rust.pot crates/romp-app/src/main.rs
+	$(call tidy_pot,$(TRANSLATIONS)/rust.pot)
+
+translations-check: translations
+	git diff --exit-code -- $(TRANSLATIONS)/*.pot
 
 fmt-check:
 	cargo fmt --all --check

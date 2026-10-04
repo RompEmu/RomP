@@ -17,6 +17,7 @@ mod external;
 mod fetch;
 mod gamepads;
 mod grid;
+mod i18n;
 mod identity;
 mod input;
 mod keyboard;

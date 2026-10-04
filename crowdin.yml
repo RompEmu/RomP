@@ -1,0 +1,5 @@
+files:
+  - source: /crates/romp-app/translations/romp-app.pot
+    translation: /crates/romp-app/translations/%two_letters_code%/LC_MESSAGES/romp-app.po
+  - source: /crates/romp-app/translations/rust.pot
+    translation: /crates/romp-app/translations/%two_letters_code%/LC_MESSAGES/rust.po

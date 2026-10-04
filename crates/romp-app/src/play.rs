@@ -1242,6 +1242,7 @@ pub fn launch(
     let session = Session::start(&cfg)?;
 
     let ui = GameWindow::new()?;
+    crate::i18n::apply(crate::i18n::choose(0, crate::i18n::system().as_deref()));
     ui.set_game_title(format!("{} — RomP", opts.title).into());
     ui.set_game_name(opts.title.clone().into());
     ui.set_mouse_mode(opts.mouse);

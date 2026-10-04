@@ -5194,6 +5194,7 @@ dependencies = [
  "reqwest",
  "romp-cheevos",
  "romp-proto",
+ "rspolib",
  "rusqlite",
  "sdl3",
  "sdl3-sys",
@@ -5204,10 +5205,12 @@ dependencies = [
  "sha2",
  "slint",
  "slint-build",
+ "sys-locale",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "toml",
+ "tr",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -6653,6 +6656,15 @@ name = "tower-service"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
+
+[[package]]
+name = "tr"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79d30c7e79732253d80e9d619007002c8f3a362b0816e37340af648d4e2c6092"
+dependencies = [
+ "rspolib",
+]
 
 [[package]]
 name = "tracing"

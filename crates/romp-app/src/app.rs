@@ -171,6 +171,7 @@ pub fn run() -> anyhow::Result<()> {
             .build()?,
     };
     let ui = AppWindow::new()?;
+    crate::i18n::apply(crate::i18n::choose(0, crate::i18n::system().as_deref()));
     let players = crate::players::Assignments::from_json(
         shared.store.lock().unwrap().get("players").as_deref(),
     );
