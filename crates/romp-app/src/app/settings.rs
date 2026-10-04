@@ -59,7 +59,8 @@ impl Controller {
         ui.set_pref_popup_corners(names(&popups::CORNERS));
         ui.set_pref_achievement_popups(i32::from(prefs.achievement_popups));
         ui.set_pref_achievement_corner(i32::from(prefs.achievement_corner));
-        let languages: Vec<slint::SharedString> = std::iter::once(tr!("System"))
+        let languages: Vec<slint::SharedString> = [tr!("System"), "English".to_string()]
+            .into_iter()
             .chain(crate::i18n::LANGUAGES.iter().map(|l| l.name.to_string()))
             .map(slint::SharedString::from)
             .collect();

@@ -34,9 +34,15 @@ pub const LANGUAGES: [Language; 4] = [
     },
 ];
 
+/// The preference for English; 0 follows the system, and from 2 on are `LANGUAGES`.
+pub const ENGLISH: u8 = 1;
+
 /// The chosen language, or else the system's if RomP has it; `None` is English.
 pub fn choose(preference: u8, system: Option<&str>) -> Option<&'static Language> {
-    if let Some(chosen) = usize::from(preference).checked_sub(1) {
+    if preference == ENGLISH {
+        return None;
+    }
+    if let Some(chosen) = usize::from(preference).checked_sub(2) {
         return LANGUAGES.get(chosen);
     }
     let base = system?.split(['-', '_', '.']).next()?.to_ascii_lowercase();
@@ -132,8 +138,13 @@ mod tests {
 
     #[test]
     fn a_chosen_language_wins_over_the_system() {
-        assert_eq!(choose(3, Some("fr-FR")).map(|l| l.code), Some("de"));
-        assert_eq!(choose(1, None).map(|l| l.code), Some("fr"));
+        assert_eq!(choose(4, Some("fr-FR")).map(|l| l.code), Some("de"));
+        assert_eq!(choose(2, None).map(|l| l.code), Some("fr"));
+    }
+
+    #[test]
+    fn english_can_be_chosen_over_a_system_language_romp_has() {
+        assert_eq!(choose(ENGLISH, Some("fr-FR")).map(|l| l.code), None);
     }
 
     #[test]

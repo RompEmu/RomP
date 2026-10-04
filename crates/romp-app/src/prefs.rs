@@ -15,7 +15,7 @@ pub struct Preferences {
     pub achievement_popups: u8,
     /// Where it shows it: an index into `popups::CORNERS`.
     pub achievement_corner: u8,
-    /// 0 follows the system; otherwise an index into `i18n::LANGUAGES`, plus one.
+    /// 0 follows the system, then English, then `i18n::LANGUAGES` in order.
     pub language: u8,
 }
 
@@ -46,7 +46,7 @@ impl Preferences {
         let last = |list: &[&str]| (list.len() - 1) as u8;
         prefs.achievement_popups = prefs.achievement_popups.min(last(&popups::LEVELS));
         prefs.achievement_corner = prefs.achievement_corner.min(last(&popups::CORNERS));
-        if usize::from(prefs.language) > crate::i18n::LANGUAGES.len() {
+        if usize::from(prefs.language) > crate::i18n::LANGUAGES.len() + 1 {
             prefs.language = 0;
         }
         prefs
