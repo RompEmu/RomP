@@ -636,17 +636,19 @@ component Library inherits Rectangle {
                 padding-left: root.compact ? 8px : 12px;
                 padding-right: root.compact ? 8px : 12px;
                 spacing: 6px;
-                Row {
-                    padding-left: root.compact ? 0 : 4px;
+                HorizontalLayout {
+                    padding-left: Locale.rtl || root.compact ? 0 : 4px;
+                    padding-right: Locale.rtl && !root.compact ? 4px : 0;
                     padding-bottom: 10px;
                     spacing: 10px;
                     alignment: root.compact ? center : stretch;
-                    AppTile {
+                    if !Locale.rtl || root.compact: AppTile {
                         icon: root.app-icon;
                         has-icon: root.has-app-icon;
                         if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
                     }
                     if !root.compact: VerticalLayout {
+                        horizontal-stretch: 1;
                         alignment: center;
                         spacing: 2px;
                         Text { horizontal-alignment: Locale.start; text: Brand.name; font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
@@ -666,8 +668,14 @@ component Library inherits Rectangle {
                                 font-size: Theme.font-caption;
                                 color: Theme.text-muted;
                                 overflow: elide;
+                                horizontal-stretch: 1;
                             }
                         }
+                    }
+                    if Locale.rtl && !root.compact: AppTile {
+                        icon: root.app-icon;
+                        has-icon: root.has-app-icon;
+                        if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
                     }
                 }
                 ListView {
