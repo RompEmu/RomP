@@ -58,6 +58,25 @@ fn release_ms(detail: &GameDetail) -> Option<i64> {
     detail.meta.first_release_date
 }
 
+/// The platform categories RomM takes from IGDB.
+const PLATFORM_CATEGORIES: [&str; 6] = [
+    gettext_noop!("Console"),
+    gettext_noop!("Portable Console"),
+    gettext_noop!("Arcade"),
+    gettext_noop!("Computer"),
+    gettext_noop!("Operating System"),
+    gettext_noop!("Platform"),
+];
+
+/// A platform's category as shown, translated when it's one RomM is known to send.
+pub fn category(name: &str) -> String {
+    if PLATFORM_CATEGORIES.contains(&name) {
+        crate::i18n::translate(name)
+    } else {
+        name.to_string()
+    }
+}
+
 const DVD_CASE: f32 = 0.71;
 
 const BOX_SHAPES: [(&[&str], f32); 12] = [

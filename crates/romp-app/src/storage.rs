@@ -17,11 +17,14 @@ pub fn dir_size(path: &Path) -> u64 {
 
 pub fn categories() -> Vec<(&'static str, PathBuf)> {
     vec![
-        ("Games", paths::roms_dir()),
-        ("Saves and states", paths::data_dir().join("saves")),
-        ("BIOS files", paths::system_dir()),
-        ("Emulators", paths::cores_dir()),
-        ("Images", paths::covers_dir()),
+        (crate::gettext_noop!("Games"), paths::roms_dir()),
+        (
+            crate::gettext_noop!("Saves and states"),
+            paths::data_dir().join("saves"),
+        ),
+        (crate::gettext_noop!("BIOS files"), paths::system_dir()),
+        (crate::gettext_noop!("Emulators"), paths::cores_dir()),
+        (crate::gettext_noop!("Images"), paths::covers_dir()),
     ]
 }
 

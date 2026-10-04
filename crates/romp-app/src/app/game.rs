@@ -285,10 +285,7 @@ impl Controller {
         let busy = self.downloading_id() == Some(detail.id);
         ui.set_game_title(detail.title.clone().into());
         ui.set_game_category(
-            detail
-                .platform_category
-                .as_deref()
-                .unwrap_or_default()
+            details::category(detail.platform_category.as_deref().unwrap_or_default())
                 .to_uppercase()
                 .into(),
         );

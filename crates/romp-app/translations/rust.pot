@@ -434,7 +434,7 @@ msgstr ""
 msgid "For you"
 msgstr ""
 
-#: crates/romp-app/src/app/collections.rs
+#: crates/romp-app/src/app/collections.rs crates/romp-app/src/storage.rs
 msgid "Games"
 msgstr ""
 
@@ -658,6 +658,30 @@ msgstr ""
 
 #: crates/romp-app/src/details.rs
 msgid "{} players"
+msgstr ""
+
+#: crates/romp-app/src/details.rs
+msgid "Console"
+msgstr ""
+
+#: crates/romp-app/src/details.rs
+msgid "Portable Console"
+msgstr ""
+
+#: crates/romp-app/src/details.rs
+msgid "Arcade"
+msgstr ""
+
+#: crates/romp-app/src/details.rs
+msgid "Computer"
+msgstr ""
+
+#: crates/romp-app/src/details.rs
+msgid "Operating System"
+msgstr ""
+
+#: crates/romp-app/src/details.rs
+msgid "Platform"
 msgstr ""
 
 #: crates/romp-app/src/details.rs
@@ -1144,6 +1168,22 @@ msgstr ""
 
 #: crates/romp-app/src/rpcs3.rs
 msgid "The archive has no PS3 game folder or ISO in it"
+msgstr ""
+
+#: crates/romp-app/src/storage.rs
+msgid "Saves and states"
+msgstr ""
+
+#: crates/romp-app/src/storage.rs
+msgid "BIOS files"
+msgstr ""
+
+#: crates/romp-app/src/storage.rs
+msgid "Emulators"
+msgstr ""
+
+#: crates/romp-app/src/storage.rs
+msgid "Images"
 msgstr ""
 
 #: crates/romp-app/src/xemu.rs

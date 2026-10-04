@@ -815,7 +815,7 @@ component Library inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             ComboBox {
-                                width: 140px;
+                                width: 180px;
                                 model: [@tr("Name"), @tr("Date added"), @tr("Last played")];
                                 current-index <=> root.sort-index;
                                 enabled: root.selected-key != "recent";
@@ -1142,7 +1142,7 @@ component GamePage inherits FocusScope {
                             spacing: 11px;
                             for fact in root.facts: HorizontalLayout {
                                 spacing: 18px;
-                                Text { text: fact.label; width: 110px; font-size: Theme.font-body-large; color: Theme.text-muted; line-height-factor: 1.3; }
+                                Text { text: fact.label; width: 150px; font-size: Theme.font-body-large; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.3; }
                                 Text { text: fact.value; font-size: Theme.font-body-large; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; line-height-factor: 1.3; }
                             }
                         }

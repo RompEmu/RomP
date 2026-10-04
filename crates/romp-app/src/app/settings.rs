@@ -632,7 +632,7 @@ impl Controller {
             sizes
                 .into_iter()
                 .map(|(label, size)| StorageRow {
-                    label: label.into(),
+                    label: translate(label).into(),
                     size: human_size(size as i64).into(),
                 })
                 .collect::<Vec<_>>(),

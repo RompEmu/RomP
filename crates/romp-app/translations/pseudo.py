@@ -12,7 +12,7 @@ PLACEHOLDER = re.compile(r"(\{[^}]*\}|\\.)")
 def pseudo(text):
     parts = PLACEHOLDER.split(text)
     body = "".join(p if PLACEHOLDER.fullmatch(p) else p.translate(ACCENTS) for p in parts)
-    return "⟦" + body + "~" * max(1, len(text) * 2 // 5) + "⟧"
+    return "[" + body + "~" * max(1, len(text) * 2 // 5) + "]"
 
 
 def entries(lines):
