@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-04
+
 ### Added
 
 - Controller hints, the button list in Settings and the game menu use the controller's own names: A and B on Xbox controllers, the Cross and Circle symbols on PlayStation ones, A and B in their places on Nintendo ones.
@@ -188,7 +190,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/RompEmu/RomP/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/RompEmu/RomP/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/RompEmu/RomP/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/RompEmu/RomP/compare/v0.7.0...v0.8.0
