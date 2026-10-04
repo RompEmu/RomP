@@ -1,5 +1,6 @@
 use crate::gamepads::Button;
 use crate::input::{A, B, DOWN, L, L2, L3, LEFT, R, R2, R3, RIGHT, SELECT, START, UP, X, Y};
+use crate::pad_labels::{Family, CHOICES};
 use romp_proto::msg::PadState;
 use serde::{Deserialize, Serialize};
 use slint::platform::Key;
@@ -266,6 +267,7 @@ pub struct Mappings {
     keyboard: BTreeMap<String, String>,
     hotkeys: BTreeMap<String, String>,
     pads: BTreeMap<String, BTreeMap<String, String>>,
+    labels: BTreeMap<String, String>,
     pub nintendo_labels: bool,
     pub stick_dpad: bool,
 }
@@ -399,6 +401,29 @@ impl Mappings {
 
     pub fn reset_pad(&mut self, model: &str) {
         self.pads.remove(model);
+        self.labels.remove(model);
+    }
+
+    /// The family whose labels a model was given instead of its own.
+    pub fn labels(&self, model: &str) -> Option<Family> {
+        self.labels.get(model).and_then(|f| Family::saved_as(f))
+    }
+
+    pub fn set_labels(&mut self, model: &str, family: Option<Family>) {
+        let saved = family.and_then(|family| {
+            CHOICES
+                .iter()
+                .find(|(f, _, _)| *f == family)
+                .map(|(_, name, _)| *name)
+        });
+        match saved {
+            Some(name) => self.labels.insert(model.into(), name.into()),
+            None => self.labels.remove(model),
+        };
+    }
+
+    pub fn family(&self, model: &str, detected: Family) -> Family {
+        self.labels(model).unwrap_or(detected)
     }
 }
 
@@ -607,6 +632,24 @@ mod tests {
         assert_eq!(restored, m);
         m.reset_pad("xbox");
         assert_eq!(m.pad_button("xbox", A), Button::East);
+    }
+
+    #[test]
+    fn a_model_can_show_the_labels_of_another_family() {
+        use crate::pad_labels::Family;
+        let mut m = Mappings::default();
+        assert_eq!(m.family("sn30", Family::Ps4), Family::Ps4);
+        m.set_labels("sn30", Some(Family::Nintendo));
+        assert_eq!(m.labels("sn30"), Some(Family::Nintendo));
+        assert_eq!(m.family("sn30", Family::Ps4), Family::Nintendo);
+        assert_eq!(m.family("other", Family::Ps4), Family::Ps4);
+        let restored = Mappings::from_json(Some(&m.to_json()));
+        assert_eq!(restored, m);
+        m.set_labels("sn30", None);
+        assert_eq!(m.family("sn30", Family::Ps4), Family::Ps4);
+        m.set_labels("sn30", Some(Family::Xbox));
+        m.reset_pad("sn30");
+        assert_eq!(m.labels("sn30"), None);
     }
 
     #[test]

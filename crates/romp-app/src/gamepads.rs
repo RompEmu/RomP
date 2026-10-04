@@ -333,17 +333,14 @@ impl Gamepads {
             .into_iter()
             .zip(self.pads())
             .map(|(key, pad)| {
-                let mut state = pad_state(pad, mappings, mapping::model_of(&key));
+                let model = mapping::model_of(&key);
+                let family = mappings.family(model, pad.family);
+                let state = pad_state(pad, mappings, model);
                 let menu = mapping::stick_to_dpad(PadState {
-                    buttons: menu_buttons(|b| pad.pressed(b), pad.family),
+                    buttons: menu_buttons(|b| pad.pressed(b), family),
                     axes: state.axes,
                 });
-                if mappings.stick_dpad {
-                    state = mapping::stick_to_dpad(state);
-                }
-                if nintendo && mappings.nintendo_labels {
-                    state = mapping::swap_face(state);
-                }
+                let state = game_state(state, mappings, nintendo, family);
                 PadInput {
                     key,
                     state,
@@ -355,11 +352,12 @@ impl Gamepads {
     }
 
     /// The family of the controller used last, for naming its buttons.
-    pub fn family_in_use(&self) -> Option<Family> {
-        self.pads()
-            .iter()
-            .max_by_key(|p| self.active.get(&p.id))
-            .map(|p| p.family)
+    pub fn family_in_use(&self, mappings: &Mappings) -> Option<Family> {
+        self.connected()
+            .into_iter()
+            .zip(self.pads())
+            .max_by_key(|(_, pad)| self.active.get(&pad.id))
+            .map(|(info, pad)| mappings.family(mapping::model_of(&info.key), pad.family))
     }
 
     pub fn take_presses(&mut self) -> Vec<(String, Button)> {
@@ -383,6 +381,21 @@ impl Gamepads {
             })
             .map(|(key, _)| key)
             .collect()
+    }
+}
+
+/// Nintendo games can take A and B by label on other controllers; Nintendo pads already
+/// have them there.
+fn game_state(state: PadState, mappings: &Mappings, nintendo: bool, family: Family) -> PadState {
+    let state = if mappings.stick_dpad {
+        mapping::stick_to_dpad(state)
+    } else {
+        state
+    };
+    if nintendo && mappings.nintendo_labels && family != Family::Nintendo {
+        mapping::swap_face(state)
+    } else {
+        state
     }
 }
 
@@ -448,6 +461,23 @@ mod tests {
             menu_buttons(top_and_up, Family::Ps4),
             1 << input::X | 1 << input::UP
         );
+    }
+
+    #[test]
+    fn nintendo_label_matching_leaves_nintendo_pads_alone() {
+        let mut mappings = Mappings::default();
+        mappings.nintendo_labels = true;
+        let a = PadState {
+            buttons: 1 << input::A,
+            axes: [0; 6],
+        };
+        let b = PadState {
+            buttons: 1 << input::B,
+            axes: [0; 6],
+        };
+        assert_eq!(game_state(a, &mappings, true, Family::Xbox), b);
+        assert_eq!(game_state(a, &mappings, true, Family::Nintendo), a);
+        assert_eq!(game_state(a, &mappings, false, Family::Xbox), a);
     }
 
     #[test]

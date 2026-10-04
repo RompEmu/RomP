@@ -1735,6 +1735,10 @@ component RemapDialog inherits Rectangle {
     in property <string> hint;
     in property <bool> waiting;
     in property <[RemapRow]> rows;
+    in property <bool> labels-shown;
+    in property <[string]> label-choices;
+    in property <int> labels;
+    callback labels-chosen(int);
     callback pick(int);
     callback key(string, KeyboardModifiers);
     callback reset();
@@ -1769,6 +1773,16 @@ component RemapDialog inherits Rectangle {
                 spacing: 12px;
                 Text { text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
                 Text { text: root.hint; color: Theme.text-secondary; wrap: word-wrap; }
+                if root.labels-shown: SettingRow {
+                    label: @tr("Button labels");
+                    detail: @tr("For controllers that say they're another kind.");
+                    ComboBox {
+                        width: 190px;
+                        model: root.label-choices;
+                        current-index: root.labels;
+                        selected => { root.labels-chosen(self.current-index); }
+                    }
+                }
                 ScrollView {
                     vertical-stretch: 1;
                     min-height: 200px;
@@ -2108,6 +2122,10 @@ export component AppWindow inherits Window {
     in property <string> remap-hint;
     in property <bool> remap-waiting;
     in property <[RemapRow]> remap-rows;
+    in property <bool> remap-labels-shown;
+    in property <[string]> remap-label-choices;
+    in property <int> remap-labels;
+    callback remap-labels-chosen(int);
     callback customize(string);
     callback remap-pick(int);
     callback remap-key(string, KeyboardModifiers);
@@ -2407,6 +2425,10 @@ export component AppWindow inherits Window {
         hint: root.remap-hint;
         waiting: root.remap-waiting;
         rows: root.remap-rows;
+        labels-shown: root.remap-labels-shown;
+        label-choices: root.remap-label-choices;
+        labels: root.remap-labels;
+        labels-chosen(i) => { root.remap-labels-chosen(i); }
         pick(i) => { root.remap-pick(i); }
         key(text, modifiers) => { root.remap-key(text, modifiers); }
         reset => { root.remap-reset(); }

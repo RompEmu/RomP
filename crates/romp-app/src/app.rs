@@ -312,6 +312,7 @@ impl Controller {
             with_controller(|c| c.remap_key(text.to_string(), mods));
         });
         ui.on_remap_reset(|| with_controller(|c| c.remap_reset()));
+        ui.on_remap_labels_chosen(|i| with_controller(|c| c.remap_labels_chosen(i)));
         ui.on_remap_close(|| with_controller(|c| c.remap_close()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));
         ui.on_select(|key| {

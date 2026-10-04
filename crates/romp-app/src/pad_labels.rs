@@ -13,7 +13,31 @@ pub enum Family {
     Nintendo,
 }
 
+/// The families a controller's labels can be set to, with the names they're saved under.
+pub const CHOICES: [(Family, &str, &str); 3] = [
+    (Family::Xbox, "xbox", "Xbox"),
+    (Family::Ps4, "playstation", "PlayStation"),
+    (Family::Nintendo, "nintendo", "Nintendo"),
+];
+
 impl Family {
+    pub fn saved_as(saved: &str) -> Option<Self> {
+        CHOICES
+            .iter()
+            .find(|(_, name, _)| *name == saved)
+            .map(|(family, _, _)| *family)
+    }
+
+    /// The name of this family among the choices, so Xbox 360 reads as Xbox.
+    pub fn choice(self) -> Option<usize> {
+        let family = match self {
+            Self::Xbox360 => Self::Xbox,
+            Self::Ps3 | Self::Ps5 => Self::Ps4,
+            other => other,
+        };
+        CHOICES.iter().position(|(f, _, _)| *f == family)
+    }
+
     fn playstation(self) -> bool {
         matches!(self, Self::Ps3 | Self::Ps4 | Self::Ps5)
     }

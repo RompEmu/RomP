@@ -1410,7 +1410,7 @@ pub fn launch(
                 known.retain(|k| keys.contains(k));
                 first_poll = false;
                 let inputs = pads.states(&mappings.borrow(), nintendo);
-                let guide = pads.family_in_use().map_or("Guide", |family| {
+                let guide = pads.family_in_use(&mappings.borrow()).map_or("Guide", |family| {
                     crate::pad_labels::name(family, crate::gamepads::Button::Mode)
                 });
                 if ui.get_guide_name() != guide {

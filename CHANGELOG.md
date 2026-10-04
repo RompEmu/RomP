@@ -4,7 +4,19 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- Controller hints, the button list in Settings and the game menu use the controller's own names: A and B on Xbox controllers, the Cross and Circle symbols on PlayStation ones, A and B in their places on Nintendo ones.
+- Each controller can be given another kind's button labels, in its button list in Settings, for controllers that say they're another kind, such as 8BitDo's in their macOS mode.
+
+### Changed
+
+- Menus confirm with the bottom button and go back with the right one, as Steam does, except on Nintendo controllers, which keep A on the right. Menus also stay put when a game's buttons are remapped.
+
 ### Fixed
+
+- Save states can be saved and loaded with a controller in the game menu: the controller moves between each slot's Save and Load buttons and presses the chosen one.
+- Matching button labels on Nintendo systems no longer swaps A and B on Nintendo controllers, which already have them in place.
 
 - Controllers that macOS looks after itself, such as the Switch Pro Controller over Bluetooth, now work in games and menus instead of showing as connected but doing nothing. RomP reads controllers through SDL now, which also knows more controllers on every system. Button layouts and player choices carry over, except for Xbox controllers on Windows, which need their player chosen again once.
 

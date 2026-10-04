@@ -4,6 +4,7 @@ use crate::console_settings::{self, Chosen};
 use crate::cores::core_for_platform;
 use crate::details::human_size;
 use crate::mapping::{self, Assigned, BUTTONS, HOTKEYS};
+use crate::pad_labels::{Family, CHOICES};
 use crate::players::KEYBOARD;
 use crate::prefs::{Preferences, UI_SCALES};
 use crate::RemapRow;
@@ -302,15 +303,34 @@ impl Controller {
             ui.set_remap_rows(ModelRc::new(VecModel::from(rows)));
             ui.set_remap_waiting(waiting.is_some());
             ui.set_remap_hint(notice.unwrap_or(SHORTCUTS_HINT).into());
+            ui.set_remap_labels_shown(false);
             return;
         }
-        let family = self
+        let model = mapping::model_of(&device);
+        let detected = self
             .gamepads
             .borrow()
             .connected()
             .into_iter()
             .find(|pad| pad.key == device)
             .map_or_else(Default::default, |pad| pad.family);
+        let family = mappings.family(model, detected);
+        let automatic = match detected.choice() {
+            Some(i) => format!("Automatic ({})", CHOICES[i].2),
+            None => "Automatic".into(),
+        };
+        let choices: Vec<slint::SharedString> = std::iter::once(automatic)
+            .chain(CHOICES.iter().map(|(_, _, label)| (*label).to_string()))
+            .map(slint::SharedString::from)
+            .collect();
+        ui.set_remap_label_choices(ModelRc::new(VecModel::from(choices)));
+        ui.set_remap_labels(
+            mappings
+                .labels(model)
+                .and_then(Family::choice)
+                .map_or(0, |i| i as i32 + 1),
+        );
+        ui.set_remap_labels_shown(!keyboard);
         let rows: Vec<RemapRow> = BUTTONS
             .iter()
             .map(|(button, name)| RemapRow {
@@ -318,11 +338,7 @@ impl Controller {
                 binding: if keyboard {
                     mapping::key_label(&mappings.key_for(*button))
                 } else {
-                    crate::pad_labels::name(
-                        family,
-                        mappings.pad_button(mapping::model_of(&device), *button),
-                    )
-                    .to_string()
+                    crate::pad_labels::name(family, mappings.pad_button(model, *button)).to_string()
                 }
                 .into(),
                 waiting: waiting == Some(*button),
@@ -437,6 +453,21 @@ impl Controller {
         self.remap_waiting.set(None);
         self.save_mappings();
         self.show_key_hints();
+        self.show_remap(None);
+    }
+
+    pub(super) fn remap_labels_chosen(&self, index: i32) {
+        let Some(device) = self.remap_device.borrow().clone() else {
+            return;
+        };
+        let family = usize::try_from(index - 1)
+            .ok()
+            .and_then(|i| CHOICES.get(i))
+            .map(|(family, _, _)| *family);
+        self.mappings
+            .borrow_mut()
+            .set_labels(mapping::model_of(&device), family);
+        self.save_mappings();
         self.show_remap(None);
     }
 
