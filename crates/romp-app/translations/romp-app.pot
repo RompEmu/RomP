@@ -343,6 +343,14 @@ msgid "Makes text and controls in this window larger."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Language"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Some text changes once you leave this screen."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Your RomM server and this device's access to it."
 msgstr ""
 

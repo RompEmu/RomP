@@ -59,6 +59,12 @@ impl Controller {
         ui.set_pref_popup_corners(names(&popups::CORNERS));
         ui.set_pref_achievement_popups(i32::from(prefs.achievement_popups));
         ui.set_pref_achievement_corner(i32::from(prefs.achievement_corner));
+        let languages: Vec<slint::SharedString> = std::iter::once(tr!("System"))
+            .chain(crate::i18n::LANGUAGES.iter().map(|l| l.name.to_string()))
+            .map(slint::SharedString::from)
+            .collect();
+        ui.set_pref_languages(ModelRc::new(VecModel::from(languages)));
+        ui.set_pref_language(i32::from(prefs.language));
         ui.set_pref_ui_scale(
             UI_SCALES
                 .iter()
@@ -93,11 +99,13 @@ impl Controller {
                 .unwrap_or(100),
             achievement_popups: index_within(ui.get_pref_achievement_popups(), &popups::LEVELS),
             achievement_corner: index_within(ui.get_pref_achievement_corner(), &popups::CORNERS),
+            language: u8::try_from(ui.get_pref_language()).unwrap_or(0),
         };
-        if prefs == self.prefs.get() {
+        let before = self.prefs.get();
+        if prefs == before {
             return;
         }
-        if prefs.ui_scale != self.prefs.get().ui_scale {
+        if prefs.ui_scale != before.ui_scale {
             crate::scale::set_factor(prefs.scale_factor());
         }
         self.prefs.set(prefs);
@@ -108,6 +116,13 @@ impl Controller {
             .set("prefs", &prefs.to_json());
         if let Some(running) = self.running.borrow().as_ref() {
             running.apply_prefs(&prefs);
+        }
+        if prefs.language != before.language {
+            crate::i18n::apply(crate::i18n::choose(
+                prefs.language,
+                crate::i18n::system().as_deref(),
+            ));
+            self.open_settings();
         }
     }
 

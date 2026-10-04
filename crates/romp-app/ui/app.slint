@@ -1415,6 +1415,8 @@ component SettingsPage inherits FocusScope {
     in-out property <bool> fullscreen;
     in-out property <float> volume;
     in-out property <int> ui-scale;
+    in property <[string]> languages;
+    in-out property <int> language;
     callback prefs-changed();
     in-out property <bool> nintendo-labels;
     in-out property <bool> stick-dpad;
@@ -1514,6 +1516,17 @@ component SettingsPage inherits FocusScope {
                                     width: 120px;
                                     model: ["1×", "1.5×", "2×"];
                                     current-index <=> root.ui-scale;
+                                    selected => { root.prefs-changed(); }
+                                }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: @tr("Language");
+                                detail: @tr("Some text changes once you leave this screen.");
+                                ComboBox {
+                                    width: 160px;
+                                    model: root.languages;
+                                    current-index <=> root.language;
                                     selected => { root.prefs-changed(); }
                                 }
                             }
@@ -2113,6 +2126,8 @@ export component AppWindow inherits Window {
     in property <[string]> pref-popup-levels;
     in property <[string]> pref-popup-corners;
     in-out property <int> pref-ui-scale;
+    in property <[string]> pref-languages;
+    in-out property <int> pref-language;
     callback prefs-changed();
     in-out property <bool> pref-nintendo-labels;
     in-out property <bool> pref-stick-dpad;
@@ -2406,6 +2421,8 @@ export component AppWindow inherits Window {
             fullscreen <=> root.pref-fullscreen;
             volume <=> root.pref-volume;
             ui-scale <=> root.pref-ui-scale;
+            languages: root.pref-languages;
+            language <=> root.pref-language;
             prefs-changed => { root.prefs-changed(); }
             nintendo-labels <=> root.pref-nintendo-labels;
             stick-dpad <=> root.pref-stick-dpad;

@@ -172,12 +172,15 @@ pub fn run() -> anyhow::Result<()> {
             .build()?,
     };
     let ui = AppWindow::new()?;
-    crate::i18n::apply(crate::i18n::choose(0, crate::i18n::system().as_deref()));
     let players = crate::players::Assignments::from_json(
         shared.store.lock().unwrap().get("players").as_deref(),
     );
     let prefs =
         crate::prefs::Preferences::from_json(shared.store.lock().unwrap().get("prefs").as_deref());
+    crate::i18n::apply(crate::i18n::choose(
+        prefs.language,
+        crate::i18n::system().as_deref(),
+    ));
     let placement = Placement::from_json(shared.store.lock().unwrap().get(WINDOW_KEY).as_deref());
     let last_view = LastView::from_json(shared.store.lock().unwrap().get(VIEW_KEY).as_deref());
     let mappings = crate::mapping::Mappings::from_json(

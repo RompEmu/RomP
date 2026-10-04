@@ -277,6 +277,10 @@ msgid "Choose a button, then press the controller button you want for it."
 msgstr ""
 
 #: crates/romp-app/src/app/settings.rs
+msgid "System"
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
 msgid "Keyboard"
 msgstr ""
 

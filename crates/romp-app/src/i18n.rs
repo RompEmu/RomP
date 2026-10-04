@@ -1,13 +1,13 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-#[expect(
-    dead_code,
-    reason = "the Language setting and right-to-left layouts read these"
-)]
 pub struct Language {
     pub code: &'static str,
     /// The language's name in itself, as the Language setting lists it.
     pub name: &'static str,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "right-to-left layouts read this")
+    )]
     pub rtl: bool,
 }
 

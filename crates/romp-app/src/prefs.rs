@@ -15,6 +15,8 @@ pub struct Preferences {
     pub achievement_popups: u8,
     /// Where it shows it: an index into `popups::CORNERS`.
     pub achievement_corner: u8,
+    /// 0 follows the system; otherwise an index into `i18n::LANGUAGES`, plus one.
+    pub language: u8,
 }
 
 impl Default for Preferences {
@@ -27,6 +29,7 @@ impl Default for Preferences {
             ui_scale: 100,
             achievement_popups: 1,
             achievement_corner: 0,
+            language: 0,
         }
     }
 }
@@ -43,6 +46,9 @@ impl Preferences {
         let last = |list: &[&str]| (list.len() - 1) as u8;
         prefs.achievement_popups = prefs.achievement_popups.min(last(&popups::LEVELS));
         prefs.achievement_corner = prefs.achievement_corner.min(last(&popups::CORNERS));
+        if usize::from(prefs.language) > crate::i18n::LANGUAGES.len() {
+            prefs.language = 0;
+        }
         prefs
     }
 
@@ -103,5 +109,14 @@ mod tests {
             Preferences::from_json(Some(r#"{"ui_scale": 0}"#)).ui_scale,
             100
         );
+    }
+
+    #[test]
+    fn an_unknown_saved_language_means_system() {
+        let p = Preferences::from_json(Some(r#"{"language": 9}"#));
+        assert_eq!(p.language, 0);
+        let p = Preferences::from_json(Some(r#"{"language": 2}"#));
+        assert_eq!(p.language, 2);
+        assert_eq!(Preferences::default().language, 0);
     }
 }
