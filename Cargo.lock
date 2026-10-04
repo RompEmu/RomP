@@ -5196,6 +5196,7 @@ dependencies = [
  "romp-proto",
  "rusqlite",
  "sdl3",
+ "sdl3-sys",
  "serde",
  "serde_json",
  "sevenz-rust2",

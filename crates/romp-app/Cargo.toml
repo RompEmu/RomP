@@ -11,7 +11,7 @@ name = "romp"
 path = "src/main.rs"
 
 [package.metadata.cargo-machete]
-ignored = ["md-5"]
+ignored = ["md-5", "sdl3-sys"]
 
 [dependencies]
 romp-cheevos = { workspace = true }
@@ -22,6 +22,8 @@ arboard = "3"
 dirs = "7"
 dunce = "1"
 sdl3 = { version = "0.20", features = ["build-from-source-static"] }
+# Only controllers come from SDL, so nothing else is built, nor needs its system libraries.
+sdl3-sys = { version = "0.7", features = ["no-sdl-audio", "no-sdl-camera", "no-sdl-dialog", "no-sdl-gpu", "no-sdl-render", "no-sdl-tray", "no-sdl-video"] }
 glow = "0.17"
 httpdate = "1"
 image = { version = "0.25", default-features = false, features = ["ico", "jpeg", "png", "webp"] }
