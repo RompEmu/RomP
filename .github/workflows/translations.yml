@@ -1,0 +1,44 @@
+name: Translations
+
+# Sends new strings to Crowdin, and brings its translations back as a pull request.
+on:
+  push:
+    branches: [main]
+    paths:
+      - crates/romp-app/translations/*.pot
+      - crowdin.yml
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: translations
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: crowdin/github-action@9c23991700c0ec5256fd41089b9d9d7d540e424e # v3.3.0
+        with:
+          upload_sources: true
+          upload_translations: false
+          download_translations: true
+          localization_branch_name: l10n_main
+          commit_message: Update translations from Crowdin
+          create_pull_request: true
+          pull_request_title: Update translations from Crowdin
+          pull_request_body: New translations from https://crowdin.com/project/romp.
+          pull_request_base_branch_name: main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}

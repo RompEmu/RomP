@@ -1,3 +1,7 @@
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+preserve_hierarchy: true
+
 files:
   - source: /crates/romp-app/translations/romp-app.pot
     translation: /crates/romp-app/translations/%two_letters_code%/LC_MESSAGES/romp-app.po
