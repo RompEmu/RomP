@@ -6,9 +6,13 @@
   <a href="https://github.com/RompEmu/RomP/releases/latest"><img src="https://img.shields.io/github/v/release/RompEmu/RomP" alt="Latest release"></a>
   <a href="https://github.com/RompEmu/RomP/releases/tag/nightly"><img src="https://github.com/RompEmu/RomP/actions/workflows/nightly.yml/badge.svg?branch=main" alt="Nightly build"></a>
   <a href="https://github.com/RompEmu/RomP/actions/workflows/ci.yml"><img src="https://github.com/RompEmu/RomP/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms: macOS, Windows and Linux">
   <a href="https://romm.app"><img src="https://img.shields.io/badge/RomM-5.0%2B-6f42c1" alt="Needs RomM 5.0 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-green" alt="License: GPL-3.0-or-later"></a>
+  <a href="https://crowdin.com/project/romp"><img src="https://badges.crowdin.net/romp/localized.svg" alt="Translation progress on Crowdin"></a>
 </p>
 
 <p align="center">Play retro games from your <a href="https://romm.app">RomM</a> library, with each game running in its own sandboxed process.</p>
@@ -141,7 +145,19 @@ RomP is free and always will be: no paid features, subscriptions, ads, tracking 
 
 ## Translations
 
-RomP is being translated into French, Spanish, German and Arabic on [Crowdin](https://crowdin.com/project/romp), where anyone can help.
+RomP is translated by the people who use it, on [Crowdin](https://crowdin.com/project/romp). You don't need to know any programming, and a free Crowdin account is enough:
+
+1. Open the [RomP project on Crowdin](https://crowdin.com/project/romp) and choose your language.
+2. Translate strings, or vote for the best suggestions others made.
+3. New translations reach the app within a day and ship in the next release.
+
+RomP is being translated into French, Spanish, German and Arabic so far. To add another language, [open an issue](https://github.com/RompEmu/RomP/issues).
+
+A few things to keep in mind:
+
+- Keep placeholders such as `{name}` or `{0}` exactly as they are. You can move them anywhere in the sentence.
+- Leave names as they are: RomP, RomM, RetroAchievements and console names.
+- To see your language in RomP, choose it in Settings → General → Language. RomP follows your system's language once it has translations for it.
 
 ## License
 
