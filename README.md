@@ -139,6 +139,10 @@ Your games, saves and library cache are stored in `~/Library/Application Support
 
 RomP is free and always will be: no paid features, subscriptions, ads, tracking or accounts of its own. Every build has every feature. [PRIVACY.md](PRIVACY.md) lists what RomP sends and where, and the Licenses tab under About RomP lists every emulator it downloads with its license.
 
+## Translations
+
+RomP is being translated into French, Spanish, German and Arabic on [Crowdin](https://crowdin.com/project/romp), where anyone can help.
+
 ## License
 
 RomP is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version.
