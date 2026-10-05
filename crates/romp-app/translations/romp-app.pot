@@ -351,6 +351,10 @@ msgid "Some text changes once you leave this screen."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Help translate RomP on Crowdin"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Your RomM server and this device's access to it."
 msgstr ""
 

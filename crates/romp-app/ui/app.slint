@@ -54,6 +54,7 @@ export global Brand {
     out property <string> website-label: "github.com/RompEmu/RomP";
     out property <string> author: "Beshr Kayali Reinholdsson";
     out property <string> author-website: "https://beshr.com";
+    out property <string> translate-website: "https://crowdin.com/project/romp";
     out property <string> tagline: @tr("Play your RomM library, each game in its own sandboxed emulator.");
 }
 
@@ -1426,7 +1427,22 @@ component SettingsTab inherits Rectangle {
     }
 }
 
+component LinkButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    width: link-label.preferred-width + 12px;
+    height: 24px;
+    border-radius: Theme.radius-small;
+    background: link-touch.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    link-label := Text { horizontal-alignment: Locale.start; text: root.text; font-size: Theme.font-small; color: Theme.accent-text; }
+    link-touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
 component SettingsPage inherits FocusScope {
+    callback open-link(string);
     in property <string> back-label;
     in property <bool> remap-open;
     in-out property <int> section;
@@ -1576,6 +1592,13 @@ component SettingsPage inherits FocusScope {
                                     current-index <=> root.language;
                                     selected => { root.prefs-changed(); }
                                 }
+                            }
+                        }
+                        Row {
+                            alignment: start;
+                            LinkButton {
+                                text: @tr("Help translate RomP on Crowdin");
+                                clicked => { root.open-link(Brand.translate-website); }
                             }
                         }
                     }
@@ -1939,19 +1962,6 @@ component AboutFact inherits Text {
     wrap: word-wrap;
 }
 
-component LinkButton inherits Rectangle {
-    in property <string> text;
-    callback clicked();
-    width: link-label.preferred-width + 12px;
-    height: 24px;
-    border-radius: Theme.radius-small;
-    background: link-touch.has-hover ? Theme.hover : transparent;
-    accessible-role: button;
-    accessible-label: root.text;
-    accessible-action-default => { root.clicked(); }
-    link-label := Text { horizontal-alignment: Locale.start; text: root.text; font-size: Theme.font-small; color: Theme.accent-text; }
-    link-touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
-}
 
 component AboutDialog inherits Rectangle {
     in property <string> version;
@@ -2435,6 +2445,7 @@ export component AppWindow inherits Window {
         }
         if root.screen == 4: SettingsPage {
             back-label: root.heading;
+            open-link(url) => { root.open-url(url); }
             remap-open: root.remap-open;
             section <=> root.settings-section;
             user: root.user-label;
