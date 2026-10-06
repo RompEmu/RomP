@@ -12,6 +12,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - Text uses the Inter font, the same on every system, and IBM Plex Sans Arabic in Arabic.
 
+### Fixed
+
+- Saturn games downloaded as a zip of a CD image load their disc, instead of the Saturn starting with an empty drive.
+
 ## [0.11.1] - 2026-10-04
 
 ### Fixed

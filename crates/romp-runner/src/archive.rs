@@ -21,6 +21,11 @@ pub fn open_rom(
     if let Some(ext_str) = ext.as_deref() {
         // .7z is never passed through: cores that list it often cannot decode it.
         if ext_str == "zip" && core_accepts_extension(valid_extensions, ext_str) {
+            // A zip holding only a disc is unpacked anyway: Beetle Saturn, for one, takes zips
+            // only as arcade (ST-V) sets and otherwise boots with no disc.
+            if let Some(disc) = disc_only_zip(rom_path)? {
+                return extract_disc_image_archive(rom_path, ext_str, session_id, disc);
+            }
             info!(
                 archive = %rom_path.display(),
                 ext = %ext_str,
@@ -278,6 +283,34 @@ fn detect_disc_image_in_zip(archive_path: &Path) -> Result<Option<DiscImageKind>
         record_disc_entry(entry.name(), &mut index_kind, &mut data_kind);
     }
     Ok(index_kind.or(data_kind))
+}
+
+/// The zip's disc image, if the zip holds nothing else but its tracks and harmless extras.
+fn disc_only_zip(archive_path: &Path) -> Result<Option<DiscImageKind>> {
+    const DISC_FILES: [&str; 18] = [
+        "cue", "bin", "img", "sub", "ccd", "gdi", "raw", "chd", "iso", "wav", "ogg", "mp3", "flac",
+        "ecm", "txt", "nfo", "sfv", "md5",
+    ];
+    let f = std::fs::File::open(archive_path)
+        .with_context(|| format!("open archive {}", archive_path.display()))?;
+    let mut archive =
+        zip::ZipArchive::new(f).with_context(|| format!("read zip {}", archive_path.display()))?;
+    for i in 0..archive.len() {
+        let entry = archive
+            .by_index_raw(i)
+            .with_context(|| format!("scan zip entry {i}"))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let ext = Path::new(entry.name())
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase);
+        if !ext.is_some_and(|e| DISC_FILES.contains(&e.as_str())) {
+            return Ok(None);
+        }
+    }
+    detect_disc_image_in_zip(archive_path)
 }
 
 fn detect_disc_image_in_7z(archive_path: &Path) -> Result<Option<DiscImageKind>> {
@@ -659,5 +692,53 @@ mod tests {
         assert!(live.exists());
         assert!(!dead.exists());
         assert!(other.exists());
+    }
+
+    fn zip_of(path: &Path, files: &[(&str, &[u8])]) {
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for (name, data) in files {
+            zip.start_file(*name, options).unwrap();
+            std::io::Write::write_all(&mut zip, data).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    const CUE: &[u8] =
+        b"FILE \"Game (Track 01).bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n";
+
+    #[test]
+    fn a_zip_holding_only_a_disc_is_unpacked_even_for_cores_that_take_zips() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("Game.zip");
+        zip_of(
+            &archive,
+            &[("Game.cue", CUE), ("Game (Track 01).bin", b"track")],
+        );
+
+        let rom = open_rom(&archive, "test-disc-zip", true, "cue|ccd|chd|toc|m3u|zip").unwrap();
+        assert_eq!(rom.effective_path.file_name().unwrap(), "Game.cue");
+        assert!(rom
+            .effective_path
+            .with_file_name("Game (Track 01).bin")
+            .is_file());
+    }
+
+    #[test]
+    fn a_zip_with_more_than_a_disc_goes_whole_to_cores_that_take_zips() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("Doom.zip");
+        zip_of(
+            &archive,
+            &[
+                ("DOOM.EXE", b"exe"),
+                ("cd/doom.cue", CUE),
+                ("cd/Game (Track 01).bin", b"track"),
+            ],
+        );
+
+        let rom = open_rom(&archive, "test-dos-zip", true, "zip|dosz|exe|cue|iso").unwrap();
+        assert_eq!(rom.effective_path, archive);
     }
 }
