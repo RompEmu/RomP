@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-05 05:37\n"
+"PO-Revision-Date: 2026-10-06 20:12\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -17,702 +17,706 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Play your RomM library, each game in its own sandboxed emulator."
-msgstr ""
+msgstr "العب مكتبة ألعابك من RomM، كل لعبة في محاكي معزول خاص بها."
 
 #: crates/romp-app/ui/app.slint
 msgid "Welcome to {}"
-msgstr ""
+msgstr "مرحبا بكم في {}"
 
 #: crates/romp-app/ui/app.slint
 msgid "Play the games in your RomM library on this computer."
-msgstr ""
+msgstr "قم بتشغيل الألعاب في مكتبتك على هذا الكمبيوتر."
 
 #: crates/romp-app/ui/app.slint
 msgid "Your whole library"
-msgstr ""
+msgstr "مكتبتك بأكملها"
 
 #: crates/romp-app/ui/app.slint
 msgid "Browse your RomM games, and download any to play, even offline."
-msgstr ""
+msgstr "تصفح ألعاب RomM الخاصة بك، وتحميل أي لعبها، حتى بدون اتصال."
 
 #: crates/romp-app/ui/app.slint
 msgid "Saves that follow you"
-msgstr ""
+msgstr "يحفظ الذي يتبعك"
 
 #: crates/romp-app/ui/app.slint
 msgid "Saves and save states sync with RomM before and after you play."
-msgstr ""
+msgstr "حفظ وحفظ حالة المزامنة مع RomM قبل اللعب وبعده."
 
 #: crates/romp-app/ui/app.slint
 msgid "Emulators taken care of"
-msgstr ""
+msgstr "محاكي المحاكي يهتمون"
 
 #: crates/romp-app/ui/app.slint
 msgid "RomP sets up the right emulator for each game and runs it in a sandbox."
-msgstr ""
+msgstr "يقوم رومب بإعداد المحاكي الصحيح لكل لعبة ويقوم بتشغيلها في صندوق رملي."
 
 #: crates/romp-app/ui/app.slint
 msgid "Get started"
-msgstr ""
+msgstr "بدء التشغيل"
 
 #: crates/romp-app/ui/app.slint
 msgid "Connect to RomM"
-msgstr ""
+msgstr "الاتصال بالروميم"
 
 #: crates/romp-app/ui/app.slint
 msgid "Enter the address you open RomM at in your browser."
-msgstr ""
+msgstr "أدخل العنوان الذي تفتحه في متصفحك."
 
 #: crates/romp-app/ui/app.slint
 msgid "RomP works with RomM 5.0 or newer."
-msgstr ""
+msgstr "يعمل رومبي مع RomM 5.0 أو أحدث."
 
 #: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Back"
-msgstr ""
+msgstr "الرجوع"
 
 #: crates/romp-app/ui/app.slint
 msgid "Continue"
-msgstr ""
+msgstr "متابعة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Approve {}"
-msgstr ""
+msgstr "الموافقة {}"
 
 #: crates/romp-app/ui/app.slint
 msgid "Scan the code, or open the link, on any device signed in to RomM. Then approve this computer."
-msgstr ""
+msgstr "قم بمسح الرمز أو فتح الرابط، على أي جهاز مسجل الدخول إلى RomM. ثم قم بالموافقة على هذا الكمبيوتر."
 
 #: crates/romp-app/ui/app.slint
 msgid "Code"
-msgstr ""
+msgstr "الكود"
 
 #: crates/romp-app/ui/app.slint
 msgid "Open in browser"
-msgstr ""
+msgstr "فتح في المتصفح"
 
 #: crates/romp-app/ui/app.slint
 msgid "Copy link"
-msgstr ""
+msgstr "نسخ الرابط"
 
 #: crates/romp-app/ui/app.slint
 msgid "Waiting for approval… ({}:{}{})"
-msgstr ""
+msgstr "في انتظار الموافقة… ({}:{}{}})"
 
 #: crates/romp-app/ui/app.slint
 msgid "Try again"
-msgstr ""
+msgstr "حاول مرة أخرى"
 
 #: crates/romp-app/ui/app.slint
 msgid "{n} game"
 msgid_plural "{n} games"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
-msgstr[3] ""
-msgstr[4] ""
-msgstr[5] ""
+msgstr[0] "ألعاب {n}"
+msgstr[1] "لعبة {n}"
+msgstr[2] "ألعاب {n}"
+msgstr[3] "ألعاب {n}"
+msgstr[4] "ألعاب {n}"
+msgstr[5] "ألعاب {n}"
 
 #: crates/romp-app/ui/app.slint
 msgid "New collection"
-msgstr ""
+msgstr "مجموعة جديدة"
 
 #: crates/romp-app/ui/app.slint
 msgid "downloaded"
-msgstr ""
+msgstr "تم التحميل"
 
 #: crates/romp-app/ui/app.slint
 msgid "favorite"
-msgstr ""
+msgstr "المفضلة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Downloaded"
-msgstr ""
+msgstr "تم التحميل"
 
 #: crates/romp-app/ui/app.slint
 msgid "On server"
-msgstr ""
+msgstr "على الخادم"
 
 #: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Offline"
-msgstr ""
+msgstr "غير متصل"
 
 #: crates/romp-app/ui/app.slint
 msgid "Syncing…"
-msgstr ""
+msgstr "مزامنة…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Rename…"
-msgstr ""
+msgstr "إعادة تسمية…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Delete…"
-msgstr ""
+msgstr "حذف…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Signed in"
-msgstr ""
+msgstr "تسجيل الدخول"
 
 #: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "About"
-msgstr ""
+msgstr "حول"
 
 #: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Settings"
-msgstr ""
+msgstr "الإعدادات"
 
 #: crates/romp-app/ui/app.slint
 msgid "Search games"
-msgstr ""
+msgstr "البحث في الألعاب"
 
 #: crates/romp-app/ui/app.slint
 msgid "Name"
-msgstr ""
+msgstr "الاسم"
 
 #: crates/romp-app/ui/app.slint
 msgid "Date added"
-msgstr ""
+msgstr "تاريخ الإضافة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Last played"
-msgstr ""
+msgstr "آخر تشغيل"
 
 #: crates/romp-app/ui/app.slint
 msgid "Refresh library"
-msgstr ""
+msgstr "تحديث المكتبة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Loading your library…"
-msgstr ""
+msgstr "جاري تحميل مكتبتك…"
 
 #: crates/romp-app/ui/app.slint
 msgid "No games found."
-msgstr ""
+msgstr "لم يتم العثور على ألعاب."
 
 #: crates/romp-app/ui/app.slint
 msgid "Download"
-msgstr ""
+msgstr "تحميل"
 
 #: crates/romp-app/ui/app.slint
 msgid "Cancel"
-msgstr ""
+msgstr "إلغاء"
 
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Play"
-msgstr ""
+msgstr "العب"
 
 #: crates/romp-app/ui/app.slint
 msgid "Delete download"
-msgstr ""
+msgstr "حذف التحميل"
 
 #: crates/romp-app/ui/app.slint
 msgid "♥ In favorites"
-msgstr ""
+msgstr "♥️ في المفضلة"
 
 #: crates/romp-app/ui/app.slint
 msgid "♡ Add to favorites"
-msgstr ""
+msgstr "♡ إضافة إلى المفضلة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Collections…"
-msgstr ""
+msgstr "المجموعات…"
 
 #: crates/romp-app/ui/app.slint
 msgid "You don't have any collections yet."
-msgstr ""
+msgstr "ليس لديك أي مجموعات حتى الآن."
 
 #: crates/romp-app/ui/app.slint
 msgid "New collection…"
-msgstr ""
+msgstr "مجموعة جديدة…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Your save changed on this computer and on the server."
-msgstr ""
+msgstr "تم تغيير حفظك على هذا الكمبيوتر وعلى الخادم."
 
 #: crates/romp-app/ui/app.slint
 msgid "Use this computer's save"
-msgstr ""
+msgstr "استخدم حفظ هذا الكمبيوتر"
 
 #: crates/romp-app/ui/app.slint
 msgid "Use the server's save"
-msgstr ""
+msgstr "استخدام حفظ السيرفر"
 
 #: crates/romp-app/ui/app.slint
 msgid "Overview"
-msgstr ""
+msgstr "نظرة عامة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Screenshots"
-msgstr ""
+msgstr "لقطات الشاشة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Screenshot {}"
-msgstr ""
+msgstr "لقطة شاشة {}"
 
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Save states"
-msgstr ""
+msgstr "حفظ الحالات"
 
 #: crates/romp-app/ui/app.slint
 msgid "Loading save states is off in hardcore mode."
-msgstr ""
+msgstr "تحميل حالات الحفظ متوقف في الوضع المتشدد."
 
 #: crates/romp-app/ui/app.slint
 msgid "Play from here"
-msgstr ""
+msgstr "العب من هنا"
 
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Achievements"
-msgstr ""
+msgstr "الإنجازات"
 
 #: crates/romp-app/ui/app.slint
 msgid "Show all {} more"
-msgstr ""
+msgstr "إظهار جميع {} أكثر"
 
 #: crates/romp-app/ui/app.slint
 msgid "Similar in your library"
-msgstr ""
+msgstr "مشابهة في مكتبتك"
 
 #: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Close"
-msgstr ""
+msgstr "أغلق"
 
 #: crates/romp-app/ui/app.slint
 msgid "General"
-msgstr ""
+msgstr "عام"
 
 #: crates/romp-app/ui/app.slint
 msgid "Account"
-msgstr ""
+msgstr "حساب"
 
 #: crates/romp-app/ui/app.slint
 msgid "Players"
-msgstr ""
+msgstr "لاعبون"
 
 #: crates/romp-app/ui/app.slint
 msgid "Storage"
-msgstr ""
+msgstr "التخزين"
 
 #: crates/romp-app/ui/app.slint
 msgid "Consoles"
-msgstr ""
+msgstr "تجميل"
 
 #: crates/romp-app/ui/app.slint
 msgid "Looks"
-msgstr ""
+msgstr "المظاهر"
 
 #: crates/romp-app/ui/app.slint
 msgid "How games behave on this computer."
-msgstr ""
+msgstr "كيف تتصرف الألعاب على هذا الكمبيوتر."
 
 #: crates/romp-app/ui/app.slint
 msgid "Pause when the game window isn't focused"
-msgstr ""
+msgstr "الإيقاف المؤقت عندما تكون نافذة اللعبة غير مركزة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Switching to another window pauses the game. Coming back resumes it."
-msgstr ""
+msgstr "التبديل إلى نافذة أخرى توقف اللعبة. العودة إلى استئناف اللعبة."
 
 #: crates/romp-app/ui/app.slint
 msgid "Resume where you left off"
-msgstr ""
+msgstr "استأنف حيث توقفت"
 
 #: crates/romp-app/ui/app.slint
 msgid "Starting a game continues from the automatic save made when you last quit it."
-msgstr ""
+msgstr "بدء اللعبة يستمر من الحفظ التلقائي الذي تم عند الإقلاع عن آخر مرة."
 
 #: crates/romp-app/ui/app.slint
 msgid "Start games in full screen"
-msgstr ""
+msgstr "بَدْء الألعاب بملء الشاشة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Press F11 in a game to switch at any time."
-msgstr ""
+msgstr "اضغط على F11 في لعبة للتبديل في أي وقت."
 
 #: crates/romp-app/ui/app.slint
 msgid "Game volume"
-msgstr ""
+msgstr "مستوى صوت اللعبة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Interface size"
-msgstr ""
+msgstr "حجم الواجهة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Makes text and controls in this window larger."
-msgstr ""
+msgstr "يجعل النص والتحكم في هذه النافذة أكبر."
 
 #: crates/romp-app/ui/app.slint
 msgid "Language"
-msgstr ""
+msgstr "اللغة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Some text changes once you leave this screen."
-msgstr ""
+msgstr "بعض النصوص تتغير بمجرد مغادرة هذه الشاشة."
+
+#: crates/romp-app/ui/app.slint
+msgid "Help translate RomP on Crowdin"
+msgstr "المساعدة في ترجمة رومبي على كراودِن"
 
 #: crates/romp-app/ui/app.slint
 msgid "Your RomM server and this device's access to it."
-msgstr ""
+msgstr "خادم RomM الخاص بك والوصول إلى هذا الجهاز."
 
 #: crates/romp-app/ui/app.slint
 msgid "Signed in as"
-msgstr ""
+msgstr "تسجيل الدخول كـ"
 
 #: crates/romp-app/ui/app.slint
 msgid "Unknown"
-msgstr ""
+msgstr "غير معروف"
 
 #: crates/romp-app/ui/app.slint
 msgid "Server"
-msgstr ""
+msgstr "خادم"
 
 #: crates/romp-app/ui/app.slint
 msgid "Device access"
-msgstr ""
+msgstr "الوصول إلى الجهاز"
 
 #: crates/romp-app/ui/app.slint
 msgid "Approve this device again, for example after an update that needs new permissions."
-msgstr ""
+msgstr "الموافقة على هذا الجهاز مرة أخرى، على سبيل المثال بعد تحديث يحتاج إلى أذونات جديدة."
 
 #: crates/romp-app/ui/app.slint
 msgid "Pair again"
-msgstr ""
+msgstr "أعِد الاقتران"
 
 #: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Sign out"
-msgstr ""
+msgstr "تسجيل الخروج"
 
 #: crates/romp-app/ui/app.slint
 msgid "Signs this device out and clears the library list. Downloaded files stay on disk."
-msgstr ""
+msgstr "تسجيل الخروج من هذا الجهاز ومسح قائمة المكتبات. الملفات التي تم تنزيلها تبقى على القرص."
 
 #: crates/romp-app/ui/app.slint
 msgid "RetroAchievements"
-msgstr ""
+msgstr "الإنجازات التراجعية"
 
 #: crates/romp-app/ui/app.slint
 msgid "Signed in as {}"
-msgstr ""
+msgstr "تسجيل الدخول كـ {}"
 
 #: crates/romp-app/ui/app.slint
 msgid "Games with achievements show them as you play. RomP keeps a sign-in token, not your password."
-msgstr ""
+msgstr "تُظهر الألعاب التي تتضمن إنجازات هذه الإنجازات أثناء اللعب. يحتفظ RomP برمز تسجيل الدخول، وليس بكلمة مرورك."
 
 #: crates/romp-app/ui/app.slint
 msgid "Hardcore mode"
-msgstr ""
+msgstr "وضع المتشعب"
 
 #: crates/romp-app/ui/app.slint
 msgid "Earns hardcore achievements. Loading save states and continuing where you left off are off while it's on. Takes effect the next time you start a game."
-msgstr ""
+msgstr "اكسب منجزات عنيدة. تحميل حفظ الحالات والاستمرار حيث توقفت أثناء تشغيلها. يأخذ المفعول في المرة القادمة التي تبدأ فيها اللعبة."
 
 #: crates/romp-app/ui/app.slint
 msgid "Popups while playing"
-msgstr ""
+msgstr "النوافذ المنبثقة أثناء التشغيل"
 
 #: crates/romp-app/ui/app.slint
 msgid "Quiet shows unlocks and keeps progress to milestones. Everything else, or everything when off, is a brief note in the corner."
-msgstr ""
+msgstr "الهدوء يظهر الفتح ويحافظ على التقدم نحو المعالم. كل شيء آخر، أو كل شيء عند توقفه، هو ملاحظة موجزة في الزاوية."
 
 #: crates/romp-app/ui/app.slint
 msgid "Popup corner"
-msgstr ""
+msgstr "زاوية منبثقة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Where popups and notes appear over the game."
-msgstr ""
+msgstr "حيث تظهر النوافذ المنبثقة والملاحظات فوق اللعبة."
 
 #: crates/romp-app/ui/app.slint
 msgid "Sign in"
-msgstr ""
+msgstr "تسجيل الدخول"
 
 #: crates/romp-app/ui/app.slint
 msgid "Earn achievements while you play. RomP keeps a sign-in token, not your password."
-msgstr ""
+msgstr "اكسب الانجازات أثناء اللعب. يحتفظ رومبي برمز تسجيل الدخول، وليس كلمة المرور الخاصة بك."
 
 #: crates/romp-app/ui/app.slint
 msgid "Username"
-msgstr ""
+msgstr "اسم المستخدم"
 
 #: crates/romp-app/ui/app.slint
 msgid "Password"
-msgstr ""
+msgstr "كلمة المرور"
 
 #: crates/romp-app/ui/app.slint
 msgid "Choose which player each controller plays as. Press a button on a controller to find it here."
-msgstr ""
+msgstr "اختر اللاعب الذي يقوم كل وحدة تحكم بتشغيله. اضغط على زر على وحدة التحكم للعثور عليه هنا."
 
 #: crates/romp-app/ui/app.slint
 msgid "Button pressed"
-msgstr ""
+msgstr "الضغط على الزر"
 
 #: crates/romp-app/ui/app.slint
 msgid "Customize…"
-msgstr ""
+msgstr "تخصيص…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Off"
-msgstr ""
+msgstr "متوقف"
 
 #: crates/romp-app/ui/app.slint
 msgid "Player {}"
-msgstr ""
+msgstr "مشغل {}"
 
 #: crates/romp-app/ui/app.slint
 msgid "Controller options"
-msgstr ""
+msgstr "خيارات التحكم"
 
 #: crates/romp-app/ui/app.slint
 msgid "Match button labels on Nintendo systems"
-msgstr ""
+msgstr "تسميات زر المطابقة على أنظمة نينتندو"
 
 #: crates/romp-app/ui/app.slint
 msgid "On other controllers, the button labelled A presses A instead of the one in its place on a Nintendo pad."
-msgstr ""
+msgstr "على أجهزة التحكم الأخرى، يضغط الزر المسمى A على A بدلا من ذلك الموجود في مكانه على منصة نينتندو."
 
 #: crates/romp-app/ui/app.slint
 msgid "Left stick also moves the D-pad"
-msgstr ""
+msgstr "العصا اليسرى تتحرك أيضا لوحة DD"
 
 #: crates/romp-app/ui/app.slint
 msgid "Handy for games made for a D-pad."
-msgstr ""
+msgstr "سهلة لألعاب مصنوعة لعبة Dpad."
 
 #: crates/romp-app/ui/app.slint
 msgid "Shortcuts"
-msgstr ""
+msgstr "الاختصارات"
 
 #: crates/romp-app/ui/app.slint
 msgid "Measuring…"
-msgstr ""
+msgstr "قياس…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Space used on this computer: {}."
-msgstr ""
+msgstr "المساحة المستخدمة على هذا الكمبيوتر: {}."
 
 #: crates/romp-app/ui/app.slint
 msgid "Clear image cache"
-msgstr ""
+msgstr "مسح ذاكرة التخزين المؤقت للصورة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Show folder"
-msgstr ""
+msgstr "إظهار المجلد"
 
 #: crates/romp-app/ui/app.slint
 msgid "Settings for each console's emulator. Changes apply the next time you start a game."
-msgstr ""
+msgstr "إعدادات محاكاة وحدة التحكم تلك. التغييرات تطبق في المرة القادمة التي تبدأ فيها اللعبة."
 
 #: crates/romp-app/ui/app.slint
 msgid "None of the emulators on this computer has settings yet."
-msgstr ""
+msgstr "لا يوجد أي محاكي على هذا الكمبيوتر لديه إعدادات حتى الآن."
 
 #: crates/romp-app/ui/app.slint
 msgid "How each console's games are drawn. In a game, Look in the game menu changes it live, so you can see the difference."
-msgstr ""
+msgstr "كيف يتم رسم كل لعبة من ألعاب وحدة التحكم. في اللعبة، انظروا في قائمة اللعبة يغيروها مباشرة، بحيث يمكنك رؤية الفرق."
 
 #: crates/romp-app/ui/app.slint
 msgid "Consoles appear here once your library has games for them."
-msgstr ""
+msgstr "ستظهر أجهزة الألعاب هنا بمجرد أن تضم مكتبتك ألعابًا لها."
 
 #: crates/romp-app/ui/app.slint
 msgid "Button labels"
-msgstr ""
+msgstr "تسميات الزر"
 
 #: crates/romp-app/ui/app.slint
 msgid "For controllers that say they're another kind."
-msgstr ""
+msgstr "للمراقبين الذين يقولون إنهم نوع آخر."
 
 #: crates/romp-app/ui/app.slint
 msgid "Press…"
-msgstr ""
+msgstr "اضغط…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Reset to default"
-msgstr ""
+msgstr "إعادة التعيين إلى الافتراضي"
 
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Done"
-msgstr ""
+msgstr "تم"
 
 #: crates/romp-app/ui/app.slint
 msgid "Licenses"
-msgstr ""
+msgstr "التراخيص"
 
 #: crates/romp-app/ui/app.slint
 msgid "Version {}"
-msgstr ""
+msgstr "الإصدار {}"
 
 #: crates/romp-app/ui/app.slint
 msgid "By"
-msgstr ""
+msgstr "بواسطة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Games and saves come from your RomM server."
-msgstr ""
+msgstr "الألعاب و الحفظ تأتي من خادم روم."
 
 #: crates/romp-app/ui/app.slint
 msgid "Emulation by libretro cores and xemu."
-msgstr ""
+msgstr "الصياغة بواسطة نواة الليبرترو و و xemu."
 
 #: crates/romp-app/ui/app.slint
 msgid "Free software under the GNU GPL, version 3 or later."
-msgstr ""
+msgstr "البرمجيات الحرة تحت GNU GPL، الإصدار 3 أو بعده."
 
 #: crates/romp-app/ui/app.slint
 msgid "RomP and the emulators it downloads are each covered by their own license."
-msgstr ""
+msgstr "لكلٍّ من RomP والمحاكيات التي ينزّلها ترخيص خاص به."
 
 #: crates/romp-app/ui/app.slint
 msgid "License"
-msgstr ""
+msgstr "الترخيص"
 
 #: crates/romp-app/ui/app.slint
 msgid "GitHub"
-msgstr ""
+msgstr "GitHub"
 
 #: crates/romp-app/ui/app.slint
 msgid "All games"
-msgstr ""
+msgstr "جميع الألعاب"
 
 #: crates/romp-app/ui/app.slint
 msgid "Library"
-msgstr ""
+msgstr "المكتبة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Search"
-msgstr ""
+msgstr "البحث"
 
 #: crates/romp-app/ui/app.slint
 msgid "Refresh"
-msgstr ""
+msgstr "تحديث"
 
 #: crates/romp-app/ui/app.slint
 msgid "Settings…"
-msgstr ""
+msgstr "الإعدادات…"
 
 #: crates/romp-app/ui/app.slint
 msgid "Help"
-msgstr ""
+msgstr "مساعدة"
 
 #: crates/romp-app/ui/app.slint
 msgid "About {}"
-msgstr ""
+msgstr "حول {}"
 
 #: crates/romp-app/ui/app.slint
 msgid "{} on GitHub"
-msgstr ""
+msgstr "{} على GitHub"
 
 #: crates/romp-app/ui/game.slint
 msgid "Paused"
-msgstr ""
+msgstr "متوقف"
 
 #: crates/romp-app/ui/game.slint
 msgid "Running"
-msgstr ""
+msgstr "تشغيل"
 
 #: crates/romp-app/ui/game.slint
 msgid "Resume"
-msgstr ""
+msgstr "استئناف"
 
 #: crates/romp-app/ui/game.slint
 msgid "Pause"
-msgstr ""
+msgstr "إيقاف"
 
 #: crates/romp-app/ui/game.slint
 msgid "Restart"
-msgstr ""
+msgstr "إعادة التشغيل"
 
 #: crates/romp-app/ui/game.slint
 msgid "Look  ·  {}"
-msgstr ""
+msgstr "مظهر · {}"
 
 #: crates/romp-app/ui/game.slint
 msgid "Hardcore mode: loading states is off."
-msgstr ""
+msgstr "وضع الصلابة: حالة التحميل متوقفة."
 
 #: crates/romp-app/ui/game.slint
 msgid "Volume"
-msgstr ""
+msgstr "حجم"
 
 #: crates/romp-app/ui/game.slint
 msgid "Exit full screen"
-msgstr ""
+msgstr "الخروج من ملء الشاشة"
 
 #: crates/romp-app/ui/game.slint
 msgid "Full screen"
-msgstr ""
+msgstr "ملء الشاشة"
 
 #: crates/romp-app/ui/game.slint
 msgid "Take screenshot"
-msgstr ""
+msgstr "التقاط لقطة الشاشة"
 
 #: crates/romp-app/ui/game.slint
 msgid "Achievements  ·  {}"
-msgstr ""
+msgstr "الإنجازات · {}"
 
 #: crates/romp-app/ui/game.slint
 msgid "Achievements  ·  sign in under Settings"
-msgstr ""
+msgstr "الإنجازات · تسجيل الدخول تحت الإعدادات"
 
 #: crates/romp-app/ui/game.slint
 msgid "Controllers…"
-msgstr ""
+msgstr "المتحكمون…"
 
 #: crates/romp-app/ui/game.slint
 msgid "Quit game"
-msgstr ""
+msgstr "إنهاء اللعبة"
 
 #: crates/romp-app/ui/game.slint
 msgid "{} next slot  ·  {} opens this menu"
-msgstr ""
+msgstr "{} الخانة التالية · {} يفتح هذه القائمة"
 
 #: crates/romp-app/ui/game.slint
 msgid "Keyboard goes to the game  ·  {} opens this menu"
-msgstr ""
+msgstr "لوحة المفاتيح تذهب إلى اللعبة · {} تفتح هذه القائمة"
 
 #: crates/romp-app/ui/game.slint
 msgid "current"
-msgstr ""
+msgstr "الحالي"
 
 #: crates/romp-app/ui/game.slint
 msgid "Save"
-msgstr ""
+msgstr "حفظ"
 
 #: crates/romp-app/ui/game.slint
 msgid "Load"
-msgstr ""
+msgstr "تحميل"
 
 #: crates/romp-app/ui/game.slint
 msgid "Look"
-msgstr ""
+msgstr "مظهر"
 
 #: crates/romp-app/ui/game.slint
 msgid "Hardcore mode: you can save, but not load."
-msgstr ""
+msgstr "الوضع الصعب: يمكنك الحفظ، ولكن ليس التحميل."
 
 #: crates/romp-app/ui/game.slint
 msgid "Choose Save or Load on a slot."
-msgstr ""
+msgstr "اختر حفظ أو تحميل في فتحة."
 
 #: crates/romp-app/ui/game.slint
 msgid "Popups"
-msgstr ""
+msgstr "النوافذ المنبثقة"
 
 #: crates/romp-app/ui/game.slint
 msgid "Corner"
-msgstr ""
+msgstr "زاوية"
 
 #: crates/romp-app/ui/slots.slint
 msgid "Empty"
-msgstr ""
+msgstr "فارغ"
 
 #: crates/romp-app/ui/slots.slint
 msgid "No picture"
-msgstr ""
+msgstr "لا توجد صورة"
 
