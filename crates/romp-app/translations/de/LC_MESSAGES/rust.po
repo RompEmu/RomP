@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-05 05:37\n"
+"PO-Revision-Date: 2026-10-06 11:16\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
 "Language: de_DE\n"
@@ -19,1026 +19,1026 @@ msgstr ""
 #: crates/romp-app/src/achievements/popups.rs crates/romp-app/src/achievements/mod.rs
 msgid "{n} point"
 msgid_plural "{n} points"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{n} Punkt"
+msgstr[1] "{n} Punkte"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "{n} achievement for {title}"
 msgid_plural "{n} achievements for {title}"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{n} Erfolg für {title}"
+msgstr[1] "{n} Erfolge für {title}"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "RetroAchievements sign-in failed"
-msgstr ""
+msgstr "RetroAchievements Anmeldung fehlgeschlagen"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "{reason}. Sign in again in Settings."
-msgstr ""
+msgstr "{reason}. Melden Sie sich erneut in den Einstellungen an."
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Unlocked: {title}"
-msgstr ""
+msgstr "Freigeschaltet: {title}"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Game mastered"
-msgstr ""
+msgstr "Spiel gemeistert"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Every achievement is yours."
-msgstr ""
+msgstr "Jede Errungenschaft ist Ihnen."
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Leaderboard attempt started"
-msgstr ""
+msgstr "Leaderboard-Versuch gestartet"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Leaderboard attempt failed"
-msgstr ""
+msgstr "Leaderboard-Versuch fehlgeschlagen"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Leaderboard score submitted"
-msgstr ""
+msgstr "Ranglistensatz eingereicht"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "RetroAchievements is unreachable"
-msgstr ""
+msgstr "RetroAchievements sind nicht erreichbar"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Unlocks will be sent when it's back."
-msgstr ""
+msgstr "Entsperrungen werden gesendet, wenn sie wieder sind."
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "RetroAchievements is back"
-msgstr ""
+msgstr "RetroAchievements sind zurück"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Unlocks were sent."
-msgstr ""
+msgstr "Entsperrungen wurden gesendet."
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Hardcore is off for this game"
-msgstr ""
+msgstr "Hardcore ist für dieses Spiel aus"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Because {reason}."
-msgstr ""
+msgstr "Weil {reason}."
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "RetroAchievements error"
-msgstr ""
+msgstr "RetroAchievements Fehler"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "All"
-msgstr ""
+msgstr "Alle"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Quiet"
-msgstr ""
+msgstr "Ruhig"
 
 #: crates/romp-app/src/achievements/popups.rs crates/romp-app/src/console_settings.rs crates/romp-app/src/looks.rs
 msgid "Off"
-msgstr ""
+msgstr "Aus"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Top right"
-msgstr ""
+msgstr "Oben rechts"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Top left"
-msgstr ""
+msgstr "Oben links"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Bottom right"
-msgstr ""
+msgstr "Unten rechts"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Bottom left"
-msgstr ""
+msgstr "Unten links"
 
 #: crates/romp-app/src/achievements/popups.rs
 msgid "Unlocked while playing"
-msgstr ""
+msgstr "Während des Spielens entsperrt"
 
 #: crates/romp-app/src/achievements/mod.rs
 msgid "No achievements for this game"
-msgstr ""
+msgstr "Keine Erfolge für dieses Spiel"
 
 #: crates/romp-app/src/achievements/mod.rs
 msgid "{earned} of {total} earned"
-msgstr ""
+msgstr "{earned} von {total} verdient"
 
 #: crates/romp-app/src/achievements/mod.rs
 msgid "Could not reach RetroAchievements"
-msgstr ""
+msgstr "Konnte RetroAchievements nicht erreichen"
 
 #: crates/romp-app/src/achievements/mod.rs
 msgid "RetroAchievements sent an answer RomP did not understand"
-msgstr ""
+msgstr "RetroAchievements schickten eine Antwort RomP nicht verstanden"
 
 #: crates/romp-app/src/achievements/mod.rs
 msgid "RetroAchievements did not accept the sign-in"
-msgstr ""
+msgstr "RetroAchievements haben die Anmeldung nicht akzeptiert"
 
 #: crates/romp-app/src/app/game.rs
 msgid "RomP can't play {} games yet."
-msgstr ""
+msgstr "RomP kann noch keine {} Spiele spielen."
 
 #: crates/romp-app/src/app/game.rs
 msgid "Another download is in progress."
-msgstr ""
+msgstr "Ein weiterer Download ist im Gange."
 
 #: crates/romp-app/src/app/game.rs
 msgid "Connect to your server to download this game."
-msgstr ""
+msgstr "Verbinde dich mit deinem Server, um dieses Spiel herunterzuladen."
 
 #: crates/romp-app/src/app/game.rs
 msgid "Downloading…"
-msgstr ""
+msgstr "Herunterladen…"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Unpacking…"
-msgstr ""
+msgstr "Entpacken…"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Download paused. Choose Download to continue."
-msgstr ""
+msgstr "Download pausiert. Wählen Sie Download aus, um fortzufahren."
 
 #: crates/romp-app/src/app/game.rs
 msgid "A game is already running."
-msgstr ""
+msgstr "Ein Spiel läuft bereits."
 
 #: crates/romp-app/src/app/game.rs
 msgid "Still syncing your saves. Try again in a moment."
-msgstr ""
+msgstr "Synchronisieren Sie Ihre Speicherstände noch. Versuchen Sie es in einem Moment erneut."
 
 #: crates/romp-app/src/app/game.rs
 msgid "Getting ready…"
-msgstr ""
+msgstr "Bereite vor…"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Installing {name}…"
-msgstr ""
+msgstr "Installiere {name}…"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Installing {name}'s system files…"
-msgstr ""
+msgstr "Installiere {name}Systemdateien…"
 
 #: crates/romp-app/src/app/game.rs crates/romp-app/src/app/save_sync.rs
 msgid "Syncing your save…"
-msgstr ""
+msgstr "Synchronisieren Ihres Speicherns…"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Could not set up the Xbox hard disk: {e}"
-msgstr ""
+msgstr "Die Xbox-Festplatte konnte nicht eingerichtet werden: {e}"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Could not write {name}'s settings: {e}"
-msgstr ""
+msgstr "Konnte die Einstellungen von {name}nicht schreiben: {e}"
 
 #: crates/romp-app/src/app/game.rs crates/romp-app/src/rpcs3.rs
 msgid "Could not start {name}: {e}"
-msgstr ""
+msgstr "Konnte {name}nicht starten: {e}"
 
 #: crates/romp-app/src/app/game.rs crates/romp-app/src/external.rs
 msgid "{name} has no download for this computer"
-msgstr ""
+msgstr "{name} hat keinen Download für diesen Computer"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Installing the PS3 system software…"
-msgstr ""
+msgstr "Installation der PS3-Systemsoftware…"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Could not start the game: {e}"
-msgstr ""
+msgstr "Das Spiel konnte nicht gestartet werden: {e}"
 
 #: crates/romp-app/src/app/game.rs
 msgid "Close the running game first."
-msgstr ""
+msgstr "Schließe zuerst das laufende Spiel."
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "unknown"
-msgstr ""
+msgstr "unbekannt"
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "This computer: {0}. Server: {1}. The one you don't choose is kept as a backup."
-msgstr ""
+msgstr "Dieser Computer: {0}. Server: {1}. Der Server, den Sie nicht wählen, wird als Sicherung beibehalten."
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Pair again to turn on save sync"
-msgstr ""
+msgstr "Synchronisation wieder einschalten"
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Pair again to use favorites and collections"
-msgstr ""
+msgstr "Erneut verbinden um Favoriten und Sammlungen zu verwenden"
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Pair again to share when you last played"
-msgstr ""
+msgstr "Paaren, um zu teilen, wenn du zuletzt gespielt hast"
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Pair again to see how long you've played"
-msgstr ""
+msgstr "Verbinde erneut um zu sehen, wie lange du gespielt hast"
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Pair again to keep RetroAchievements progress current in RomM"
-msgstr ""
+msgstr "Erneut koppeln, um RetroAchievements Fortschritt in RomM aktuell zu halten"
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Save sync is off. Choose \"{}\" in the library."
-msgstr ""
+msgstr "Synchronisation ist aus. Wähle \"{}\" in der Bibliothek."
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Saves will sync when the server is reachable."
-msgstr ""
+msgstr "Die Speicherung wird synchronisiert, wenn der Server erreichbar ist."
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "A newer save is on the server. You'll be asked which to keep next time you play."
-msgstr ""
+msgstr "Ein neuerer Speicherplatz befindet sich auf dem Server. Sie werden gefragt, welche Sie das nächste Mal beim Spielen behalten möchten."
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Saves synced."
-msgstr ""
+msgstr "Speichert synchronisiert."
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Couldn't sync saves: {e}."
-msgstr ""
+msgstr "Speichern fehlgeschlagen: {e}."
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Choose a button, then press the key you want for it."
-msgstr ""
+msgstr "Wählen Sie eine Taste, dann drücken Sie die Taste, die Sie wollen."
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Choose a shortcut, then press the key you want for it. Esc always opens the game menu."
-msgstr ""
+msgstr "Wähle eine Verknüpfung und drücke dann die gewünschte Taste. Esc öffnet immer das Spielmenü."
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Choose a button, then press the controller button you want for it."
-msgstr ""
+msgstr "Wählen Sie eine Taste, dann drücken Sie die Controller-Taste, die Sie wollen."
 
 #: crates/romp-app/src/app/settings.rs
 msgid "System"
-msgstr ""
+msgstr "System"
 
 #: crates/romp-app/src/app/settings.rs crates/romp-app/src/app.rs
 msgid "Offline: showing downloaded games"
-msgstr ""
+msgstr "Offline: Heruntergeladene Spiele anzeigen"
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Keyboard"
-msgstr ""
+msgstr "Keyboard"
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Built in"
-msgstr ""
+msgstr "Eingebaut in"
 
 #: crates/romp-app/src/app/settings.rs crates/romp-app/src/ports.rs
 msgid "Controller"
-msgstr ""
+msgstr "Controller"
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Game menu"
-msgstr ""
+msgstr "Spielmenü"
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Shortcuts"
-msgstr ""
+msgstr "Verknüpfungen"
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Automatic ({})"
-msgstr ""
+msgstr "Automatisch ({})"
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Automatic"
-msgstr ""
+msgstr "Automatisch"
 
 #: crates/romp-app/src/app/settings.rs
 msgid "Esc always opens the game menu. Choose a different key."
-msgstr ""
+msgstr "Esc öffnet immer das Spielmenü. Wählen Sie einen anderen Schlüssel."
 
 #: crates/romp-app/src/app/settings.rs
 msgid "{0} now uses {1}."
-msgstr ""
+msgstr "{0} verwendet jetzt {1}."
 
 #: crates/romp-app/src/slots.rs
 msgid "Where you left off"
-msgstr ""
+msgstr "Wo du aufgehört hast"
 
 #: crates/romp-app/src/slots.rs
 msgid "Slot {}"
-msgstr ""
+msgstr "Platz {}"
 
 #: crates/romp-app/src/slots.rs
 msgid "Just now"
-msgstr ""
+msgstr "Gerade jetzt"
 
 #: crates/romp-app/src/slots.rs
 msgid "{n} minute ago"
 msgid_plural "{n} minutes ago"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{n} Minute vor"
+msgstr[1] "{n} Minuten her"
 
 #: crates/romp-app/src/slots.rs
 msgid "{n} hour ago"
 msgid_plural "{n} hours ago"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{n} Stunde vor"
+msgstr[1] "{n} Stunden vor"
 
 #: crates/romp-app/src/slots.rs
 msgid "Yesterday"
-msgstr ""
+msgstr "Gestern"
 
 #: crates/romp-app/src/slots.rs
 msgid "{n} day ago"
 msgid_plural "{n} days ago"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{n} Tag vor"
+msgstr[1] "{n} Tage"
 
 #: crates/romp-app/src/slots.rs
 msgid "On {}"
-msgstr ""
+msgstr "An {}"
 
 #: crates/romp-app/src/slots.rs
 msgid "Empty"
-msgstr ""
+msgstr "Leer"
 
 #: crates/romp-app/src/app.rs
 msgid "The request was declined."
-msgstr ""
+msgstr "Die Anfrage wurde abgelehnt."
 
 #: crates/romp-app/src/app.rs
 msgid "The code expired."
-msgstr ""
+msgstr "Der Code ist abgelaufen."
 
 #: crates/romp-app/src/app.rs
 msgid "This device was signed out by the server. Pair it again to continue."
-msgstr ""
+msgstr "Dieses Gerät wurde vom Server abgemeldet. Kopieren Sie es erneut, um fortzufahren."
 
 #: crates/romp-app/src/app.rs
 msgid "Syncing…"
-msgstr ""
+msgstr "Synchronisiere…"
 
 #: crates/romp-app/src/app.rs
 msgid "Sync failed: {e}"
-msgstr ""
+msgstr "Sync fehlgeschlagen: {e}"
 
 #: crates/romp-app/src/app.rs
 msgid "Could not reach the server. Check the address and that RomM is running."
-msgstr ""
+msgstr "Der Server konnte nicht erreicht werden. Überprüfen Sie die Adresse und das RomM läuft."
 
 #: crates/romp-app/src/app.rs
 msgid "This server does not support device sign-in. Update RomM to 5.0 or newer."
-msgstr ""
+msgstr "Dieser Server unterstützt keine Geräteanmeldung. Aktualisieren Sie RomM auf 5.0 oder neuer."
 
 #: crates/romp-app/src/app.rs
 msgid "Could not start sign-in: {e}."
-msgstr ""
+msgstr "Anmeldung fehlgeschlagen: {e}."
 
 #: crates/romp-app/src/app.rs
 msgid "That doesn't look like a RomM server ({e})."
-msgstr ""
+msgstr "Das sieht nicht aus wie ein RomM-Server ({e})."
 
 #: crates/romp-app/src/app/achievements.rs
 msgid "Enter your RetroAchievements username and password."
-msgstr ""
+msgstr "Geben Sie Ihren RetroAchievements Benutzernamen und Passwort ein."
 
 #: crates/romp-app/src/app/achievements.rs
 msgid "Signing in…"
-msgstr ""
+msgstr "Anmelden…"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Series"
-msgstr ""
+msgstr "Serie"
 
 #: crates/romp-app/src/app/collections.rs crates/romp-app/src/details.rs
 msgid "Franchises"
-msgstr ""
+msgstr "Franchise"
 
 #: crates/romp-app/src/app/collections.rs crates/romp-app/src/details.rs
 msgid "Genres"
-msgstr ""
+msgstr "Genres"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "All games"
-msgstr ""
+msgstr "Alle Spiele"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Favorites"
-msgstr ""
+msgstr "Favoriten"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Recently played"
-msgstr ""
+msgstr "Kürzlich gespielt"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "For you"
-msgstr ""
+msgstr "Für dich"
 
 #: crates/romp-app/src/app/collections.rs crates/romp-app/src/storage.rs
 msgid "Games"
-msgstr ""
+msgstr "Spiele"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "No games"
-msgstr ""
+msgstr "Keine Spiele"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "{0} game"
 msgid_plural "{0} games"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{0} Spiel"
+msgstr[1] "{0} Spiele"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Platforms"
-msgstr ""
+msgstr "Plattformen"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Collections"
-msgstr ""
+msgstr "Sammlungen"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Pair again to show them"
-msgstr ""
+msgstr "Erneut koppeln, um sie zu zeigen"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Couldn't update \"{0}\": {1}."
-msgstr ""
+msgstr "Konnte \"{0}nicht aktualisieren: {1}."
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Couldn't create the collection: {e}."
-msgstr ""
+msgstr "Die Sammlung konnte nicht erstellt werden: {e}."
 
 #: crates/romp-app/src/app/collections.rs
 msgid "New collection"
-msgstr ""
+msgstr "Neue Sammlung"
 
 #: crates/romp-app/src/app/collections.rs crates/romp-app/src/pad_labels.rs
 msgid "Create"
-msgstr ""
+msgstr "Anlegen"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Rename collection"
-msgstr ""
+msgstr "Sammlung umbenennen"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Rename"
-msgstr ""
+msgstr "Umbenennen"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Delete \"{}\"?"
-msgstr ""
+msgstr "\"{}\" löschen?"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "The collection is removed from your RomM server. Its games stay in your library."
-msgstr ""
+msgstr "Die Sammlung wird von Ihrem RomM-Server entfernt. Die Spiele bleiben in Ihrer Bibliothek."
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Delete"
-msgstr ""
+msgstr "Löschen"
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Couldn't rename \"{0}\": {1}."
-msgstr ""
+msgstr "Konnte \"{0}nicht umbenennen \": {1}."
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Couldn't delete \"{0}\": {1}."
-msgstr ""
+msgstr "Konnte \"{0}nicht löschen: {1}."
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "D-pad"
-msgstr ""
+msgstr "D-pad"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Move"
-msgstr ""
+msgstr "Bewegen"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Open"
-msgstr ""
+msgstr "Öffnen"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Change list"
-msgstr ""
+msgstr "Liste ändern"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Settings"
-msgstr ""
+msgstr "Einstellungen"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Play or download"
-msgstr ""
+msgstr "Abspielen oder herunterladen"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Favorite"
-msgstr ""
+msgstr "Favorit"
 
 #: crates/romp-app/src/app/navigation.rs crates/romp-app/src/pad_labels.rs
 msgid "Back"
-msgstr ""
+msgstr "Zurück"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Change section"
-msgstr ""
+msgstr "Abschnitt ändern"
 
 #: crates/romp-app/src/bios.rs
 msgid "This game needs BIOS files your server doesn't have: {}. Add them to this platform's firmware in RomM."
-msgstr ""
+msgstr "Dieses Spiel benötigt BIOS-Dateien, die Ihr Server nicht hat: {}. Füge sie zur Firmware dieser Plattform in RomM hinzu."
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Higher is sharper and needs a faster computer."
-msgstr ""
+msgstr "Höher ist schärfer und benötigt einen schnelleren Computer."
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Keeps textures sharp on floors and walls seen at an angle."
-msgstr ""
+msgstr "Hält Texturen scharf auf Böden und Wänden aus einem Winkel gesehen."
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Shows a wider picture in games that have a widescreen patch."
-msgstr ""
+msgstr "Zeigt ein größeres Bild in Spielen, die einen Widescreen-Patch haben."
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Resolution"
-msgstr ""
+msgstr "Auflösung"
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Native"
-msgstr ""
+msgstr "Nativ"
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Anisotropic filtering"
-msgstr ""
+msgstr "Anisotropic filtering"
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Widescreen"
-msgstr ""
+msgstr "Breitbild"
 
 #: crates/romp-app/src/console_settings.rs
 msgid "On"
-msgstr ""
+msgstr "An"
 
 #: crates/romp-app/src/cores.rs
 msgid "Could not reach the download server"
-msgstr ""
+msgstr "Konnte den Download-Server nicht erreichen"
 
 #: crates/romp-app/src/cores.rs
 msgid "Could not check the core download"
-msgstr ""
+msgstr "Konnte den Download nicht überprüfen"
 
 #: crates/romp-app/src/cores.rs
 msgid "Could not reach the core download server"
-msgstr ""
+msgstr "Konnte den Download-Server nicht erreichen"
 
 #: crates/romp-app/src/cores.rs
 msgid "{0} is not available for this computer ({1})"
-msgstr ""
+msgstr "{0} ist für diesen Computer nicht verfügbar ({1})"
 
 #: crates/romp-app/src/cores.rs
 msgid "The core download did not match its checksum"
-msgstr ""
+msgstr "Der Download entspricht nicht der Prüfsumme"
 
 #: crates/romp-app/src/credentials.rs
 msgid "Could not store the sign-in in the keychain: {e}"
-msgstr ""
+msgstr "Anmeldung konnte nicht im Schlüsselbund gespeichert werden: {e}"
 
 #: crates/romp-app/src/details.rs
 msgid "Jan"
-msgstr ""
+msgstr "Jörg"
 
 #: crates/romp-app/src/details.rs
 msgid "Feb"
-msgstr ""
+msgstr "Feb"
 
 #: crates/romp-app/src/details.rs
 msgid "Mar"
-msgstr ""
+msgstr "Mär"
 
 #: crates/romp-app/src/details.rs
 msgid "Apr"
-msgstr ""
+msgstr "Apr"
 
 #: crates/romp-app/src/details.rs
 msgid "May"
-msgstr ""
+msgstr "Mai"
 
 #: crates/romp-app/src/details.rs
 msgid "Jun"
-msgstr ""
+msgstr "Juni"
 
 #: crates/romp-app/src/details.rs
 msgid "Jul"
-msgstr ""
+msgstr "Jul"
 
 #: crates/romp-app/src/details.rs
 msgid "Aug"
-msgstr ""
+msgstr "Aug"
 
 #: crates/romp-app/src/details.rs
 msgid "Sep"
-msgstr ""
+msgstr "Sep"
 
 #: crates/romp-app/src/details.rs
 msgid "Oct"
-msgstr ""
+msgstr "Okt"
 
 #: crates/romp-app/src/details.rs
 msgid "Nov"
-msgstr ""
+msgstr "Nov"
 
 #: crates/romp-app/src/details.rs
 msgid "Dec"
-msgstr ""
+msgstr "Dez"
 
 #: crates/romp-app/src/details.rs
 msgid "{d} {month} {y}"
-msgstr ""
+msgstr "{d} {month} {y}"
 
 #: crates/romp-app/src/details.rs
 msgid "1 player"
-msgstr ""
+msgstr "1 Spieler"
 
 #: crates/romp-app/src/details.rs
 msgid "{} players"
-msgstr ""
+msgstr "{} Spieler"
 
 #: crates/romp-app/src/details.rs
 msgid "Console"
-msgstr ""
+msgstr "Konsole"
 
 #: crates/romp-app/src/details.rs
 msgid "Portable Console"
-msgstr ""
+msgstr "Tragbare Konsole"
 
 #: crates/romp-app/src/details.rs
 msgid "Arcade"
-msgstr ""
+msgstr "Arcade"
 
 #: crates/romp-app/src/details.rs
 msgid "Computer"
-msgstr ""
+msgstr "Computer"
 
 #: crates/romp-app/src/details.rs
 msgid "Operating System"
-msgstr ""
+msgstr "Betriebssystem"
 
 #: crates/romp-app/src/details.rs
 msgid "Platform"
-msgstr ""
+msgstr "Plattform"
 
 #: crates/romp-app/src/details.rs
 msgid "Company"
-msgstr ""
+msgstr "Firma"
 
 #: crates/romp-app/src/details.rs
 msgid "Companies"
-msgstr ""
+msgstr "Firmen"
 
 #: crates/romp-app/src/details.rs
 msgid "Released"
-msgstr ""
+msgstr "Veröffentlicht"
 
 #: crates/romp-app/src/details.rs
 msgid "Genre"
-msgstr ""
+msgstr "Genre"
 
 #: crates/romp-app/src/details.rs
 msgid "Developer"
-msgstr ""
+msgstr "Entwickler"
 
 #: crates/romp-app/src/details.rs
 msgid "Developers"
-msgstr ""
+msgstr "Entwickler"
 
 #: crates/romp-app/src/details.rs
 msgid "Publisher"
-msgstr ""
+msgstr "Herausgeber"
 
 #: crates/romp-app/src/details.rs
 msgid "Publishers"
-msgstr ""
+msgstr "Herausgeber"
 
 #: crates/romp-app/src/details.rs
 msgid "Franchise"
-msgstr ""
+msgstr "Franchise"
 
 #: crates/romp-app/src/details.rs
 msgid "Rating"
-msgstr ""
+msgstr "Bewertung"
 
 #: crates/romp-app/src/details.rs
 msgid "Size"
-msgstr ""
+msgstr "Größe"
 
 #: crates/romp-app/src/download.rs
 msgid "Could not reach the server"
-msgstr ""
+msgstr "Server konnte nicht erreicht werden"
 
 #: crates/romp-app/src/download.rs
 msgid "Download failed: {e}"
-msgstr ""
+msgstr "Download fehlgeschlagen: {e}"
 
 #: crates/romp-app/src/download.rs
 msgid "Could not save the file: {e}"
-msgstr ""
+msgstr "Datei konnte nicht gespeichert werden: {e}"
 
 #: crates/romp-app/src/download.rs
 msgid "The downloaded file is corrupted; try again"
-msgstr ""
+msgstr "Die heruntergeladene Datei ist beschädigt; versuchen Sie es erneut"
 
 #: crates/romp-app/src/download.rs
 msgid "Download cancelled"
-msgstr ""
+msgstr "Download abgebrochen"
 
 #: crates/romp-app/src/download.rs
 msgid "The server sent an invalid file path"
-msgstr ""
+msgstr "Der Server hat einen ungültigen Dateipfad gesendet"
 
 #: crates/romp-app/src/external.rs
 msgid "Could not reach GitHub to download {name}"
-msgstr ""
+msgstr "GitHub konnte nicht erreicht werden, um {name} herunterzuladen"
 
 #: crates/romp-app/src/external.rs
 msgid "{name} is not available right now ({e})"
-msgstr ""
+msgstr "{name} ist momentan nicht verfügbar ({e})"
 
 #: crates/romp-app/src/external.rs
 msgid "Could not unpack {name}: {e}"
-msgstr ""
+msgstr "Konnte {name}nicht entpacken: {e}"
 
 #: crates/romp-app/src/external.rs
 msgid "The {name} download did not contain the emulator"
-msgstr ""
+msgstr "Der {name} Download enthielt keinen Emulator"
 
 #: crates/romp-app/src/looks.rs
 msgid "Sharp pixels"
-msgstr ""
+msgstr "Scharfe Pixel"
 
 #: crates/romp-app/src/looks.rs
 msgid "Smooth"
-msgstr ""
+msgstr "Glatt"
 
 #: crates/romp-app/src/looks.rs
 msgid "Handheld screen"
-msgstr ""
+msgstr "Handheld-Bildschirm"
 
 #: crates/romp-app/src/looks.rs
 msgid "TV"
-msgstr ""
+msgstr "TM"
 
 #: crates/romp-app/src/looks.rs
 msgid "Monitor"
-msgstr ""
+msgstr "Überwachen"
 
 #: crates/romp-app/src/looks.rs
 msgid "Subtle"
-msgstr ""
+msgstr "Subtil"
 
 #: crates/romp-app/src/looks.rs
 msgid "Strong"
-msgstr ""
+msgstr "Stark"
 
 #: crates/romp-app/src/looks.rs
 msgid "Light"
-msgstr ""
+msgstr "Hell"
 
 #: crates/romp-app/src/looks.rs
 msgid "Medium"
-msgstr ""
+msgstr "Mittel"
 
 #: crates/romp-app/src/looks.rs
 msgid "Pocket"
-msgstr ""
+msgstr "Tasche"
 
 #: crates/romp-app/src/looks.rs
 msgid "Original green"
-msgstr ""
+msgstr "Ursprüngliches Grün"
 
 #: crates/romp-app/src/looks.rs
 msgid "Backlit"
-msgstr ""
+msgstr "Hintergrundbeleuchtung"
 
 #: crates/romp-app/src/looks.rs
 msgid "Original"
-msgstr ""
+msgstr "Original"
 
 #: crates/romp-app/src/looks.rs
 msgid "Vivid"
-msgstr ""
+msgstr "Lebhaft"
 
 #: crates/romp-app/src/looks.rs
 msgid "Blend"
-msgstr ""
+msgstr "Blend"
 
 #: crates/romp-app/src/looks.rs
 msgid "Style"
-msgstr ""
+msgstr "Stil"
 
 #: crates/romp-app/src/looks.rs
 msgid "Screen"
-msgstr ""
+msgstr "Bildschirm"
 
 #: crates/romp-app/src/looks.rs
 msgid "Curvature"
-msgstr ""
+msgstr "Krümmung"
 
 #: crates/romp-app/src/looks.rs
 msgid "Scanlines"
-msgstr ""
+msgstr "Scanlines"
 
 #: crates/romp-app/src/looks.rs
 msgid "Mask"
-msgstr ""
+msgstr "Maske"
 
 #: crates/romp-app/src/looks.rs
 msgid "Model"
-msgstr ""
+msgstr "Modell"
 
 #: crates/romp-app/src/looks.rs
 msgid "Colours"
-msgstr ""
+msgstr "Farben"
 
 #: crates/romp-app/src/looks.rs
 msgid "Dithering"
-msgstr ""
+msgstr "Dithering"
 
 #: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
 msgid "Start"
-msgstr ""
+msgstr "Start"
 
 #: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
 msgid "Select"
-msgstr ""
+msgstr "Auswählen"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Up"
-msgstr ""
+msgstr "Hoch"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Down"
-msgstr ""
+msgstr "Unten"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Left"
-msgstr ""
+msgstr "Links"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Right"
-msgstr ""
+msgstr "Rechts"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Pause"
-msgstr ""
+msgstr "Pause"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Save state"
-msgstr ""
+msgstr "Status speichern"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Load state"
-msgstr ""
+msgstr "Ladezustand"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Next save slot"
-msgstr ""
+msgstr "Nächster Speicherplatz"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Full screen"
-msgstr ""
+msgstr "Vollbild"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Screenshot"
-msgstr ""
+msgstr "Screenshot"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Not set"
-msgstr ""
+msgstr "Nicht gesetzt"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "D-pad up"
-msgstr ""
+msgstr "D-Pad hoch"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "D-pad down"
-msgstr ""
+msgstr "D-Pad runter"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "D-pad left"
-msgstr ""
+msgstr "D-Pad links"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "D-pad right"
-msgstr ""
+msgstr "D-Pad rechts"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Unknown"
-msgstr ""
+msgstr "Unbekannt"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Bottom face button"
-msgstr ""
+msgstr "Untere Flächentaste"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Right face button"
-msgstr ""
+msgstr "Rechter Flächentaste"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Left face button"
-msgstr ""
+msgstr "Schaltfläche linke Fläche"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Top face button"
-msgstr ""
+msgstr "Obere Flächen-Taste"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Left bumper"
-msgstr ""
+msgstr "Linke Stoßstange"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Right bumper"
-msgstr ""
+msgstr "Rechter Stoß"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Left trigger"
-msgstr ""
+msgstr "Linker Auslöser"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Right trigger"
-msgstr ""
+msgstr "Rechter Auslöser"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Guide"
-msgstr ""
+msgstr "Anleitung"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Menu"
-msgstr ""
+msgstr "Menü"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "View"
-msgstr ""
+msgstr "Ansicht"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Xbox button"
-msgstr ""
+msgstr "Xbox Taste"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Cross"
-msgstr ""
+msgstr "Kreuz"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Circle"
-msgstr ""
+msgstr "Kreis"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Square"
-msgstr ""
+msgstr "Quadrat"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Triangle"
-msgstr ""
+msgstr "Dreieck"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Options"
-msgstr ""
+msgstr "Optionen"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Share"
-msgstr ""
+msgstr "Teilen"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "PS button"
-msgstr ""
+msgstr "PS-Taste"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Home"
-msgstr ""
+msgstr "Zuhause"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Left stick press"
-msgstr ""
+msgstr "Links-Stick drücken"
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Right stick press"
-msgstr ""
+msgstr "Rechter Stick Druck"
 
 #: crates/romp-app/src/play.rs
 msgid "Mouse captured. Press {key} to release it."
-msgstr ""
+msgstr "Maus aufgenommen. Drücke {key} um sie freizugeben."
 
 #: crates/romp-app/src/play.rs
 msgid "The game hasn't drawn anything yet"
-msgstr ""
+msgstr "Das Spiel hat noch nichts gezeichnet"
 
 #: crates/romp-app/src/play.rs
 msgid "Screenshot saved"
-msgstr ""
+msgstr "Screenshot gespeichert"
 
 #: crates/romp-app/src/play.rs
 msgid "Couldn't save the screenshot: {e}"
-msgstr ""
+msgstr "Screenshot konnte nicht gespeichert werden: {e}"
 
 #: crates/romp-app/src/play.rs
 msgid "Loading states is off in hardcore mode"
-msgstr ""
+msgstr "Lade Status ist im Hardcore-Modus aus"
 
 #: crates/romp-app/src/play.rs
 msgid "Save slot {slot}"
@@ -1046,15 +1046,15 @@ msgstr ""
 
 #: crates/romp-app/src/play.rs
 msgid "Port {}"
-msgstr ""
+msgstr "Port {}"
 
 #: crates/romp-app/src/play.rs
 msgid "Not started yet"
-msgstr ""
+msgstr "Noch nicht gestartet"
 
 #: crates/romp-app/src/play.rs
 msgid "Starting…"
-msgstr ""
+msgstr "Starte…"
 
 #: crates/romp-app/src/play.rs
 msgid "{name} → Player {p}"
@@ -1062,15 +1062,15 @@ msgstr ""
 
 #: crates/romp-app/src/play.rs
 msgid "{} connected. Choose its player in Settings."
-msgstr ""
+msgstr "{} verbunden. Wähle seinen Spieler in den Einstellungen."
 
 #: crates/romp-app/src/play.rs
 msgid "The game couldn't continue from where you left off, so that automatic save was set aside. Start the game again to play from the beginning or from a save slot."
-msgstr ""
+msgstr "Das Spiel konnte dort nicht weitergehen, wo Sie aufgehört haben, so dass das automatische Speichern beiseite gesetzt wurde. Starte das Spiel erneut um von Anfang an oder von einem Spielstand aus zu spielen."
 
 #: crates/romp-app/src/play.rs
 msgid "Your keyboard goes to the game. Press {key} for the menu."
-msgstr ""
+msgstr "Deine Tastatur geht ins Spiel. Drücke {key} für das Menü."
 
 #: crates/romp-app/src/play.rs
 msgid "Saved to slot {slot}"
@@ -1078,115 +1078,115 @@ msgstr ""
 
 #: crates/romp-app/src/play.rs
 msgid "Could not save slot {slot}"
-msgstr ""
+msgstr "Konnte Slot {slot} nicht speichern"
 
 #: crates/romp-app/src/play.rs
 msgid "Loaded slot {slot}"
-msgstr ""
+msgstr "Geladener Slot {slot}"
 
 #: crates/romp-app/src/play.rs
 msgid "Slot {slot} is empty or unreadable"
-msgstr ""
+msgstr "Slot- {slot} ist leer oder unlesbar"
 
 #: crates/romp-app/src/play.rs
 msgid "a signal"
-msgstr ""
+msgstr "ein Signal"
 
 #: crates/romp-app/src/play.rs
 msgid "code {}"
-msgstr ""
+msgstr "code {}"
 
 #: crates/romp-app/src/play.rs
 msgid "The emulator stopped ({code})."
-msgstr ""
+msgstr "Der Emulator wurde gestoppt ({code})."
 
 #: crates/romp-app/src/play_stats.rs
 msgid "under a minute"
-msgstr ""
+msgstr "unter einer Minute"
 
 #: crates/romp-app/src/play_stats.rs
 msgid "{m} min"
-msgstr ""
+msgstr "{m} min"
 
 #: crates/romp-app/src/play_stats.rs
 msgid "{h} h"
-msgstr ""
+msgstr "{h} h"
 
 #: crates/romp-app/src/play_stats.rs
 msgid "{h} h {m} min"
-msgstr ""
+msgstr "{h} h {m} min"
 
 #: crates/romp-app/src/play_stats.rs
 msgid "{n} session"
 msgid_plural "{n} sessions"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{n} Sitzung"
+msgstr[1] "{n} Sitzungen"
 
 #: crates/romp-app/src/play_stats.rs
 msgid "Played {}"
-msgstr ""
+msgstr "Gespielt {}"
 
 #: crates/romp-app/src/play_stats.rs
 msgid "last played {when}"
-msgstr ""
+msgstr "zuletzt gespielter {when}"
 
 #: crates/romp-app/src/romm/client.rs
 msgid "Enter your RomM server address."
-msgstr ""
+msgstr "Geben Sie Ihre RomM-Server-Adresse ein."
 
 #: crates/romp-app/src/romm/client.rs
 msgid "This server runs RomM {version}. RomP needs RomM 5.0 or newer."
-msgstr ""
+msgstr "Dieser Server läuft RomM {version}. RomP benötigt RomM 5.0 oder neuer."
 
 #: crates/romp-app/src/romm/client.rs
 msgid "Unrecognised RomM version \"{version}\"."
-msgstr ""
+msgstr "Unbekannte RomM-Version \"{version}\"."
 
 #: crates/romp-app/src/romm/client.rs
 msgid "Because you played {seed}"
-msgstr ""
+msgstr "Weil du {seed} gespielt hast"
 
 #: crates/romp-app/src/romm/client.rs
 msgid "Picked for you"
-msgstr ""
+msgstr "Für dich ausgewählt"
 
 #: crates/romp-app/src/rpcs3.rs
 msgid "RPCS3 could not install the PS3 system software."
-msgstr ""
+msgstr "RPCS3 konnte die PS3-Systemsoftware nicht installieren."
 
 #: crates/romp-app/src/rpcs3.rs
 msgid "RomP plays PS3 games stored as a game folder, an ISO, or a zip or 7z of one, and this one is a {kind} file."
-msgstr ""
+msgstr "RomP spielt PS3-Spiele, die als Spielordner, ISO oder Zip oder 7z eines Spiels gespeichert sind, und dies ist eine {kind} Datei."
 
 #: crates/romp-app/src/rpcs3.rs
 msgid "The download has no name"
-msgstr ""
+msgstr "Der Download hat keinen Namen"
 
 #: crates/romp-app/src/rpcs3.rs
 msgid "Could not unpack the game: {e}"
-msgstr ""
+msgstr "Das Spiel konnte nicht entpackt werden: {e}"
 
 #: crates/romp-app/src/rpcs3.rs
 msgid "The archive has no PS3 game folder or ISO in it"
-msgstr ""
+msgstr "Das Archiv hat keinen PS3 Spielordner oder ISO darin"
 
 #: crates/romp-app/src/storage.rs
 msgid "Saves and states"
-msgstr ""
+msgstr "Speichert und Status"
 
 #: crates/romp-app/src/storage.rs
 msgid "BIOS files"
-msgstr ""
+msgstr "BIOS-Dateien"
 
 #: crates/romp-app/src/storage.rs
 msgid "Emulators"
-msgstr ""
+msgstr "Emulatoren"
 
 #: crates/romp-app/src/storage.rs
 msgid "Images"
-msgstr ""
+msgstr "Bilder"
 
 #: crates/romp-app/src/xemu.rs
 msgid "Could not reach GitHub to download the Xbox hard disk"
-msgstr ""
+msgstr "Konnte GitHub nicht erreichen, um die Xbox-Festplatte herunterzuladen"
 
