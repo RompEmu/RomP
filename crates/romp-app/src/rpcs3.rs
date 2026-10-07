@@ -427,6 +427,7 @@ mod tests {
         Asset {
             name: name.into(),
             browser_download_url: format!("https://example.com/{name}"),
+            digest: None,
         }
     }
 

@@ -10,6 +10,8 @@ const LOG_TAIL: usize = 40;
 pub struct Asset {
     pub name: String,
     pub browser_download_url: String,
+    /// `sha256:<hex>`, computed by GitHub when the asset was uploaded.
+    pub digest: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -66,6 +68,12 @@ impl Emulator {
             .bytes()
             .await
             .map_err(|e| e.to_string())?;
+        if !matches_digest(asset.digest.as_deref(), &bytes) {
+            return Err(tr::tr!(
+                "The {name} download did not match its checksum",
+                name
+            ));
+        }
         let version_dir = self.dir.join(&release.tag_name);
         let file = asset.name.clone();
         let dir = version_dir.clone();
@@ -95,6 +103,13 @@ impl Emulator {
         .map_err(|e| e.to_string())?;
         Ok(exe)
     }
+}
+
+/// A release asset without a digest is refused, so a download is never installed unchecked.
+fn matches_digest(digest: Option<&str>, bytes: &[u8]) -> bool {
+    digest
+        .and_then(|d| d.strip_prefix("sha256:"))
+        .is_some_and(|hex| hex.eq_ignore_ascii_case(&crate::cores::sha256_hex(bytes)))
 }
 
 fn unpack(bytes: &[u8], dir: &Path, name: &str) -> Result<(), String> {
@@ -253,6 +268,22 @@ pub fn launch(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_download_must_match_the_digest_github_published() {
+        let sha256 = crate::cores::sha256_hex(b"binary");
+        assert!(matches_digest(Some(&format!("sha256:{sha256}")), b"binary"));
+        assert!(matches_digest(
+            Some(&format!("sha256:{}", sha256.to_ascii_uppercase())),
+            b"binary"
+        ));
+        assert!(!matches_digest(Some(&format!("sha256:{sha256}")), b"other"));
+        assert!(
+            !matches_digest(Some(&sha256), b"binary"),
+            "needs the sha256: prefix"
+        );
+        assert!(!matches_digest(None, b"binary"), "no digest, no install");
+    }
 
     #[cfg(target_os = "macos")]
     #[test]
