@@ -625,7 +625,10 @@ impl Controller {
                 }
             };
             let hdd = match exe {
-                Ok(_) => xemu.ensure_hdd_template(&http, xemu::HDD_IMAGE).await,
+                Ok(_) => {
+                    xemu.ensure_hdd_template(&http, xemu::HDD_IMAGE, xemu::HDD_IMAGE_SHA256)
+                        .await
+                }
                 Err(ref e) => Err(e.clone()),
             };
             let system = paths::system_dir();

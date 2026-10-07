@@ -761,6 +761,10 @@ msgid "{name} is not available right now ({e})"
 msgstr ""
 
 #: crates/romp-app/src/external.rs
+msgid "The {name} download did not match its checksum"
+msgstr ""
+
+#: crates/romp-app/src/external.rs
 msgid "Could not unpack {name}: {e}"
 msgstr ""
 
@@ -1188,4 +1192,8 @@ msgstr ""
 
 #: crates/romp-app/src/xemu.rs
 msgid "Could not reach GitHub to download the Xbox hard disk"
+msgstr ""
+
+#: crates/romp-app/src/xemu.rs
+msgid "The Xbox hard disk download did not match its checksum"
 msgstr ""

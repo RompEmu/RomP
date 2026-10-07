@@ -337,6 +337,8 @@ pub fn config_toml(cfg: &LaunchConfig) -> String {
 pub const RELEASES: &str = "https://api.github.com/repos/xemu-project/xemu/releases/latest";
 pub const HDD_IMAGE: &str =
     "https://github.com/xemu-project/xemu-hdd-image/releases/download/1.0/xbox_hdd.qcow2.zip";
+pub const HDD_IMAGE_SHA256: &str =
+    "d9f5a4c1224ff24cf9066067bda70cc8b9c874ea22b9c542eb2edbfc4621bb39";
 const HDD_FILE: &str = "xbox_hdd.qcow2";
 
 fn exe_in(dir: &Path, asset: &str) -> PathBuf {
@@ -381,6 +383,7 @@ impl Xemu {
         &self,
         http: &reqwest::Client,
         url: &str,
+        sha256: &str,
     ) -> Result<PathBuf, String> {
         let path = self.hdd_template();
         if path.is_file() {
@@ -396,6 +399,11 @@ impl Xemu {
             .bytes()
             .await
             .map_err(|e| e.to_string())?;
+        if !crate::cores::sha256_hex(&bytes).eq_ignore_ascii_case(sha256) {
+            return Err(tr::tr!(
+                "The Xbox hard disk download did not match its checksum"
+            ));
+        }
         let target = path.clone();
         tokio::task::spawn_blocking(move || -> Result<(), String> {
             let mut archive =
@@ -453,6 +461,7 @@ mod tests {
         Asset {
             name: name.into(),
             browser_download_url: format!("https://example.com/{name}"),
+            digest: None,
         }
     }
 
@@ -564,7 +573,11 @@ mod tests {
             .and(path("/latest"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "tag_name": "v0.9.0",
-                "assets": [{ "name": name, "browser_download_url": format!("{}/{name}", server.uri()) }]
+                "assets": [{
+                    "name": name,
+                    "browser_download_url": format!("{}/{name}", server.uri()),
+                    "digest": format!("sha256:{}", crate::cores::sha256_hex(&zip)),
+                }]
             })))
             .mount(&server)
             .await;
@@ -582,6 +595,38 @@ mod tests {
             .unwrap();
         assert_eq!(exe, dir.path().join("v0.9.0/xemu.app/Contents/MacOS/xemu"));
         assert_eq!(xemu.installed(), Some(exe));
+    }
+
+    #[tokio::test]
+    async fn the_hard_disk_is_only_kept_when_it_matches_its_checksum() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        zip.start_file(HDD_FILE, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut zip, b"blank").unwrap();
+        let zip = zip.finish().unwrap().into_inner();
+        let sha256 = crate::cores::sha256_hex(&zip);
+        Mock::given(method("GET"))
+            .and(path("/hdd.zip"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(zip))
+            .mount(&server)
+            .await;
+        let url = format!("{}/hdd.zip", server.uri());
+        let dir = tempfile::tempdir().unwrap();
+        let xemu = Xemu::new(dir.path().to_path_buf());
+        let http = reqwest::Client::new();
+        assert!(xemu
+            .ensure_hdd_template(&http, &url, &"0".repeat(64))
+            .await
+            .is_err());
+        assert!(!xemu.hdd_template().exists());
+        let hdd = xemu
+            .ensure_hdd_template(&http, &url, &sha256)
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(hdd).unwrap(), b"blank");
     }
 
     #[test]
