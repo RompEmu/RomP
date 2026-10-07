@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-06 20:12\n"
+"PO-Revision-Date: 2026-10-07 17:47\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -785,6 +785,10 @@ msgid "{name} is not available right now ({e})"
 msgstr "{name} غير متوفر الآن ({e})"
 
 #: crates/romp-app/src/external.rs
+msgid "The {name} download did not match its checksum"
+msgstr ""
+
+#: crates/romp-app/src/external.rs
 msgid "Could not unpack {name}: {e}"
 msgstr "تعذر إلغاء الحزمة {name}: {e}"
 
@@ -1217,4 +1221,8 @@ msgstr "الصور"
 #: crates/romp-app/src/xemu.rs
 msgid "Could not reach GitHub to download the Xbox hard disk"
 msgstr "تعذر الوصول إلى GitHub لتحميل قرص Xbox الثابت"
+
+#: crates/romp-app/src/xemu.rs
+msgid "The Xbox hard disk download did not match its checksum"
+msgstr ""
 

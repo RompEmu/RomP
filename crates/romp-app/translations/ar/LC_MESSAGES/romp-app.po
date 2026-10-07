@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-06 20:12\n"
+"PO-Revision-Date: 2026-10-06 20:47\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -128,7 +128,7 @@ msgstr "المفضلة"
 
 #: crates/romp-app/ui/app.slint
 msgid "Downloaded"
-msgstr "تم التحميل"
+msgstr "نازل"
 
 #: crates/romp-app/ui/app.slint
 msgid "On server"
@@ -562,11 +562,11 @@ msgstr "الألعاب و الحفظ تأتي من خادم روم."
 
 #: crates/romp-app/ui/app.slint
 msgid "Emulation by libretro cores and xemu."
-msgstr "الصياغة بواسطة نواة الليبرترو و و xemu."
+msgstr "محاكاة أجهزة اللعب من libretro و xemu."
 
 #: crates/romp-app/ui/app.slint
 msgid "Free software under the GNU GPL, version 3 or later."
-msgstr "البرمجيات الحرة تحت GNU GPL، الإصدار 3 أو بعده."
+msgstr "برمجية حرة بموجب رخصة GNU GPL، الإصدار 3 أو أحدث."
 
 #: crates/romp-app/ui/app.slint
 msgid "RomP and the emulators it downloads are each covered by their own license."
