@@ -16,6 +16,11 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - Saturn games downloaded as a zip of a CD image load their disc, instead of the Saturn starting with an empty drive.
 
+### Security
+
+- xemu and RPCS3 downloads are checked against the checksum GitHub publishes for them, and the Xbox hard disk image against a known one; a download that doesn't match isn't installed. By @gantoine in [#12](https://github.com/RompEmu/RomP/pull/12).
+- The Linux AppImage is built with fixed, checksum-checked versions of appimagetool and its runtime, instead of their latest builds. By @gantoine in [#11](https://github.com/RompEmu/RomP/pull/11).
+
 ## [0.11.1] - 2026-10-04
 
 ### Fixed
