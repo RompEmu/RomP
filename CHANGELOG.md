@@ -4,9 +4,11 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-07
+
 ### Added
 
-- Settings → General has a Language choice: System, English, Français, Español, Deutsch and العربية. Translations are on their way from Crowdin; until a language has some, it shows English, and RomP only follows the system's language once it has. In Arabic the interface reads right to left.
+- RomP speaks French, Spanish, German and Arabic, translated on [Crowdin](https://crowdin.com/project/romp). It follows the system's language, or the one picked in Settings → General → Language. In Arabic the interface reads right to left.
 
 ### Changed
 
@@ -213,7 +215,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/RompEmu/RomP/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/RompEmu/RomP/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/RompEmu/RomP/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/RompEmu/RomP/compare/v0.9.0...v0.10.0
