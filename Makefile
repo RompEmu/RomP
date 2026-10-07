@@ -10,6 +10,13 @@ ICON := crates/romp-app/assets/icon-macos.png
 MOLTENVK := 1.4.1
 MOLTENVK_SHA256 := 5ea0c259df7ded9a275444820f09cced54d6e5a7c7a31d262de62a5cdb7e15cf
 MOLTENVK_TAR := target/MoltenVK-$(MOLTENVK)-macos.tar
+APPIMAGETOOL_VERSION := 1.9.1
+APPIMAGETOOL_SHA256 := ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+APPIMAGETOOL := target/appimagetool-$(APPIMAGETOOL_VERSION)-x86_64.AppImage
+# appimagetool otherwise embeds the runtime from type2-runtime's moving "continuous" release.
+APPIMAGE_RUNTIME_VERSION := 20251108
+APPIMAGE_RUNTIME_SHA256 := 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+APPIMAGE_RUNTIME := target/appimage-runtime-$(APPIMAGE_RUNTIME_VERSION)-x86_64
 
 APP := $(DIST)/RomP.app
 ICONSET := $(DIST)/RomP.iconset
@@ -18,7 +25,6 @@ LINUX_NAME := RomP-$(RELEASE)-linux-$(ARCH)
 LINUX_TAR := $(DIST)/$(LINUX_NAME).tar.gz
 APPDIR := $(DIST)/RomP.AppDir
 APPIMAGE := $(DIST)/RomP-$(RELEASE)-$(ARCH).AppImage
-APPIMAGETOOL ?= appimagetool
 WINDOWS_NAME := RomP-$(RELEASE)-windows-$(ARCH)
 WINDOWS_ZIP := $(DIST)/$(WINDOWS_NAME).zip
 
@@ -58,6 +64,19 @@ $(MOLTENVK_TAR):
 	echo "$(MOLTENVK_SHA256)  $@.tmp" | shasum -a 256 -c -
 	mv $@.tmp $@
 
+$(APPIMAGETOOL):
+	mkdir -p $(dir $@)
+	curl -fsSL -o $@.tmp https://github.com/AppImage/appimagetool/releases/download/$(APPIMAGETOOL_VERSION)/appimagetool-x86_64.AppImage
+	echo "$(APPIMAGETOOL_SHA256)  $@.tmp" | sha256sum -c -
+	chmod +x $@.tmp
+	mv $@.tmp $@
+
+$(APPIMAGE_RUNTIME):
+	mkdir -p $(dir $@)
+	curl -fsSL -o $@.tmp https://github.com/AppImage/type2-runtime/releases/download/$(APPIMAGE_RUNTIME_VERSION)/runtime-x86_64
+	echo "$(APPIMAGE_RUNTIME_SHA256)  $@.tmp" | sha256sum -c -
+	mv $@.tmp $@
+
 app: build $(MOLTENVK_TAR)
 	rm -rf $(APP) $(ICONSET)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Frameworks $(APP)/Contents/Resources $(ICONSET)
@@ -84,7 +103,7 @@ dist: dist-$(PLATFORM)
 dist-macos: app
 	$(zip_app)
 
-appimage: build
+appimage: build $(APPIMAGETOOL) $(APPIMAGE_RUNTIME)
 	rm -rf $(APPDIR) $(APPIMAGE)
 	mkdir -p $(APPDIR)/usr/bin $(APPDIR)/usr/share/applications $(APPDIR)/usr/share/icons/hicolor/256x256/apps
 	cp $(BIN)/romp $(BIN)/romp-runner $(APPDIR)/usr/bin/
@@ -94,7 +113,7 @@ appimage: build
 	cp packaging/linux/romp.png $(APPDIR)/
 	cp packaging/linux/romp.png $(APPDIR)/usr/share/icons/hicolor/256x256/apps/
 	ln -s usr/bin/romp $(APPDIR)/AppRun
-	ARCH=$(ARCH) $(APPIMAGETOOL) --no-appstream $(APPDIR) $(APPIMAGE)
+	ARCH=$(ARCH) $(APPIMAGETOOL) --no-appstream --runtime-file $(APPIMAGE_RUNTIME) $(APPDIR) $(APPIMAGE)
 	rm -rf $(APPDIR)
 	$(call checksum,$(APPIMAGE))
 

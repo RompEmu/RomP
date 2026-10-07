@@ -98,7 +98,7 @@ cargo build --release
 ./target/release/romp
 ```
 
-`make dist` packages the app into `dist/`: `RomP.app` and a zip on macOS, a zip on Windows, an AppImage and a tarball on Linux (with [appimagetool](https://github.com/AppImage/appimagetool) installed). On Windows, run it from Git Bash with Make and 7-Zip installed.
+`make dist` packages the app into `dist/`: `RomP.app` and a zip on macOS, a zip on Windows, an AppImage and a tarball on Linux (Make downloads a pinned [appimagetool](https://github.com/AppImage/appimagetool) and checks it). On Windows, run it from Git Bash with Make and 7-Zip installed.
 
 `make check` runs the same checks as CI: formatting, Clippy, tests, [cargo-deny](https://github.com/EmbarkStudios/cargo-deny), [cargo-machete](https://github.com/bnjbvr/cargo-machete), [typos](https://github.com/crate-ci/typos), [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://github.com/zizmorcore/zizmor).
 
