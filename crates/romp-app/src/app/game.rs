@@ -540,6 +540,7 @@ impl Controller {
             .sync_device()
             .zip(self.game_saves(&detail))
             .filter(|_| !offline);
+        let store = self.shared.store.clone();
         self.shared.rt.spawn(async move {
             let base = crate::cores::download_base(core);
             let current = match cores.installed(core) {
@@ -600,7 +601,11 @@ impl Controller {
             let sram = match (&client, sync) {
                 (Some(client), Some((device, game))) => {
                     on_ui(move |c| c.game_status(id, tr!("Syncing your save…")));
-                    Some(saves::sync_sram(client, &device, &game).await)
+                    let result = saves::sync_sram(client, &device, &game).await;
+                    if let Ok(outcome) = &result {
+                        saves::remember_outcome(&store, &game, outcome);
+                    }
+                    Some(result)
                 }
                 _ => None,
             };

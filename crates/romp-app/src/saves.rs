@@ -1,5 +1,6 @@
 use crate::romm::client::{Client, Error, SaveUpload};
 use crate::romm::types::ClientSave;
+use crate::store::InGameSaveRecord;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -285,6 +286,91 @@ impl GameSaves {
     }
 }
 
+/// Where a game's in-game save stands with RomM, for its card on the game's page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InGameSaveStatus {
+    /// The save here is the one last synced, at this time in Unix seconds.
+    Synced {
+        at: i64,
+    },
+    NotSynced,
+    /// Changed here and waiting for the server to be reachable.
+    Waiting,
+    /// Nothing here yet, but RomM has one, which comes down when the game starts.
+    OnServer,
+    /// Save sync is off, so the save stays on this computer.
+    ThisComputerOnly,
+}
+
+pub fn in_game_save_status(
+    local_md5: Option<&str>,
+    record: Option<&InGameSaveRecord>,
+    paired: bool,
+    pending: bool,
+    on_server: bool,
+) -> Option<InGameSaveStatus> {
+    let Some(local) = local_md5 else {
+        return (paired && on_server).then_some(InGameSaveStatus::OnServer);
+    };
+    Some(match record {
+        _ if !paired => InGameSaveStatus::ThisComputerOnly,
+        Some(r) if r.md5 == local => InGameSaveStatus::Synced { at: r.synced_at },
+        _ if pending => InGameSaveStatus::Waiting,
+        _ => InGameSaveStatus::NotSynced,
+    })
+}
+
+/// Remembers the save when a sync left it matching RomM's.
+pub fn remember_outcome(
+    store: &std::sync::Mutex<crate::store::Store>,
+    game: &GameSaves,
+    outcome: &SramOutcome,
+) {
+    if !matches!(outcome, SramOutcome::Conflict(_)) {
+        remember_synced(store, game);
+    }
+}
+
+/// The server's saves RomP would sync: RomM offers a device only those under its emulator.
+pub fn for_emulator(
+    server: Vec<crate::romm::types::RemoteSave>,
+    emulator: &str,
+) -> Vec<crate::romm::types::RemoteSave> {
+    server
+        .into_iter()
+        .filter(|s| s.emulator.as_deref() == Some(emulator))
+        .collect()
+}
+
+/// With no record of the last sync, a save here matching the server's newest counts as synced.
+pub fn matching_server_save(
+    local_md5: &str,
+    server: &[crate::romm::types::RemoteSave],
+) -> Option<InGameSaveRecord> {
+    let at = |s: &crate::romm::types::RemoteSave| crate::sync::parse_iso(&s.updated_at);
+    let newest = server.iter().max_by_key(|s| at(s).unwrap_or(i64::MIN))?;
+    (newest.content_hash.as_deref() == Some(local_md5)).then(|| InGameSaveRecord {
+        md5: local_md5.to_string(),
+        synced_at: at(newest).unwrap_or(0) / 1000,
+    })
+}
+
+pub fn local_md5(game: &GameSaves) -> Option<String> {
+    std::fs::read(game.sram_path()).ok().map(|b| md5_hex(&b))
+}
+
+/// Remembers the in-game save as it is now as the one that matches RomM's.
+pub fn remember_synced(store: &std::sync::Mutex<crate::store::Store>, game: &GameSaves) {
+    let Some(md5) = local_md5(game) else { return };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    store
+        .lock()
+        .unwrap()
+        .set_in_game_save_record(game.rom_id, &md5, now);
+}
+
 async fn upload_sram(
     client: &Client,
     device_id: &str,
@@ -534,6 +620,106 @@ pub async fn sync_states(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_in_game_save_says_where_it_stands_with_romm() {
+        use InGameSaveStatus::*;
+        let record = InGameSaveRecord {
+            md5: "same".into(),
+            synced_at: 100,
+        };
+        let status = |local: Option<&str>, paired, pending, on_server| {
+            in_game_save_status(local, Some(&record), paired, pending, on_server)
+        };
+        assert_eq!(
+            status(Some("same"), true, false, false),
+            Some(Synced { at: 100 })
+        );
+        assert_eq!(
+            status(Some("same"), true, true, false),
+            Some(Synced { at: 100 })
+        );
+        assert_eq!(status(Some("new"), true, false, false), Some(NotSynced));
+        assert_eq!(status(Some("new"), true, true, false), Some(Waiting));
+        assert_eq!(
+            status(Some("same"), false, false, false),
+            Some(ThisComputerOnly)
+        );
+        assert_eq!(status(None, true, false, true), Some(OnServer));
+        assert_eq!(status(None, false, false, true), None);
+        assert_eq!(status(None, true, false, false), None);
+        assert_eq!(
+            in_game_save_status(Some("never"), None, true, false, false),
+            Some(NotSynced)
+        );
+    }
+
+    #[test]
+    fn only_saves_under_romps_emulator_are_ours() {
+        let remote = |id, emulator: Option<&str>| crate::romm::types::RemoteSave {
+            id,
+            rom_id: 1813,
+            file_name: "x.srm".into(),
+            slot: Some(SRAM_SLOT.into()),
+            updated_at: "2026-10-08T09:42:18+00:00".into(),
+            content_hash: None,
+            emulator: emulator.map(Into::into),
+        };
+        let server = vec![
+            remote(20, Some("mgba")),
+            remote(6, Some("GBA")),
+            remote(7, None),
+        ];
+        let ours: Vec<i64> = for_emulator(server, "mgba").iter().map(|s| s.id).collect();
+        assert_eq!(ours, [20]);
+    }
+
+    #[test]
+    fn a_save_matching_the_servers_newest_counts_as_synced() {
+        let remote = |id, hash: &str, at: &str| crate::romm::types::RemoteSave {
+            id,
+            rom_id: 5,
+            file_name: "x.srm".into(),
+            slot: Some(SRAM_SLOT.into()),
+            updated_at: at.into(),
+            content_hash: Some(hash.into()),
+            emulator: Some("mgba".into()),
+        };
+        let server = [
+            remote(1, "old", "2026-10-01T10:00:00+00:00"),
+            remote(2, "abc", "2026-10-02T10:00:00+00:00"),
+        ];
+        assert_eq!(
+            matching_server_save("abc", &server),
+            Some(InGameSaveRecord {
+                md5: "abc".into(),
+                synced_at: 1_790_935_200
+            })
+        );
+        assert_eq!(matching_server_save("old", &server), None);
+        assert_eq!(matching_server_save("abc", &[]), None);
+    }
+
+    #[test]
+    fn a_synced_save_is_remembered_as_it_is_now() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = std::sync::Mutex::new(crate::store::Store::open_in_memory().unwrap());
+        let game = GameSaves {
+            rom_id: 5,
+            dir: dir.path().to_path_buf(),
+            title: "Zelda".into(),
+            emulator: "snes9x".into(),
+            save_file: SRAM_FILE.into(),
+            save_emulator: "snes9x".into(),
+        };
+        remember_synced(&store, &game);
+        assert_eq!(store.lock().unwrap().in_game_save_record(5), None);
+        std::fs::write(dir.path().join(SRAM_FILE), b"save").unwrap();
+        remember_synced(&store, &game);
+        let record = store.lock().unwrap().in_game_save_record(5).unwrap();
+        assert_eq!(record.md5, md5_hex(b"save"));
+        assert_eq!(local_md5(&game).as_deref(), Some(record.md5.as_str()));
+    }
 
     fn dsv(raw: &[u8]) -> Vec<u8> {
         let mut bytes = raw.to_vec();

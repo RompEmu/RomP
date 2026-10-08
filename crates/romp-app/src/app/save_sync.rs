@@ -49,6 +49,7 @@ async fn sync_game(
     core_version: Option<&str>,
 ) -> Result<SramOutcome, Error> {
     let sram = saves::sync_sram(client, device_id, game).await?;
+    saves::remember_outcome(store, game, &sram);
     if let Some(version) = core_version {
         saves::sync_states(client, store, game, version).await?;
     }
@@ -157,8 +158,12 @@ impl Controller {
             ui.set_game_status(tr!("Syncing your save…").into());
         }
         let conflict = pending.conflict.clone();
+        let store = self.shared.store.clone();
         self.shared.rt.spawn(async move {
             let result = saves::resolve_sram(&client, &device, &game, &conflict, keep).await;
+            if let Ok(outcome) = &result {
+                saves::remember_outcome(&store, &game, outcome);
+            }
             on_ui(move |c| {
                 if let Err(e) = result {
                     tracing::warn!("resolving save conflict: {e}");
@@ -213,7 +218,7 @@ impl Controller {
             Ok(SramOutcome::Conflict(_)) => {
                 tr!("A newer save is on the server. You'll be asked which to keep next time you play.")
             }
-            Ok(_) => tr!("Saves synced."),
+            Ok(_) => tr!("In-game save and save states synced."),
             Err(Error::Unreachable) => {
                 self.shared.store.lock().unwrap().add_pending(id);
                 tr!("Saves will sync when the server is reachable.")
@@ -224,6 +229,9 @@ impl Controller {
             }
         };
         self.game_status(id, status);
+        if let Some(detail) = self.current_game().filter(|d| d.id == id) {
+            self.show_save_slots(&detail);
+        }
     }
 
     pub(super) fn sync_pending(&self) {

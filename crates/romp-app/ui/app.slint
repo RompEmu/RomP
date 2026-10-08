@@ -1228,7 +1228,7 @@ component GamePage inherits FocusScope {
                 }
                 if root.save-slots.length > 0: VerticalLayout {
                     spacing: 10px;
-                    SectionTitle { text: @tr("Save states"); }
+                    SectionTitle { text: @tr("Saves"); }
                     if root.slots-hardcore: Text { horizontal-alignment: Locale.start;
                         text: @tr("Loading save states is off in hardcore mode.");
                         font-size: Theme.font-small;
@@ -1249,8 +1249,8 @@ component GamePage inherits FocusScope {
                                 spacing: 6px;
                                 SlotPicture { card: card; height: 124px; }
                                 Text { horizontal-alignment: Locale.start; text: card.label; font-weight: 700; font-size: Theme.font-body; color: Theme.text-strong; }
-                                Text { horizontal-alignment: Locale.start; text: card.detail; font-size: Theme.font-small; color: Theme.text-muted; }
-                                Row {
+                                Text { horizontal-alignment: Locale.start; text: card.detail; font-size: Theme.font-small; color: Theme.text-muted; wrap: word-wrap; }
+                                if !card.in-game: Row {
                                     alignment: start;
                                     Button {
                                         text: @tr("Play from here");

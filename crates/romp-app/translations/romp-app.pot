@@ -247,9 +247,8 @@ msgstr ""
 msgid "Screenshot {}"
 msgstr ""
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-msgid "Save states"
+#: crates/romp-app/ui/app.slint
+msgid "Saves"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
@@ -646,6 +645,10 @@ msgstr ""
 
 #: crates/romp-app/ui/game.slint
 msgid "Restart"
+msgstr ""
+
+#: crates/romp-app/ui/game.slint
+msgid "Save states"
 msgstr ""
 
 #: crates/romp-app/ui/game.slint

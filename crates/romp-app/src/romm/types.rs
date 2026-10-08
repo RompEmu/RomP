@@ -279,6 +279,8 @@ pub struct RemoteSave {
     pub slot: Option<String>,
     pub updated_at: String,
     pub content_hash: Option<String>,
+    #[serde(default)]
+    pub emulator: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

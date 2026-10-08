@@ -98,6 +98,32 @@ pub fn card(info: &SlotInfo, now: SystemTime, current: Option<u8>) -> crate::Slo
         thumbnail: thumbnail.unwrap_or_default(),
         empty: info.is_empty(),
         current: Some(info.slot) == current,
+        in_game: false,
+    }
+}
+
+/// The in-game save's card on the game's page, saying where it stands with RomM.
+pub fn in_game_card(status: &crate::saves::InGameSaveStatus, now: SystemTime) -> crate::SlotCard {
+    use crate::saves::InGameSaveStatus::*;
+    let detail = match status {
+        Synced { at } => {
+            let at = SystemTime::UNIX_EPOCH + Duration::from_secs(u64::try_from(*at).unwrap_or(0));
+            tr!("Synced with RomM · {}", when(at, now))
+        }
+        NotSynced => tr!("Not synced yet"),
+        Waiting => tr!("Will sync when the server is reachable"),
+        OnServer => tr!("On RomM · comes down when you play"),
+        ThisComputerOnly => tr!("On this computer only · pair RomP to sync it"),
+    };
+    crate::SlotCard {
+        slot: -1,
+        label: tr!("In-game save").into(),
+        detail: detail.into(),
+        thumbnail: slint::Image::default(),
+        has_thumbnail: false,
+        empty: false,
+        current: false,
+        in_game: true,
     }
 }
 
@@ -126,6 +152,24 @@ pub fn thumbnail(rgba: &[u8], width: u32, height: u32, aspect: f32) -> Option<im
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_in_game_save_card_says_where_the_save_stands() {
+        use crate::saves::InGameSaveStatus::*;
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10_000);
+        let card = in_game_card(&Synced { at: 10_000 - 120 }, now);
+        assert!(card.in_game);
+        assert_eq!(card.label, "In-game save");
+        assert_eq!(card.detail, "Synced with RomM · 2 minutes ago");
+        assert_eq!(
+            in_game_card(&OnServer, now).detail,
+            "On RomM · comes down when you play"
+        );
+        assert_eq!(
+            in_game_card(&Waiting, now).detail,
+            "Will sync when the server is reachable"
+        );
+    }
 
     #[test]
     fn slots_report_what_is_saved() {

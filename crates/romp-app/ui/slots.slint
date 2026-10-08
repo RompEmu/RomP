@@ -1,6 +1,6 @@
 import { Locale, Row, Theme } from "theme.slint";
 
-export struct SlotCard { slot: int, label: string, detail: string, thumbnail: image, has-thumbnail: bool, empty: bool, current: bool }
+export struct SlotCard { slot: int, label: string, detail: string, thumbnail: image, has-thumbnail: bool, empty: bool, current: bool, in-game: bool }
 
 /// A save slot's picture, or a quiet placeholder when nothing is saved there.
 export component SlotPicture inherits Rectangle {
@@ -15,7 +15,13 @@ export component SlotPicture inherits Rectangle {
         image-fit: cover;
         image-rendering: pixelated;
     }
-    if !root.card.has-thumbnail: Text { horizontal-alignment: Locale.start;
+    if root.card.in-game: Image {
+        width: 32px;
+        height: 32px;
+        source: @image-url("icons/save.svg");
+        colorize: Theme.text-subtle;
+    }
+    if !root.card.has-thumbnail && !root.card.in-game: Text { horizontal-alignment: Locale.start;
         text: root.card.empty ? @tr("Empty") : @tr("No picture");
         color: Theme.text-subtle;
         font-size: Theme.font-small;

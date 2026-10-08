@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- A game's page shows its in-game save beside its save states, and whether it's synced with RomM, waiting to sync, or on RomM and coming down when you play.
+
 ### Fixed
 
 - GameCube and Wii games show their picture, instead of a black screen with sound.

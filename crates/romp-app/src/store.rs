@@ -57,6 +57,13 @@ pub struct StateRecord {
     pub remote_updated_at: Option<String>,
 }
 
+/// The in-game save as it was when it last matched RomM's, and when that was, in Unix seconds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InGameSaveRecord {
+    pub md5: String,
+    pub synced_at: i64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Scope {
     #[default]
@@ -226,6 +233,15 @@ impl Store {
                    achievement_id INTEGER NOT NULL, hardcore INTEGER NOT NULL, hash TEXT NOT NULL,
                    unlocked_at INTEGER NOT NULL, PRIMARY KEY (username, achievement_id, hardcore));
                  PRAGMA user_version = 9;
+                 COMMIT;",
+            )?;
+        }
+        if version < 10 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS in_game_save_sync (rom_id INTEGER PRIMARY KEY,
+                   md5 TEXT NOT NULL, synced_at INTEGER NOT NULL);
+                 PRAGMA user_version = 10;
                  COMMIT;",
             )?;
         }
@@ -657,6 +673,31 @@ impl Store {
                 ],
             )
             .expect("write state record");
+    }
+
+    pub fn in_game_save_record(&self, rom_id: i64) -> Option<InGameSaveRecord> {
+        self.conn
+            .query_row(
+                "SELECT md5, synced_at FROM in_game_save_sync WHERE rom_id = ?1",
+                [rom_id],
+                |r| {
+                    Ok(InGameSaveRecord {
+                        md5: r.get(0)?,
+                        synced_at: r.get(1)?,
+                    })
+                },
+            )
+            .ok()
+    }
+
+    pub fn set_in_game_save_record(&mut self, rom_id: i64, md5: &str, synced_at: i64) {
+        self.conn
+            .execute(
+                "INSERT INTO in_game_save_sync (rom_id, md5, synced_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(rom_id) DO UPDATE SET md5 = excluded.md5, synced_at = excluded.synced_at",
+                params![rom_id, md5, synced_at],
+            )
+            .expect("write in-game save record");
     }
 
     pub fn add_pending(&mut self, rom_id: i64) {
@@ -1187,6 +1228,27 @@ mod tests {
         s.remove_pending_unlock("player", &unlock(3));
         s.clear_library();
         assert_eq!(s.pending_unlocks("player"), [(unlock(7), 2_000)]);
+    }
+
+    #[test]
+    fn the_last_synced_in_game_save_is_remembered() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("c.db");
+        {
+            let mut s = Store::open(&path).unwrap();
+            assert_eq!(s.in_game_save_record(7), None);
+            s.set_in_game_save_record(7, "aaa", 100);
+            s.set_in_game_save_record(7, "bbb", 200);
+        }
+        let s = Store::open(&path).unwrap();
+        assert_eq!(
+            s.in_game_save_record(7),
+            Some(InGameSaveRecord {
+                md5: "bbb".into(),
+                synced_at: 200
+            })
+        );
+        assert_eq!(s.in_game_save_record(8), None);
     }
 
     #[test]

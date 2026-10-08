@@ -257,7 +257,7 @@ msgid "A newer save is on the server. You'll be asked which to keep next time yo
 msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs
-msgid "Saves synced."
+msgid "In-game save and save states synced."
 msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs
@@ -360,6 +360,30 @@ msgstr ""
 
 #: crates/romp-app/src/slots.rs
 msgid "Empty"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "Synced with RomM · {}"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "Not synced yet"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "Will sync when the server is reachable"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "On RomM · comes down when you play"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "On this computer only · pair RomP to sync it"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "In-game save"
 msgstr ""
 
 #: crates/romp-app/src/app.rs
