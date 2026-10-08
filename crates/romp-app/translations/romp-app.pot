@@ -256,6 +256,10 @@ msgid "Loading save states is off in hardcore mode."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Use this save"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Play from here"
 msgstr ""
 

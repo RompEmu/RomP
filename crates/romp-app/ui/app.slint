@@ -951,6 +951,7 @@ component GamePage inherits FocusScope {
     in property <[SlotCard]> save-slots;
     in property <bool> slots-hardcore;
     callback play-slot(int);
+    callback use-other-save();
     in property <[AchievementRow]> achievements;
     in property <string> achievements-summary;
     in property <int> achievements-hidden;
@@ -1250,6 +1251,14 @@ component GamePage inherits FocusScope {
                                 SlotPicture { card: card; height: 124px; }
                                 Text { horizontal-alignment: Locale.start; text: card.label; font-weight: 700; font-size: Theme.font-body; color: Theme.text-strong; }
                                 Text { horizontal-alignment: Locale.start; text: card.detail; font-size: Theme.font-small; color: Theme.text-muted; wrap: word-wrap; }
+                                if card.offer: Row {
+                                    alignment: start;
+                                    Button {
+                                        text: @tr("Use this save");
+                                        enabled: !root.busy;
+                                        clicked => { root.use-other-save(); }
+                                    }
+                                }
                                 if !card.in-game: Row {
                                     alignment: start;
                                     Button {
@@ -2230,6 +2239,7 @@ export component AppWindow inherits Window {
     in property <[SlotCard]> game-save-slots;
     in property <bool> game-slots-hardcore;
     callback play-slot(int);
+    callback use-other-save();
     in property <[AchievementRow]> game-achievements;
     in property <string> game-achievements-summary;
     in property <int> game-achievements-hidden;
@@ -2409,6 +2419,7 @@ export component AppWindow inherits Window {
             save-slots: root.game-save-slots;
             slots-hardcore: root.game-slots-hardcore;
             play-slot(slot) => { root.play-slot(slot); }
+            use-other-save => { root.use-other-save(); }
             achievements: root.game-achievements;
             achievements-summary: root.game-achievements-summary;
             achievements-hidden: root.game-achievements-hidden;

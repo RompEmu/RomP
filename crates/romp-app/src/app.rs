@@ -105,6 +105,8 @@ struct Controller {
     preparing: Cell<bool>,
     download_fraction: Cell<f32>,
     pending_launch: RefCell<Option<save_sync::PendingLaunch>>,
+    /// The game and another emulator's save its page offers to use.
+    other_save: RefCell<Option<(i64, crate::saves::OtherSave)>>,
     playing: RefCell<Option<crate::store::GameDetail>>,
     syncing_game: Cell<Option<i64>>,
     downloaded_choice: Cell<bool>,
@@ -197,6 +199,7 @@ pub fn run() -> anyhow::Result<()> {
         preparing: Cell::new(false),
         download_fraction: Cell::new(0.0),
         pending_launch: RefCell::new(None),
+        other_save: RefCell::new(None),
         playing: RefCell::new(None),
         syncing_game: Cell::new(None),
         downloaded_choice: Cell::new(false),
@@ -360,6 +363,7 @@ impl Controller {
         ui.on_ra_hardcore_changed(|| with_controller(|c| c.ra_hardcore_changed()));
         ui.on_show_all_achievements(|| with_controller(|c| c.show_all_achievements()));
         ui.on_play_slot(|slot| with_controller(|c| c.play_slot(slot)));
+        ui.on_use_other_save(|| with_controller(|c| c.use_other_save()));
         ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
     }
 

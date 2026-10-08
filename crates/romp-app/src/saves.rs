@@ -94,6 +94,13 @@ const DESMUME_BACKUP: &str = "backup/desmume";
 const DESMUME_FOOTER: &[u8] =
     b"|<--Snip above here to create a raw sav by excluding this DeSmuME savedata footer:";
 
+fn without_desmume_footer(bytes: &[u8]) -> &[u8] {
+    bytes
+        .windows(DESMUME_FOOTER.len())
+        .position(|w| w == DESMUME_FOOTER)
+        .map_or(bytes, |end| &bytes[..end])
+}
+
 /// Turns a DS game's DeSmuME save into the raw save melonDS reads, unless the folder already has
 /// one, and moves DeSmuME's save and states, which melonDS can't load, to the backup folder.
 pub fn adopt_desmume_saves(dir: &Path) -> io::Result<()> {
@@ -113,11 +120,7 @@ pub fn adopt_desmume_saves(dir: &Path) -> io::Result<()> {
     let sram = dir.join(SRAM_FILE);
     if !sram.exists() {
         let bytes = std::fs::read(newest)?;
-        let raw = bytes
-            .windows(DESMUME_FOOTER.len())
-            .position(|w| w == DESMUME_FOOTER)
-            .map_or(&bytes[..], |end| &bytes[..end]);
-        replace_file(&sram, raw)?;
+        replace_file(&sram, without_desmume_footer(&bytes))?;
     }
     let backup = dir.join(DESMUME_BACKUP);
     std::fs::create_dir_all(&backup)?;
@@ -298,8 +301,27 @@ pub enum InGameSaveStatus {
     Waiting,
     /// Nothing here yet, but RomM has one, which comes down when the game starts.
     OnServer,
+    /// Nothing here and none of RomP's on RomM, but another emulator's that can be used.
+    FromOtherEmulator(OtherSave),
     /// Save sync is off, so the save stays on this computer.
     ThisComputerOnly,
+}
+
+/// What RomM holds for a game's in-game save.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ServerSaves {
+    /// A save under RomP's emulator, which RomM offers when the game starts.
+    pub ours: bool,
+    /// The newest save under another emulator, where saves carry over between emulators.
+    pub other: Option<OtherSave>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OtherSave {
+    pub id: i64,
+    pub emulator: String,
+    /// Unix seconds.
+    pub at: i64,
 }
 
 pub fn in_game_save_status(
@@ -307,10 +329,20 @@ pub fn in_game_save_status(
     record: Option<&InGameSaveRecord>,
     paired: bool,
     pending: bool,
-    on_server: bool,
+    server: &ServerSaves,
 ) -> Option<InGameSaveStatus> {
     let Some(local) = local_md5 else {
-        return (paired && on_server).then_some(InGameSaveStatus::OnServer);
+        if !paired {
+            return None;
+        }
+        return if server.ours {
+            Some(InGameSaveStatus::OnServer)
+        } else {
+            server
+                .other
+                .clone()
+                .map(InGameSaveStatus::FromOtherEmulator)
+        };
     };
     Some(match record {
         _ if !paired => InGameSaveStatus::ThisComputerOnly,
@@ -318,6 +350,56 @@ pub fn in_game_save_status(
         _ if pending => InGameSaveStatus::Waiting,
         _ => InGameSaveStatus::NotSynced,
     })
+}
+
+/// Systems whose in-game saves are the same bytes whichever emulator wrote them: raw save RAM,
+/// or a standard memory card.
+const SAVES_CARRY_OVER: [&str; 13] = [
+    "nes", "famicom", "snes", "sfam", "gb", "gbc", "gba", "genesis", "sms", "gamegear", "nds",
+    "psx", "ps2",
+];
+const PS1_CARD_BYTES: usize = 131_072;
+const PS2_CARD_BYTES: usize = 8_650_752;
+
+pub fn server_saves(
+    server: &[crate::romm::types::RemoteSave],
+    platform_slug: &str,
+    emulator: &str,
+) -> ServerSaves {
+    let at = |s: &crate::romm::types::RemoteSave| crate::sync::parse_iso(&s.updated_at);
+    let other = SAVES_CARRY_OVER
+        .contains(&platform_slug)
+        .then(|| {
+            server
+                .iter()
+                .filter(|s| s.emulator.as_deref().is_some_and(|e| e != emulator))
+                .max_by_key(|s| at(s).unwrap_or(i64::MIN))
+        })
+        .flatten()
+        .map(|s| OtherSave {
+            id: s.id,
+            emulator: s.emulator.clone().unwrap_or_default(),
+            at: at(s).unwrap_or(0) / 1000,
+        });
+    ServerSaves {
+        ours: server
+            .iter()
+            .any(|s| s.emulator.as_deref() == Some(emulator)),
+        other,
+    }
+}
+
+/// Another emulator's save in the form RomP's emulator reads, or None when it can't be used.
+pub fn adapt_other_save(platform_slug: &str, bytes: Vec<u8>) -> Option<Vec<u8>> {
+    if !SAVES_CARRY_OVER.contains(&platform_slug) || bytes.is_empty() {
+        return None;
+    }
+    match platform_slug {
+        "psx" => (bytes.len() == PS1_CARD_BYTES).then_some(bytes),
+        "ps2" => (bytes.len() == PS2_CARD_BYTES).then_some(bytes),
+        "nds" => Some(without_desmume_footer(&bytes).to_vec()),
+        _ => Some(bytes),
+    }
 }
 
 /// Remembers the save when a sync left it matching RomM's.
@@ -395,7 +477,7 @@ async fn upload_sram(
         .map(|_| ())
 }
 
-fn install_download(game: &GameSaves, bytes: &[u8]) -> Result<SramOutcome, Error> {
+pub fn install_download(game: &GameSaves, bytes: &[u8]) -> Result<SramOutcome, Error> {
     let io_err = |e: io::Error| Error::Decode(format!("could not write the save: {e}"));
     let backup = backup(&game.dir, &game.save_file).map_err(io_err)?;
     replace_file(&game.sram_path(), bytes).map_err(io_err)?;
@@ -628,30 +710,111 @@ mod tests {
             md5: "same".into(),
             synced_at: 100,
         };
-        let status = |local: Option<&str>, paired, pending, on_server| {
-            in_game_save_status(local, Some(&record), paired, pending, on_server)
+        let none = ServerSaves::default();
+        let ours = ServerSaves {
+            ours: true,
+            other: None,
+        };
+        let gba = OtherSave {
+            id: 6,
+            emulator: "GBA".into(),
+            at: 50,
+        };
+        let theirs = ServerSaves {
+            ours: false,
+            other: Some(gba.clone()),
+        };
+        let status = |local: Option<&str>, paired, pending, server: &ServerSaves| {
+            in_game_save_status(local, Some(&record), paired, pending, server)
         };
         assert_eq!(
-            status(Some("same"), true, false, false),
+            status(Some("same"), true, false, &none),
             Some(Synced { at: 100 })
         );
         assert_eq!(
-            status(Some("same"), true, true, false),
+            status(Some("same"), true, true, &none),
             Some(Synced { at: 100 })
         );
-        assert_eq!(status(Some("new"), true, false, false), Some(NotSynced));
-        assert_eq!(status(Some("new"), true, true, false), Some(Waiting));
+        assert_eq!(status(Some("new"), true, false, &none), Some(NotSynced));
+        assert_eq!(status(Some("new"), true, true, &none), Some(Waiting));
         assert_eq!(
-            status(Some("same"), false, false, false),
+            status(Some("same"), false, false, &none),
             Some(ThisComputerOnly)
         );
-        assert_eq!(status(None, true, false, true), Some(OnServer));
-        assert_eq!(status(None, false, false, true), None);
-        assert_eq!(status(None, true, false, false), None);
+        assert_eq!(status(Some("new"), true, false, &theirs), Some(NotSynced));
+        assert_eq!(status(None, true, false, &ours), Some(OnServer));
         assert_eq!(
-            in_game_save_status(Some("never"), None, true, false, false),
+            status(None, true, false, &theirs),
+            Some(FromOtherEmulator(gba))
+        );
+        assert_eq!(status(None, false, false, &ours), None);
+        assert_eq!(status(None, false, false, &theirs), None);
+        assert_eq!(status(None, true, false, &none), None);
+        assert_eq!(
+            in_game_save_status(Some("never"), None, true, false, &none),
             Some(NotSynced)
         );
+    }
+
+    fn remote(id: i64, emulator: &str, at: &str) -> crate::romm::types::RemoteSave {
+        crate::romm::types::RemoteSave {
+            id,
+            rom_id: 1813,
+            file_name: "x.srm".into(),
+            slot: Some(SRAM_SLOT.into()),
+            updated_at: at.into(),
+            content_hash: None,
+            emulator: Some(emulator.into()),
+        }
+    }
+
+    #[test]
+    fn another_emulators_newest_save_is_offered_where_saves_carry_over() {
+        let server = [
+            remote(6, "GBA", "2026-09-20T09:01:55+00:00"),
+            remote(8, "vba-m", "2026-09-25T09:00:00+00:00"),
+        ];
+        let saves = server_saves(&server, "gba", "mgba");
+        assert!(!saves.ours);
+        assert_eq!(
+            saves.other,
+            Some(OtherSave {
+                id: 8,
+                emulator: "vba-m".into(),
+                at: 1_790_326_800
+            })
+        );
+        let with_ours = [
+            server[0].clone(),
+            remote(20, "mgba", "2026-10-08T09:42:18+00:00"),
+        ];
+        assert!(server_saves(&with_ours, "gba", "mgba").ours);
+        assert_eq!(server_saves(&server, "n64", "mupen64plus_next").other, None);
+        assert_eq!(server_saves(&[], "gba", "mgba"), ServerSaves::default());
+    }
+
+    #[test]
+    fn another_emulators_save_is_used_only_in_a_form_this_one_reads() {
+        assert_eq!(
+            adapt_other_save("gba", b"raw".to_vec()),
+            Some(b"raw".to_vec())
+        );
+        assert_eq!(adapt_other_save("gba", Vec::new()), None);
+        assert_eq!(
+            adapt_other_save("psx", vec![0; 131_072]).map(|b| b.len()),
+            Some(131_072)
+        );
+        assert_eq!(adapt_other_save("psx", vec![0; 1_000]), None);
+        assert_eq!(
+            adapt_other_save("ps2", vec![0; 8_650_752]).map(|b| b.len()),
+            Some(8_650_752)
+        );
+        assert_eq!(adapt_other_save("ps2", vec![0; 8_388_608]), None);
+        assert_eq!(
+            adapt_other_save("nds", dsv(b"game")),
+            Some(b"game".to_vec())
+        );
+        assert_eq!(adapt_other_save("n64", b"raw".to_vec()), None);
     }
 
     #[test]

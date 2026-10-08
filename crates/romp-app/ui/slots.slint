@@ -1,6 +1,6 @@
 import { Locale, Row, Theme } from "theme.slint";
 
-export struct SlotCard { slot: int, label: string, detail: string, thumbnail: image, has-thumbnail: bool, empty: bool, current: bool, in-game: bool }
+export struct SlotCard { slot: int, label: string, detail: string, thumbnail: image, has-thumbnail: bool, empty: bool, current: bool, in-game: bool, offer: bool }
 
 /// A save slot's picture, or a quiet placeholder when nothing is saved there.
 export component SlotPicture inherits Rectangle {

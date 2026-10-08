@@ -99,6 +99,7 @@ pub fn card(info: &SlotInfo, now: SystemTime, current: Option<u8>) -> crate::Slo
         empty: info.is_empty(),
         current: Some(info.slot) == current,
         in_game: false,
+        offer: false,
     }
 }
 
@@ -113,6 +114,11 @@ pub fn in_game_card(status: &crate::saves::InGameSaveStatus, now: SystemTime) ->
         NotSynced => tr!("Not synced yet"),
         Waiting => tr!("Will sync when the server is reachable"),
         OnServer => tr!("On RomM · comes down when you play"),
+        FromOtherEmulator(other) => {
+            let at =
+                SystemTime::UNIX_EPOCH + Duration::from_secs(u64::try_from(other.at).unwrap_or(0));
+            tr!("On RomM from {} · {}", other.emulator, when(at, now))
+        }
         ThisComputerOnly => tr!("On this computer only · pair RomP to sync it"),
     };
     crate::SlotCard {
@@ -124,6 +130,7 @@ pub fn in_game_card(status: &crate::saves::InGameSaveStatus, now: SystemTime) ->
         empty: false,
         current: false,
         in_game: true,
+        offer: matches!(status, FromOtherEmulator(_)),
     }
 }
 
@@ -156,8 +163,13 @@ mod tests {
     #[test]
     fn the_in_game_save_card_says_where_the_save_stands() {
         use crate::saves::InGameSaveStatus::*;
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10_000);
-        let card = in_game_card(&Synced { at: 10_000 - 120 }, now);
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let card = in_game_card(
+            &Synced {
+                at: 1_000_000 - 120,
+            },
+            now,
+        );
         assert!(card.in_game);
         assert_eq!(card.label, "In-game save");
         assert_eq!(card.detail, "Synced with RomM · 2 minutes ago");
@@ -169,6 +181,17 @@ mod tests {
             in_game_card(&Waiting, now).detail,
             "Will sync when the server is reachable"
         );
+        assert!(!card.offer);
+        let other = in_game_card(
+            &FromOtherEmulator(crate::saves::OtherSave {
+                id: 6,
+                emulator: "GBA".into(),
+                at: 1_000_000 - 3 * 86_400,
+            }),
+            now,
+        );
+        assert_eq!(other.detail, "On RomM from GBA · 3 days ago");
+        assert!(other.offer);
     }
 
     #[test]
