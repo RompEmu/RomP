@@ -372,13 +372,16 @@ pub fn server_saves(
         .then(|| {
             server
                 .iter()
-                .filter(|s| s.emulator.as_deref().is_some_and(|e| e != emulator))
+                .filter(|s| s.emulator.as_deref() != Some(emulator))
                 .max_by_key(|s| at(s).unwrap_or(i64::MIN))
         })
         .flatten()
         .map(|s| OtherSave {
             id: s.id,
-            emulator: s.emulator.clone().unwrap_or_default(),
+            emulator: s
+                .emulator
+                .clone()
+                .unwrap_or_else(|| tr::tr!("another emulator")),
             at: at(s).unwrap_or(0) / 1000,
         });
     ServerSaves {
@@ -789,6 +792,16 @@ mod tests {
             remote(20, "mgba", "2026-10-08T09:42:18+00:00"),
         ];
         assert!(server_saves(&with_ours, "gba", "mgba").ours);
+        let mut uploaded = remote(9, "", "2026-09-30T09:00:00+00:00");
+        uploaded.emulator = None;
+        assert_eq!(
+            server_saves(&[server[0].clone(), uploaded], "gba", "mgba").other,
+            Some(OtherSave {
+                id: 9,
+                emulator: "another emulator".into(),
+                at: 1_790_758_800
+            })
+        );
         assert_eq!(server_saves(&server, "n64", "mupen64plus_next").other, None);
         assert_eq!(server_saves(&[], "gba", "mgba"), ServerSaves::default());
     }

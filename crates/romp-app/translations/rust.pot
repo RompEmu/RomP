@@ -1218,6 +1218,10 @@ msgstr ""
 msgid "The archive has no PS3 game folder or ISO in it"
 msgstr ""
 
+#: crates/romp-app/src/saves.rs
+msgid "another emulator"
+msgstr ""
+
 #: crates/romp-app/src/storage.rs
 msgid "Saves and states"
 msgstr ""
