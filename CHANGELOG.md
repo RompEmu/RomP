@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-08
+
 ### Added
 
 - A game's page shows its in-game save beside its save states, and whether it's synced with RomM, waiting to sync, or on RomM and coming down when you play.
@@ -225,7 +227,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/RompEmu/RomP/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/RompEmu/RomP/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/RompEmu/RomP/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/RompEmu/RomP/compare/v0.10.0...v0.11.0
