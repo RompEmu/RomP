@@ -12,6 +12,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Fixed
 
 - GameCube and Wii games show their picture, instead of a black screen with sound.
+- A game whose in-game save is on RomM but not on this computer gets it when it starts, including a save this computer uploaded before, instead of starting with no save or with an older one from another app.
 
 ## [0.12.0] - 2026-10-07
 
