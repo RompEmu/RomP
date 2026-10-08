@@ -7,7 +7,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Added
 
 - A game's page shows its in-game save beside its save states, and whether it's synced with RomM, waiting to sync, or on RomM and coming down when you play.
-- When RomM only has a game's in-game save from another emulator, such as another app's GBA save, the game's page offers to use it. RomM keeps saves per emulator, so RomP never got those. This is offered for NES, SNES, Game Boy, Game Boy Advance, Genesis, Master System, Game Gear, DS, PlayStation and PS2 games, whose saves carry over between emulators.
+- When RomM only has a game's in-game save from another emulator, such as another app's GBA save, the game's page offers to use it. RomP uses another emulator's save only when you choose it there. This is offered for NES, SNES, Game Boy, Game Boy Advance, Genesis, Master System, Game Gear, DS, PlayStation and PS2 games, whose saves carry over between emulators.
 
 ### Fixed
 
