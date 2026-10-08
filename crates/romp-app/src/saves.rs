@@ -532,7 +532,9 @@ pub async fn sync_sram(
         })
         .into_iter()
         .collect();
-    let negotiation = client.negotiate(device_id, &saves, &[game.rom_id]).await?;
+    let negotiation = client
+        .negotiate(device_id, &saves, &[game.rom_id], &game.save_emulator)
+        .await?;
     let session = negotiation.session_id;
     let op = negotiation
         .operations

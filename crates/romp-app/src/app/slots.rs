@@ -7,6 +7,8 @@ use crate::SlotCard;
 use slint::{ModelRc, VecModel};
 use tr::tr;
 
+const SAVES_RETRY: std::time::Duration = std::time::Duration::from_secs(3);
+
 impl Controller {
     /// The game page's saves: the in-game save, where you left off, then every filled slot.
     pub(super) fn show_save_slots(&self, detail: &GameDetail) {
@@ -32,13 +34,29 @@ impl Controller {
         let store = self.shared.store.clone();
         let detail = detail.clone();
         self.shared.rt.spawn(async move {
-            let Ok(server) = client
-                .list_saves(game.rom_id, saves::SRAM_SLOT, &device)
-                .await
-            else {
-                return;
+            // RomM sometimes fails a request while RomP starts up and asks for much at once.
+            let list = || client.list_saves(game.rom_id, saves::SRAM_SLOT, &device);
+            let listed = match list().await {
+                Err(_) => {
+                    tokio::time::sleep(SAVES_RETRY).await;
+                    list().await
+                }
+                ok => ok,
+            };
+            let server = match listed {
+                Ok(server) => server,
+                Err(e) => {
+                    tracing::warn!("listing {}'s saves on RomM: {e}", detail.title);
+                    return;
+                }
             };
             let summary = saves::server_saves(&server, &detail.platform_slug, &game.save_emulator);
+            tracing::info!(
+                rom_id = game.rom_id,
+                listed = server.len(),
+                ?summary,
+                "in-game saves on RomM"
+            );
             let ours = saves::for_emulator(server, &game.save_emulator);
             if let Some(record) = local.and_then(|md5| saves::matching_server_save(&md5, &ours)) {
                 store.lock().unwrap().set_in_game_save_record(
@@ -127,10 +145,7 @@ impl Controller {
             .await;
             on_ui(move |c| {
                 let status = match result {
-                    Ok(true) => tr!(
-                        "Using the save from {}. It syncs as RomP's from now on.",
-                        emulator
-                    ),
+                    Ok(true) => tr!("Using the save from {}. It becomes RomP's own the first time the game saves.", emulator),
                     Ok(false) => tr!(
                         "The save from {} isn't one this emulator can read.",
                         emulator

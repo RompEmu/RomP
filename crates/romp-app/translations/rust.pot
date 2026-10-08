@@ -573,7 +573,7 @@ msgid "Copying the save from {}…"
 msgstr ""
 
 #: crates/romp-app/src/app/slots.rs
-msgid "Using the save from {}. It syncs as RomP's from now on."
+msgid "Using the save from {}. It becomes RomP's own the first time the game saves."
 msgstr ""
 
 #: crates/romp-app/src/app/slots.rs

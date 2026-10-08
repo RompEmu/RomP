@@ -550,9 +550,17 @@ impl Client {
         device_id: &str,
         saves: &[ClientSave],
         rom_ids: &[i64],
+        emulator: &str,
     ) -> Result<Negotiation, Error> {
-        let body =
-            serde_json::json!({ "device_id": device_id, "saves": saves, "rom_ids": rom_ids });
+        // RomP never deletes an in-game save itself, so one it doesn't list is lost rather than
+        // deleted, and it loads only its own emulator's saves.
+        let body = serde_json::json!({
+            "device_id": device_id,
+            "saves": saves,
+            "rom_ids": rom_ids,
+            "emulators": [emulator],
+            "restore_unlisted": true,
+        });
         let resp = self
             .send(
                 self.request(reqwest::Method::POST, "/api/sync/negotiate")
@@ -1419,7 +1427,7 @@ pub(crate) mod tests {
         Mock::given(method("POST"))
             .and(path("/api/sync/negotiate"))
             .and(body_json(serde_json::json!({
-                "device_id": "dev", "rom_ids": [5],
+                "device_id": "dev", "rom_ids": [5], "emulators": ["snes9x"], "restore_unlisted": true,
                 "saves": [{"rom_id": 5, "file_name": "Zelda.srm", "slot": "autosave", "emulator": "snes9x",
                            "content_hash": "abc", "updated_at": "2026-09-26T10:00:00+00:00", "file_size_bytes": 8192}]})))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -1428,7 +1436,7 @@ pub(crate) mod tests {
             .mount(&server)
             .await;
         let n = authed(&server)
-            .negotiate("dev", &[save], &[5])
+            .negotiate("dev", &[save], &[5], "snes9x")
             .await
             .unwrap();
         assert_eq!(n.session_id, 9);
