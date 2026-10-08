@@ -289,6 +289,31 @@ impl GameSaves {
     }
 }
 
+async fn is_ours(
+    client: &Client,
+    device_id: &str,
+    game: &GameSaves,
+    save_id: i64,
+) -> Result<bool, Error> {
+    let listed = client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?;
+    Ok(for_emulator(listed, &game.save_emulator)
+        .iter()
+        .any(|s| s.id == save_id))
+}
+
+async fn download_newest(
+    client: &Client,
+    device_id: &str,
+    game: &GameSaves,
+) -> Result<SramOutcome, Error> {
+    let listed = client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?;
+    let Some(save) = newest(for_emulator(listed, &game.save_emulator)) else {
+        return Ok(SramOutcome::InSync);
+    };
+    let bytes = client.download_save(save.id, device_id, None).await?;
+    install_download(game, &bytes)
+}
+
 /// Where a game's in-game save stands with RomM, for its card on the game's page.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InGameSaveStatus {
@@ -513,7 +538,15 @@ pub async fn sync_sram(
         .operations
         .into_iter()
         .find(|o| o.rom_id == game.rom_id && o.slot.as_deref() == Some(SRAM_SLOT));
+    tracing::info!(
+        rom_id = game.rom_id,
+        ?op,
+        "RomM's sync answer for the in-game save"
+    );
     let result = match (op.as_ref().map(|o| o.action.as_str()), local) {
+        // RomM may pick another emulator's save, or none when this device uploaded the newest
+        // itself, so with no save here RomP takes the newest of its own.
+        (_, None) => download_newest(client, device_id, game).await,
         (Some("upload"), Some(bytes)) => {
             match upload_sram(client, device_id, game, bytes, Some(session), false).await {
                 Ok(()) => Ok(SramOutcome::Uploaded),
@@ -533,6 +566,10 @@ pub async fn sync_sram(
             }
         }
         (Some("download"), _) => match op.as_ref().and_then(|o| o.save_id) {
+            // Another emulator's save is only ever used when it's chosen on the game's page.
+            Some(save_id) if !is_ours(client, device_id, game, save_id).await? => {
+                Ok(SramOutcome::InSync)
+            }
             Some(save_id) => {
                 let bytes = client
                     .download_save(save_id, device_id, Some(session))
@@ -1151,11 +1188,91 @@ mod tests {
             Client::new(base_of(server, "/")).with_token("t".into())
         }
 
+        async fn listed(server: &MockServer, saves: serde_json::Value) {
+            Mock::given(method("GET"))
+                .and(path("/api/saves"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(saves))
+                .mount(server)
+                .await;
+        }
+
+        #[tokio::test]
+        async fn with_no_save_here_the_newest_of_romps_on_romm_comes_down() {
+            let server = MockServer::start().await;
+            negotiation(
+                &server,
+                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 6, "file_name": "x.sav"}]),
+            )
+            .await;
+            Mock::given(method("GET"))
+                .and(path("/api/saves/6/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"other emulator".to_vec()))
+                .expect(0)
+                .mount(&server)
+                .await;
+            completion_counts(&server, 1, 0).await;
+            let save = |id: i64, emulator: &str, at: &str| {
+                json!({"id": id, "rom_id": 5, "file_name": "x.srm", "slot": "autosave",
+                       "updated_at": at, "emulator": emulator})
+            };
+            listed(
+                &server,
+                json!([
+                    save(6, "GBA", "2026-10-09T09:00:00+00:00"),
+                    save(19, "snes9x", "2026-10-01T09:00:00+00:00"),
+                    save(20, "snes9x", "2026-10-08T09:42:18+00:00"),
+                ]),
+            )
+            .await;
+            Mock::given(method("GET"))
+                .and(path("/api/saves/20/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"from romm".to_vec()))
+                .expect(1)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
+            assert_eq!(outcome.unwrap(), SramOutcome::Downloaded { backup: None });
+            assert_eq!(
+                std::fs::read(dir.path().join(SRAM_FILE)).unwrap(),
+                b"from romm"
+            );
+        }
+
+        #[tokio::test]
+        async fn another_emulators_save_is_not_downloaded_over_this_one() {
+            let server = MockServer::start().await;
+            negotiation(
+                &server,
+                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 6, "file_name": "x.sav"}]),
+            )
+            .await;
+            completion_counts(&server, 0, 0).await;
+            listed(
+                &server,
+                json!([{"id": 6, "rom_id": 5, "file_name": "x.sav", "slot": "autosave",
+                "updated_at": "2026-10-09T09:00:00+00:00", "emulator": "GBA"}]),
+            )
+            .await;
+            Mock::given(method("GET"))
+                .and(path("/api/saves/6/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"other emulator".to_vec()))
+                .expect(0)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
+            assert_eq!(outcome.unwrap(), SramOutcome::InSync);
+            assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"mine");
+        }
+
         #[tokio::test]
         async fn nothing_to_sync() {
             let server = MockServer::start().await;
             negotiation(&server, json!([])).await;
             completion_counts(&server, 0, 0).await;
+            listed(&server, json!([])).await;
             Mock::given(method("POST"))
                 .and(path("/api/saves"))
                 .respond_with(ResponseTemplate::new(500))
@@ -1240,6 +1357,12 @@ mod tests {
             )
             .await;
             completion(&server, 1).await;
+            listed(
+                &server,
+                json!([{"id": 4, "rom_id": 5, "file_name": "Zelda.ps2", "slot": "autosave",
+                "updated_at": "2026-10-08T09:00:00+00:00", "emulator": "pcsx2"}]),
+            )
+            .await;
             Mock::given(method("GET"))
                 .and(path("/api/saves/4/content"))
                 .respond_with(ResponseTemplate::new(200).set_body_bytes(b"new card".to_vec()))
@@ -1271,6 +1394,12 @@ mod tests {
             )
             .await;
             completion(&server, 1).await;
+            listed(
+                &server,
+                json!([{"id": 4, "rom_id": 5, "file_name": "x.srm", "slot": "autosave",
+                "updated_at": "2026-10-08T09:00:00+00:00", "emulator": "snes9x"}]),
+            )
+            .await;
             Mock::given(method("GET"))
                 .and(path("/api/saves/4/content"))
                 .and(query_param("session_id", "9"))
