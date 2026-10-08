@@ -109,6 +109,7 @@ struct DeviceState {
 pub struct HwVulkanContext {
     _entry: ash::Entry,
     instance: ash::Instance,
+    surface: vk::SurfaceKHR,
     negotiation: RefCell<*const Negotiation>,
     state: RefCell<Option<DeviceState>>,
     interface: OnceCell<Box<RenderInterface>>,
@@ -177,6 +178,12 @@ impl HwVulkanContext {
         if has(ash::khr::get_physical_device_properties2::NAME) {
             extensions.push(ash::khr::get_physical_device_properties2::NAME.as_ptr());
         }
+        // Cores such as Dolphin present only through a swapchain on a surface, and there's no window.
+        let headless = has(ash::khr::surface::NAME) && has(ash::ext::headless_surface::NAME);
+        if headless {
+            extensions.push(ash::khr::surface::NAME.as_ptr());
+            extensions.push(ash::ext::headless_surface::NAME.as_ptr());
+        }
         if has(ash::khr::portability_enumeration::NAME) {
             extensions.push(ash::khr::portability_enumeration::NAME.as_ptr());
             flags |= vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR;
@@ -190,9 +197,17 @@ impl HwVulkanContext {
             .enabled_extension_names(&extensions)
             .flags(flags);
         let instance = unsafe { entry.create_instance(&info, None) }?;
+        let surface = if headless {
+            let loader = ash::ext::headless_surface::Instance::new(&entry, &instance);
+            let info = vk::HeadlessSurfaceCreateInfoEXT::default();
+            unsafe { loader.create_headless_surface(&info, None) }.unwrap_or_default()
+        } else {
+            vk::SurfaceKHR::null()
+        };
         Ok(Self {
             _entry: entry,
             instance,
+            surface,
             negotiation: RefCell::new(std::ptr::null()),
             state: RefCell::new(None),
             interface: OnceCell::new(),
@@ -213,7 +228,7 @@ impl HwVulkanContext {
                     &mut context,
                     self.instance.handle(),
                     vk::PhysicalDevice::null(),
-                    vk::SurfaceKHR::null(),
+                    self.surface,
                     self._entry.static_fn().get_instance_proc_addr,
                     std::ptr::null(),
                     0,
@@ -931,6 +946,43 @@ mod tests {
             return;
         };
         assert!(ctx.readback_bgra(2, 2).iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn a_core_creating_its_device_is_given_a_surface() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SURFACE: AtomicU64 = AtomicU64::new(0);
+        unsafe extern "C" fn create(
+            _context: *mut RetroVulkanContext,
+            _instance: vk::Instance,
+            _gpu: vk::PhysicalDevice,
+            surface: vk::SurfaceKHR,
+            _get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+            _extensions: *const *const c_char,
+            _num_extensions: c_uint,
+            _layers: *const *const c_char,
+            _num_layers: c_uint,
+            _features: *const vk::PhysicalDeviceFeatures,
+        ) -> bool {
+            SURFACE.store(vk::Handle::as_raw(surface), Ordering::SeqCst);
+            false
+        }
+        let Some((_guard, ctx)) = context() else {
+            return;
+        };
+        let negotiation = Negotiation {
+            interface_type: RETRO_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_VULKAN,
+            interface_version: NEGOTIATION_VERSION,
+            get_application_info: None,
+            create_device: Some(create),
+            destroy_device: None,
+        };
+        assert!(unsafe { ctx.set_negotiation_interface(&raw const negotiation as *const c_void) });
+        assert!(ctx.create_device().is_err());
+        if cfg!(target_os = "macos") {
+            // Dolphin presents only through a swapchain on this surface.
+            assert_ne!(SURFACE.load(Ordering::SeqCst), 0);
+        }
     }
 
     #[test]

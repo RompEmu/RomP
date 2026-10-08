@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Fixed
+
+- GameCube and Wii games show their picture, instead of a black screen with sound.
+
 ## [0.12.0] - 2026-10-07
 
 ### Added
