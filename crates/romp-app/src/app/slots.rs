@@ -59,13 +59,20 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         let dir = crate::paths::game_save_dir(&crate::paths::data_dir(), &self.server(), detail.id);
         let now = std::time::SystemTime::now();
-        let in_game = self.game_saves(detail).and_then(|game| {
+        let paired = self.sync_device().is_some();
+        let (record, pending) = {
             let store = self.shared.store.lock().unwrap();
+            (
+                store.in_game_save_record(detail.id),
+                store.pending().contains(&detail.id),
+            )
+        };
+        let in_game = self.game_saves(detail).and_then(|game| {
             saves::in_game_save_status(
                 saves::local_md5(&game).as_deref(),
-                store.in_game_save_record(detail.id).as_ref(),
-                self.sync_device().is_some(),
-                store.pending().contains(&detail.id),
+                record.as_ref(),
+                paired,
+                pending,
                 server,
             )
         });

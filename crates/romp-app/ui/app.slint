@@ -1248,6 +1248,7 @@ component GamePage inherits FocusScope {
                             for card in root.save-slots: VerticalLayout {
                                 width: 200px;
                                 spacing: 6px;
+                                alignment: start;
                                 SlotPicture { card: card; height: 124px; }
                                 Text { horizontal-alignment: Locale.start; text: card.label; font-weight: 700; font-size: Theme.font-body; color: Theme.text-strong; }
                                 Text { horizontal-alignment: Locale.start; text: card.detail; font-size: Theme.font-small; color: Theme.text-muted; wrap: word-wrap; }
