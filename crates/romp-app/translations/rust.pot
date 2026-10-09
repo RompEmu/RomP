@@ -253,7 +253,7 @@ msgid "Saves will sync when the server is reachable."
 msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs
-msgid "A newer save is on the server. You'll be asked which to keep next time you play."
+msgid "The save here and the one on RomM differ. You'll be asked which to keep next time you play."
 msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs

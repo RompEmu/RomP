@@ -138,7 +138,7 @@ impl Controller {
                     return Ok(false);
                 };
                 saves::install_download(&game, &bytes)?;
-                let outcome = saves::sync_sram(&client, &device, &game).await?;
+                let outcome = saves::sync_sram(&client, &device, &game, None).await?;
                 saves::remember_outcome(&store, &game, &outcome);
                 Ok::<_, Error>(true)
             }

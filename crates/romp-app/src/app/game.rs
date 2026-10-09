@@ -601,7 +601,8 @@ impl Controller {
             let sram = match (&client, sync) {
                 (Some(client), Some((device, game))) => {
                     on_ui(move |c| c.game_status(id, tr!("Syncing your save…")));
-                    let result = saves::sync_sram(client, &device, &game).await;
+                    let last = store.lock().unwrap().in_game_save_record(game.rom_id);
+                    let result = saves::sync_sram(client, &device, &game, last.as_ref()).await;
                     if let Ok(outcome) = &result {
                         saves::remember_outcome(&store, &game, outcome);
                     }

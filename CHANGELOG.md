@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Fixed
+
+- A game whose save didn't come down from RomM before 0.13.0, and that has since started a fresh save, is no longer stuck with it: when the save here and RomM's differ and RomP can't tell which is newer, it asks which to keep, as it does for any conflict. RomP now decides each sync from the save here, its newest on RomM and the one it last synced, instead of relying on RomM's sync answer, which can miss a save or offer another emulator's.
+
 ## [0.13.0] - 2026-10-08
 
 ### Added

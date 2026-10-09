@@ -242,35 +242,6 @@ pub struct Firmware {
     pub sha1_hash: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ClientSave {
-    pub rom_id: i64,
-    pub file_name: String,
-    pub slot: Option<String>,
-    pub emulator: Option<String>,
-    pub content_hash: Option<String>,
-    pub updated_at: String,
-    pub file_size_bytes: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct SyncOp {
-    pub action: String,
-    pub rom_id: i64,
-    pub save_id: Option<i64>,
-    #[serde(default)]
-    pub slot: Option<String>,
-    pub file_name: String,
-    pub server_updated_at: Option<String>,
-    pub server_content_hash: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct Negotiation {
-    pub session_id: i64,
-    pub operations: Vec<SyncOp>,
-}
-
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RemoteSave {
     pub id: i64,

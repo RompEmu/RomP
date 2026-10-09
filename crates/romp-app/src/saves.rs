@@ -1,5 +1,4 @@
 use crate::romm::client::{Client, Error, SaveUpload};
-use crate::romm::types::ClientSave;
 use crate::store::InGameSaveRecord;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -289,31 +288,6 @@ impl GameSaves {
     }
 }
 
-async fn is_ours(
-    client: &Client,
-    device_id: &str,
-    game: &GameSaves,
-    save_id: i64,
-) -> Result<bool, Error> {
-    let listed = client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?;
-    Ok(for_emulator(listed, &game.save_emulator)
-        .iter()
-        .any(|s| s.id == save_id))
-}
-
-async fn download_newest(
-    client: &Client,
-    device_id: &str,
-    game: &GameSaves,
-) -> Result<SramOutcome, Error> {
-    let listed = client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?;
-    let Some(save) = newest(for_emulator(listed, &game.save_emulator)) else {
-        return Ok(SramOutcome::InSync);
-    };
-    let bytes = client.download_save(save.id, device_id, None).await?;
-    install_download(game, &bytes)
-}
-
 /// Where a game's in-game save stands with RomM, for its card on the game's page.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InGameSaveStatus {
@@ -512,91 +486,78 @@ pub fn install_download(game: &GameSaves, bytes: &[u8]) -> Result<SramOutcome, E
     Ok(SramOutcome::Downloaded { backup })
 }
 
+/// What a sync does with a game's in-game save.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SramAction {
+    InSync,
+    Upload,
+    Download,
+    /// Both differ and nothing tells which is newer, so whoever plays chooses.
+    Ask,
+}
+
+/// Decides from the save here, RomP's newest on RomM and the one last synced, all as content
+/// hashes. RomM's save is `Some(None)` when RomM didn't say its hash.
+pub fn sram_action(
+    here: Option<&str>,
+    romm: Option<Option<&str>>,
+    last_synced: Option<&str>,
+) -> SramAction {
+    match (here, romm) {
+        (None, None) => SramAction::InSync,
+        (Some(_), None) => SramAction::Upload,
+        (None, Some(_)) => SramAction::Download,
+        (Some(here), Some(romm)) if romm == Some(here) => SramAction::InSync,
+        (Some(here), Some(_)) if last_synced == Some(here) => SramAction::Download,
+        (Some(_), Some(romm)) if last_synced.is_some() && romm == last_synced => SramAction::Upload,
+        _ => SramAction::Ask,
+    }
+}
+
+/// Syncs a game's in-game save with RomP's newest on RomM, given the one last synced.
 pub async fn sync_sram(
     client: &Client,
     device_id: &str,
     game: &GameSaves,
+    last_synced: Option<&InGameSaveRecord>,
 ) -> Result<SramOutcome, Error> {
     let local = std::fs::read(game.sram_path()).ok();
-    let local_updated_at = file_iso_mtime(&game.sram_path());
-    let saves: Vec<ClientSave> = local
-        .as_ref()
-        .map(|bytes| ClientSave {
-            rom_id: game.rom_id,
-            file_name: game.remote_sram_name(),
-            slot: Some(SRAM_SLOT.into()),
-            emulator: Some(game.save_emulator.clone()),
-            content_hash: Some(md5_hex(bytes)),
-            updated_at: local_updated_at.clone().unwrap_or_default(),
-            file_size_bytes: bytes.len() as u64,
-        })
-        .into_iter()
-        .collect();
-    let negotiation = client
-        .negotiate(device_id, &saves, &[game.rom_id], &game.save_emulator)
-        .await?;
-    let session = negotiation.session_id;
-    let op = negotiation
-        .operations
-        .into_iter()
-        .find(|o| o.rom_id == game.rom_id && o.slot.as_deref() == Some(SRAM_SLOT));
+    let local_md5 = local.as_deref().map(md5_hex);
+    let listed = client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?;
+    let server = newest(for_emulator(listed, &game.save_emulator));
+    let action = sram_action(
+        local_md5.as_deref(),
+        server.as_ref().map(|s| s.content_hash.as_deref()),
+        last_synced.map(|r| r.md5.as_str()),
+    );
     tracing::info!(
         rom_id = game.rom_id,
-        ?op,
-        "RomM's sync answer for the in-game save"
+        server = server.as_ref().map(|s| s.id),
+        ?action,
+        "in-game save sync"
     );
-    let result = match (op.as_ref().map(|o| o.action.as_str()), local) {
-        // RomM may pick another emulator's save, or none when this device uploaded the newest
-        // itself, so with no save here RomP takes the newest of its own.
-        (_, None) => download_newest(client, device_id, game).await,
-        (Some("upload"), Some(bytes)) => {
-            match upload_sram(client, device_id, game, bytes, Some(session), false).await {
+    let conflict = |server: Option<crate::romm::types::RemoteSave>| {
+        SramOutcome::Conflict(SramConflict {
+            save_id: server.as_ref().map(|s| s.id),
+            server_updated_at: server.map(|s| s.updated_at),
+            local_updated_at: file_iso_mtime(&game.sram_path()),
+        })
+    };
+    match (action, local, server) {
+        (SramAction::Upload, Some(bytes), server) => {
+            match upload_sram(client, device_id, game, bytes, None, false).await {
                 Ok(()) => Ok(SramOutcome::Uploaded),
-                Err(Error::Conflict) => {
-                    let latest = client
-                        .list_saves(game.rom_id, SRAM_SLOT, device_id)
-                        .await
-                        .ok()
-                        .and_then(newest);
-                    Ok(SramOutcome::Conflict(SramConflict {
-                        save_id: latest.as_ref().map(|s| s.id),
-                        server_updated_at: latest.map(|s| s.updated_at),
-                        local_updated_at,
-                    }))
-                }
+                Err(Error::Conflict) => Ok(conflict(server)),
                 Err(e) => Err(e),
             }
         }
-        (Some("download"), _) => match op.as_ref().and_then(|o| o.save_id) {
-            // Another emulator's save is only ever used when it's chosen on the game's page.
-            Some(save_id) if !is_ours(client, device_id, game, save_id).await? => {
-                Ok(SramOutcome::InSync)
-            }
-            Some(save_id) => {
-                let bytes = client
-                    .download_save(save_id, device_id, Some(session))
-                    .await?;
-                install_download(game, &bytes)
-            }
-            None => Err(Error::Decode("download without a save id".into())),
-        },
-        (Some("conflict"), _) => {
-            let op = op.expect("conflict operation");
-            Ok(SramOutcome::Conflict(SramConflict {
-                save_id: op.save_id,
-                server_updated_at: op.server_updated_at,
-                local_updated_at,
-            }))
+        (SramAction::Download, _, Some(server)) => {
+            let bytes = client.download_save(server.id, device_id, None).await?;
+            install_download(game, &bytes)
         }
+        (SramAction::Ask, _, server) => Ok(conflict(server)),
         _ => Ok(SramOutcome::InSync),
-    };
-    let (completed, failed) = match &result {
-        Ok(SramOutcome::Uploaded | SramOutcome::Downloaded { .. }) => (1, 0),
-        Ok(SramOutcome::InSync | SramOutcome::Conflict(_)) => (0, 0),
-        Err(_) => (0, 1),
-    };
-    let _ = client.complete_session(session, completed, failed).await;
-    result
+    }
 }
 
 pub async fn resolve_sram(
@@ -616,9 +577,12 @@ pub async fn resolve_sram(
         Keep::Server => {
             let save_id = match conflict.save_id {
                 Some(id) => id,
-                None => newest(client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?)
-                    .map(|s| s.id)
-                    .ok_or_else(|| Error::Decode("no server save to use".into()))?,
+                None => newest(for_emulator(
+                    client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?,
+                    &game.save_emulator,
+                ))
+                .map(|s| s.id)
+                .ok_or_else(|| Error::Decode("no server save to use".into()))?,
             };
             let bytes = client.download_save(save_id, device_id, None).await?;
             install_download(game, &bytes)
@@ -1134,7 +1098,7 @@ mod tests {
         use super::super::*;
         use crate::romm::client::tests::base_of;
         use serde_json::json;
-        use wiremock::matchers::{body_json, method, path, query_param};
+        use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
         fn game(dir: &Path) -> GameSaves {
@@ -1148,46 +1112,35 @@ mod tests {
             }
         }
 
-        async fn negotiation(server: &MockServer, ops: serde_json::Value) {
-            Mock::given(method("POST"))
-                .and(path("/api/sync/negotiate"))
-                .respond_with(
-                    ResponseTemplate::new(200)
-                        .set_body_json(json!({"session_id": 9, "operations": ops})),
-                )
-                .mount(server)
-                .await;
-        }
-
-        async fn completion_counts(server: &MockServer, completed: u32, failed: u32) {
-            Mock::given(method("POST"))
-                .and(path("/api/sync/sessions/9/complete"))
-                .and(body_json(json!({
-                    "operations_completed": completed,
-                    "operations_failed": failed
-                })))
-                .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
-                .expect(1)
-                .mount(server)
-                .await;
-        }
-
-        async fn completion(server: &MockServer, times: u64) {
-            Mock::given(method("POST"))
-                .and(path("/api/sync/sessions/9/complete"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
-                .expect(times)
-                .mount(server)
-                .await;
-        }
-
-        fn save_json(id: i64, updated: &str) -> serde_json::Value {
-            json!({"id": id, "rom_id": 5, "file_name": "Zelda [t].srm", "slot": "autosave",
-                   "updated_at": updated, "content_hash": "h"})
+        fn ps2_game(dir: &Path) -> GameSaves {
+            let (save_file, save_emulator) = in_game_save("armsx2", dir, None);
+            GameSaves {
+                emulator: "armsx2".into(),
+                save_file,
+                save_emulator,
+                ..game(dir)
+            }
         }
 
         fn client(server: &MockServer) -> Client {
             Client::new(base_of(server, "/")).with_token("t".into())
+        }
+
+        fn save_json(id: i64, updated: &str) -> serde_json::Value {
+            json!({"id": id, "rom_id": 5, "file_name": "Zelda [t].srm", "slot": "autosave",
+                   "updated_at": updated, "content_hash": "h", "emulator": "snes9x"})
+        }
+
+        /// A save of RomP's on RomM, with this content hash.
+        fn remote(id: i64, hash: &str, updated: &str) -> serde_json::Value {
+            json!({"id": id, "rom_id": 5, "file_name": "Zelda [t].srm", "slot": "autosave",
+                   "updated_at": updated, "content_hash": hash, "emulator": "snes9x"})
+        }
+
+        /// A newer save from another emulator, which RomP's sync leaves alone.
+        fn other(id: i64, updated: &str) -> serde_json::Value {
+            json!({"id": id, "rom_id": 5, "file_name": "Zelda.sav", "slot": "autosave",
+                   "updated_at": updated, "content_hash": "other", "emulator": "bsnes"})
         }
 
         async fn listed(server: &MockServer, saves: serde_json::Value) {
@@ -1198,42 +1151,87 @@ mod tests {
                 .await;
         }
 
-        #[tokio::test]
-        async fn with_no_save_here_the_newest_of_romps_on_romm_comes_down() {
-            let server = MockServer::start().await;
-            negotiation(
-                &server,
-                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 6, "file_name": "x.sav"}]),
-            )
-            .await;
+        async fn content(server: &MockServer, id: i64, bytes: &[u8], times: u64) {
             Mock::given(method("GET"))
-                .and(path("/api/saves/6/content"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"other emulator".to_vec()))
-                .expect(0)
-                .mount(&server)
+                .and(path(format!("/api/saves/{id}/content")))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(bytes.to_vec()))
+                .expect(times)
+                .mount(server)
                 .await;
-            completion_counts(&server, 1, 0).await;
-            let save = |id: i64, emulator: &str, at: &str| {
-                json!({"id": id, "rom_id": 5, "file_name": "x.srm", "slot": "autosave",
-                       "updated_at": at, "emulator": emulator})
-            };
+        }
+
+        async fn uploads(server: &MockServer, status: u16, times: u64) {
+            Mock::given(method("POST"))
+                .and(path("/api/saves"))
+                .and(query_param("slot", "autosave"))
+                .and(query_param("overwrite", "false"))
+                .respond_with(ResponseTemplate::new(status).set_body_json(save_json(1, "t")))
+                .expect(times)
+                .mount(server)
+                .await;
+        }
+
+        fn synced(bytes: &[u8]) -> InGameSaveRecord {
+            InGameSaveRecord {
+                md5: md5_hex(bytes),
+                synced_at: 0,
+            }
+        }
+
+        #[test]
+        fn the_save_here_romms_and_the_last_synced_decide_what_happens() {
+            use SramAction::*;
+            let (here, romm, base) = (Some("here"), Some(Some("romm")), Some("base"));
+            assert_eq!(sram_action(None, None, None), InSync);
+            assert_eq!(sram_action(here, None, base), Upload);
+            assert_eq!(sram_action(None, romm, base), Download);
+            assert_eq!(sram_action(here, Some(Some("here")), None), InSync);
+            assert_eq!(sram_action(here, romm, Some("here")), Download);
+            assert_eq!(sram_action(here, Some(Some("base")), base), Upload);
+            assert_eq!(sram_action(here, romm, base), Ask);
+            assert_eq!(sram_action(here, romm, None), Ask);
+            assert_eq!(sram_action(here, Some(None), Some("here")), Download);
+            assert_eq!(sram_action(here, Some(None), None), Ask);
+        }
+
+        #[tokio::test]
+        async fn with_no_save_anywhere_nothing_happens() {
+            let server = MockServer::start().await;
+            listed(&server, json!([other(9, "2026-10-09T09:00:00+00:00")])).await;
+            uploads(&server, 200, 0).await;
+            content(&server, 9, b"other", 0).await;
+            let dir = tempfile::tempdir().unwrap();
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()), None).await;
+            assert_eq!(outcome.unwrap(), SramOutcome::InSync);
+        }
+
+        #[tokio::test]
+        async fn a_save_only_here_uploads() {
+            let server = MockServer::start().await;
+            listed(&server, json!([])).await;
+            uploads(&server, 200, 1).await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()), None).await;
+            assert_eq!(outcome.unwrap(), SramOutcome::Uploaded);
+        }
+
+        #[tokio::test]
+        async fn a_save_only_on_romm_comes_down_the_newest_of_romps() {
+            let server = MockServer::start().await;
             listed(
                 &server,
                 json!([
-                    save(6, "GBA", "2026-10-09T09:00:00+00:00"),
-                    save(19, "snes9x", "2026-10-01T09:00:00+00:00"),
-                    save(20, "snes9x", "2026-10-08T09:42:18+00:00"),
+                    remote(19, "a", "2026-10-01T09:00:00+00:00"),
+                    remote(20, "b", "2026-10-08T09:42:18+00:00"),
+                    other(6, "2026-10-09T09:00:00+00:00"),
                 ]),
             )
             .await;
-            Mock::given(method("GET"))
-                .and(path("/api/saves/20/content"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"from romm".to_vec()))
-                .expect(1)
-                .mount(&server)
-                .await;
+            content(&server, 20, b"from romm", 1).await;
+            content(&server, 6, b"other", 0).await;
             let dir = tempfile::tempdir().unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()), None).await;
             assert_eq!(outcome.unwrap(), SramOutcome::Downloaded { backup: None });
             assert_eq!(
                 std::fs::read(dir.path().join(SRAM_FILE)).unwrap(),
@@ -1242,78 +1240,173 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn another_emulators_save_is_not_downloaded_over_this_one() {
+        async fn the_same_save_on_both_sides_is_in_sync_whatever_was_recorded() {
             let server = MockServer::start().await;
-            negotiation(
-                &server,
-                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 6, "file_name": "x.sav"}]),
-            )
-            .await;
-            completion_counts(&server, 0, 0).await;
             listed(
                 &server,
-                json!([{"id": 6, "rom_id": 5, "file_name": "x.sav", "slot": "autosave",
-                "updated_at": "2026-10-09T09:00:00+00:00", "emulator": "GBA"}]),
+                json!([remote(4, &md5_hex(b"mine"), "2026-10-08T09:00:00+00:00")]),
             )
             .await;
-            Mock::given(method("GET"))
-                .and(path("/api/saves/6/content"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"other emulator".to_vec()))
-                .expect(0)
-                .mount(&server)
-                .await;
+            uploads(&server, 200, 0).await;
+            content(&server, 4, b"mine", 0).await;
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()), None).await;
             assert_eq!(outcome.unwrap(), SramOutcome::InSync);
-            assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"mine");
         }
 
         #[tokio::test]
-        async fn nothing_to_sync() {
+        async fn a_save_unchanged_here_takes_romms_newer_one_and_keeps_a_backup() {
             let server = MockServer::start().await;
-            negotiation(&server, json!([])).await;
-            completion_counts(&server, 0, 0).await;
+            listed(
+                &server,
+                json!([remote(4, "newer", "2026-10-08T09:00:00+00:00")]),
+            )
+            .await;
+            content(&server, 4, b"new", 1).await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(SRAM_FILE), b"old").unwrap();
+            let outcome = sync_sram(
+                &client(&server),
+                "dev",
+                &game(dir.path()),
+                Some(&synced(b"old")),
+            )
+            .await
+            .unwrap();
+            let SramOutcome::Downloaded {
+                backup: Some(backup),
+            } = outcome
+            else {
+                panic!("{outcome:?}")
+            };
+            assert_eq!(std::fs::read(backup).unwrap(), b"old");
+            assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"new");
+        }
+
+        #[tokio::test]
+        async fn a_save_changed_here_uploads_over_romms_unchanged_one() {
+            let server = MockServer::start().await;
+            listed(
+                &server,
+                json!([remote(4, &md5_hex(b"old"), "2026-10-08T09:00:00+00:00")]),
+            )
+            .await;
+            uploads(&server, 200, 1).await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(SRAM_FILE), b"new").unwrap();
+            let outcome = sync_sram(
+                &client(&server),
+                "dev",
+                &game(dir.path()),
+                Some(&synced(b"old")),
+            )
+            .await;
+            assert_eq!(outcome.unwrap(), SramOutcome::Uploaded);
+        }
+
+        #[tokio::test]
+        async fn saves_that_differ_with_nothing_to_tell_which_is_newer_are_asked_about() {
+            for record in [None, Some(synced(b"base"))] {
+                let server = MockServer::start().await;
+                listed(
+                    &server,
+                    json!([remote(4, "theirs", "2026-10-08T09:00:00+00:00")]),
+                )
+                .await;
+                uploads(&server, 200, 0).await;
+                content(&server, 4, b"theirs", 0).await;
+                let dir = tempfile::tempdir().unwrap();
+                std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
+                let outcome =
+                    sync_sram(&client(&server), "dev", &game(dir.path()), record.as_ref()).await;
+                let Ok(SramOutcome::Conflict(conflict)) = outcome else {
+                    panic!("{outcome:?}")
+                };
+                assert_eq!(conflict.save_id, Some(4));
+                assert_eq!(
+                    conflict.server_updated_at.as_deref(),
+                    Some("2026-10-08T09:00:00+00:00")
+                );
+                assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"mine");
+            }
+        }
+
+        #[tokio::test]
+        async fn an_upload_romm_refuses_becomes_a_question() {
+            let server = MockServer::start().await;
+            listed(
+                &server,
+                json!([remote(4, &md5_hex(b"old"), "2026-10-08T09:00:00+00:00")]),
+            )
+            .await;
+            uploads(&server, 409, 1).await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(SRAM_FILE), b"new").unwrap();
+            let outcome = sync_sram(
+                &client(&server),
+                "dev",
+                &game(dir.path()),
+                Some(&synced(b"old")),
+            )
+            .await;
+            let Ok(SramOutcome::Conflict(conflict)) = outcome else {
+                panic!("{outcome:?}")
+            };
+            assert_eq!(conflict.save_id, Some(4));
+        }
+
+        #[tokio::test]
+        async fn a_ps2_memory_card_uploads_under_the_shared_ps2_name() {
+            let server = MockServer::start().await;
             listed(&server, json!([])).await;
             Mock::given(method("POST"))
                 .and(path("/api/saves"))
-                .respond_with(ResponseTemplate::new(500))
-                .expect(0)
-                .mount(&server)
-                .await;
-            let dir = tempfile::tempdir().unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
-            assert_eq!(outcome.unwrap(), SramOutcome::InSync);
-        }
-
-        #[tokio::test]
-        async fn local_only_uploads() {
-            let server = MockServer::start().await;
-            negotiation(&server, json!([{"action": "upload", "rom_id": 5, "slot": "autosave", "save_id": null, "file_name": "Zelda- Link.srm"}])).await;
-            completion(&server, 1).await;
-            Mock::given(method("POST"))
-                .and(path("/api/saves"))
-                .and(query_param("slot", "autosave"))
-                .and(query_param("session_id", "9"))
-                .and(query_param("overwrite", "false"))
+                .and(query_param("emulator", "pcsx2"))
                 .respond_with(ResponseTemplate::new(200).set_body_json(save_json(1, "t")))
                 .expect(1)
                 .mount(&server)
                 .await;
             let dir = tempfile::tempdir().unwrap();
-            std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
+            let card = dir.path().join(ARMSX2_CARD);
+            std::fs::create_dir_all(card.parent().unwrap()).unwrap();
+            std::fs::write(&card, b"card").unwrap();
+            let game = ps2_game(dir.path());
+            assert_eq!(game.remote_sram_name(), "Zelda- Link.ps2");
+            let outcome = sync_sram(&client(&server), "dev", &game, None).await;
             assert_eq!(outcome.unwrap(), SramOutcome::Uploaded);
         }
 
-        fn ps2_game(dir: &Path) -> GameSaves {
-            let (save_file, save_emulator) = in_game_save("armsx2", dir, None);
-            GameSaves {
-                emulator: "armsx2".into(),
-                save_file,
-                save_emulator,
-                ..game(dir)
-            }
+        #[tokio::test]
+        async fn a_downloaded_memory_card_lands_where_the_emulator_reads_it() {
+            let server = MockServer::start().await;
+            listed(
+                &server,
+                json!([{"id": 4, "rom_id": 5, "file_name": "Zelda.ps2", "slot": "autosave",
+                    "updated_at": "2026-10-08T09:00:00+00:00", "content_hash": "new", "emulator": "pcsx2"}]),
+            )
+            .await;
+            content(&server, 4, b"new card", 1).await;
+            let dir = tempfile::tempdir().unwrap();
+            let card = dir.path().join(ARMSX2_CARD);
+            std::fs::create_dir_all(card.parent().unwrap()).unwrap();
+            std::fs::write(&card, b"old card").unwrap();
+            let outcome = sync_sram(
+                &client(&server),
+                "dev",
+                &ps2_game(dir.path()),
+                Some(&synced(b"old card")),
+            )
+            .await
+            .unwrap();
+            assert_eq!(std::fs::read(&card).unwrap(), b"new card");
+            let SramOutcome::Downloaded {
+                backup: Some(backup),
+            } = outcome
+            else {
+                panic!("expected a download with a backup, got {outcome:?}");
+            };
+            assert_eq!(std::fs::read(backup).unwrap(), b"old card");
         }
 
         #[test]
@@ -1329,195 +1422,15 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn a_ps2_memory_card_uploads_under_the_shared_ps2_name() {
-            let server = MockServer::start().await;
-            negotiation(&server, json!([{"action": "upload", "rom_id": 5, "slot": "autosave", "save_id": null, "file_name": "Zelda- Link.ps2"}])).await;
-            completion(&server, 1).await;
-            Mock::given(method("POST"))
-                .and(path("/api/saves"))
-                .and(query_param("emulator", "pcsx2"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(save_json(1, "t")))
-                .expect(1)
-                .mount(&server)
-                .await;
-            let dir = tempfile::tempdir().unwrap();
-            let card = dir.path().join(ARMSX2_CARD);
-            std::fs::create_dir_all(card.parent().unwrap()).unwrap();
-            std::fs::write(&card, b"card").unwrap();
-            let game = ps2_game(dir.path());
-            assert_eq!(game.remote_sram_name(), "Zelda- Link.ps2");
-            let outcome = sync_sram(&client(&server), "dev", &game).await;
-            assert_eq!(outcome.unwrap(), SramOutcome::Uploaded);
-        }
-
-        #[tokio::test]
-        async fn a_downloaded_memory_card_lands_where_the_emulator_reads_it() {
-            let server = MockServer::start().await;
-            negotiation(
-                &server,
-                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 4, "file_name": "Zelda.ps2"}]),
-            )
-            .await;
-            completion(&server, 1).await;
-            listed(
-                &server,
-                json!([{"id": 4, "rom_id": 5, "file_name": "Zelda.ps2", "slot": "autosave",
-                "updated_at": "2026-10-08T09:00:00+00:00", "emulator": "pcsx2"}]),
-            )
-            .await;
-            Mock::given(method("GET"))
-                .and(path("/api/saves/4/content"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"new card".to_vec()))
-                .mount(&server)
-                .await;
-            let dir = tempfile::tempdir().unwrap();
-            let card = dir.path().join(ARMSX2_CARD);
-            std::fs::create_dir_all(card.parent().unwrap()).unwrap();
-            std::fs::write(&card, b"old card").unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &ps2_game(dir.path()))
-                .await
-                .unwrap();
-            assert_eq!(std::fs::read(&card).unwrap(), b"new card");
-            let SramOutcome::Downloaded {
-                backup: Some(backup),
-            } = outcome
-            else {
-                panic!("expected a download with a backup, got {outcome:?}");
-            };
-            assert_eq!(std::fs::read(backup).unwrap(), b"old card");
-        }
-
-        #[tokio::test]
-        async fn server_newer_downloads_and_backs_up() {
-            let server = MockServer::start().await;
-            negotiation(
-                &server,
-                json!([{"action": "download", "rom_id": 5, "slot": "autosave", "save_id": 4, "file_name": "x.srm"}]),
-            )
-            .await;
-            completion(&server, 1).await;
-            listed(
-                &server,
-                json!([{"id": 4, "rom_id": 5, "file_name": "x.srm", "slot": "autosave",
-                "updated_at": "2026-10-08T09:00:00+00:00", "emulator": "snes9x"}]),
-            )
-            .await;
-            Mock::given(method("GET"))
-                .and(path("/api/saves/4/content"))
-                .and(query_param("session_id", "9"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"new".to_vec()))
-                .mount(&server)
-                .await;
-            let dir = tempfile::tempdir().unwrap();
-            std::fs::write(dir.path().join(SRAM_FILE), b"old").unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()))
-                .await
-                .unwrap();
-            let SramOutcome::Downloaded {
-                backup: Some(backup),
-            } = outcome
-            else {
-                panic!("{outcome:?}")
-            };
-            assert_eq!(std::fs::read(backup).unwrap(), b"old");
-            assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"new");
-        }
-
-        #[tokio::test]
-        async fn operations_for_other_slots_are_ignored() {
-            let server = MockServer::start().await;
-            negotiation(&server, json!([
-                {"action": "download", "rom_id": 5, "save_id": 11, "file_name": "web.srm", "slot": "web"},
-                {"action": "no_op", "rom_id": 5, "save_id": 12, "file_name": "x.srm", "slot": "autosave"}
-            ])).await;
-            completion(&server, 1).await;
-            Mock::given(method("GET"))
-                .and(path("/api/saves/11/content"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"wrong".to_vec()))
-                .expect(0)
-                .mount(&server)
-                .await;
-            let dir = tempfile::tempdir().unwrap();
-            std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path())).await;
-            assert_eq!(outcome.unwrap(), SramOutcome::InSync);
-            assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"mine");
-        }
-
-        #[tokio::test]
-        async fn conflict_is_reported_not_resolved() {
-            let server = MockServer::start().await;
-            negotiation(
-                &server,
-                json!([{"action": "conflict", "rom_id": 5, "slot": "autosave", "save_id": 4, "file_name": "x.srm",
-                "server_updated_at": "2026-09-26T10:00:00+00:00"}]),
-            )
-            .await;
-            completion_counts(&server, 0, 0).await;
-            let dir = tempfile::tempdir().unwrap();
-            std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()))
-                .await
-                .unwrap();
-            let SramOutcome::Conflict(c) = outcome else {
-                panic!()
-            };
-            assert_eq!(c.save_id, Some(4));
-            assert_eq!(
-                c.server_updated_at.as_deref(),
-                Some("2026-09-26T10:00:00+00:00")
-            );
-            assert!(c.local_updated_at.is_some());
-            assert_eq!(std::fs::read(dir.path().join(SRAM_FILE)).unwrap(), b"mine");
-        }
-
-        #[tokio::test]
-        async fn upload_409_becomes_conflict() {
-            let server = MockServer::start().await;
-            negotiation(
-                &server,
-                json!([{"action": "upload", "rom_id": 5, "slot": "autosave", "save_id": null, "file_name": "x.srm"}]),
-            )
-            .await;
-            Mock::given(method("POST"))
-                .and(path("/api/saves"))
-                .respond_with(ResponseTemplate::new(409).set_body_json(json!({"detail": "newer"})))
-                .mount(&server)
-                .await;
-            Mock::given(method("GET"))
-                .and(path("/api/saves"))
-                .and(query_param("slot", "autosave"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
-                    save_json(7, "2026-09-26T10:00:00.5Z"),
-                    save_json(6, "2026-09-26T10:00:00+00:00")
-                ])))
-                .mount(&server)
-                .await;
-            completion_counts(&server, 0, 0).await;
-            let dir = tempfile::tempdir().unwrap();
-            std::fs::write(dir.path().join(SRAM_FILE), b"mine").unwrap();
-            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()))
-                .await
-                .unwrap();
-            let SramOutcome::Conflict(conflict) = outcome else {
-                panic!("expected a conflict");
-            };
-            assert_eq!(conflict.save_id, Some(7));
-            assert_eq!(
-                conflict.server_updated_at.as_deref(),
-                Some("2026-09-26T10:00:00.5Z")
-            );
-        }
-
-        #[tokio::test]
         async fn resolving_backs_up_the_loser() {
             let server = MockServer::start().await;
             Mock::given(method("GET"))
                 .and(path("/api/saves"))
                 .and(query_param("slot", "autosave"))
                 .respond_with(ResponseTemplate::new(200).set_body_json(json!([
-                    save_json(6, "2026-09-25T10:00:00+00:00"),
-                    save_json(7, "2026-09-26T10:00:00+00:00")
+                    remote(6, "a", "2026-09-25T10:00:00+00:00"),
+                    remote(7, "b", "2026-09-26T10:00:00+00:00"),
+                    other(9, "2026-09-27T10:00:00+00:00")
                 ])))
                 .mount(&server)
                 .await;

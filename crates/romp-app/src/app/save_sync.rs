@@ -48,7 +48,8 @@ async fn sync_game(
     game: &GameSaves,
     core_version: Option<&str>,
 ) -> Result<SramOutcome, Error> {
-    let sram = saves::sync_sram(client, device_id, game).await?;
+    let last = store.lock().unwrap().in_game_save_record(game.rom_id);
+    let sram = saves::sync_sram(client, device_id, game, last.as_ref()).await?;
     saves::remember_outcome(store, game, &sram);
     if let Some(version) = core_version {
         saves::sync_states(client, store, game, version).await?;
@@ -216,7 +217,7 @@ impl Controller {
         self.syncing_game.set(None);
         let status = match result {
             Ok(SramOutcome::Conflict(_)) => {
-                tr!("A newer save is on the server. You'll be asked which to keep next time you play.")
+                tr!("The save here and the one on RomM differ. You'll be asked which to keep next time you play.")
             }
             Ok(_) => tr!("In-game save and save states synced."),
             Err(Error::Unreachable) => {

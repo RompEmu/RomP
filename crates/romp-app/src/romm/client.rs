@@ -1,6 +1,6 @@
 use crate::romm::types::{
-    ClientSave, DeviceAuth, Firmware, Heartbeat, Negotiation, Platform, PollOutcome,
-    RemoteCollection, RemoteSave, RemoteState, RomDetail, RomFile, RomPage, User,
+    DeviceAuth, Firmware, Heartbeat, Platform, PollOutcome, RemoteCollection, RemoteSave,
+    RemoteState, RomDetail, RomFile, RomPage, User,
 };
 use crate::store::PlaySession;
 use serde::de::DeserializeOwned;
@@ -543,50 +543,6 @@ impl Client {
             &format!("/api/firmware/{}/content/", firmware.id),
             &firmware.file_name,
         )
-    }
-
-    pub async fn negotiate(
-        &self,
-        device_id: &str,
-        saves: &[ClientSave],
-        rom_ids: &[i64],
-        emulator: &str,
-    ) -> Result<Negotiation, Error> {
-        // RomP never deletes an in-game save itself, so one it doesn't list is lost rather than
-        // deleted, and it loads only its own emulator's saves.
-        let body = serde_json::json!({
-            "device_id": device_id,
-            "saves": saves,
-            "rom_ids": rom_ids,
-            "emulators": [emulator],
-            "restore_unlisted": true,
-        });
-        let resp = self
-            .send(
-                self.request(reqwest::Method::POST, "/api/sync/negotiate")
-                    .json(&body),
-            )
-            .await?;
-        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
-    }
-
-    pub async fn complete_session(
-        &self,
-        session_id: i64,
-        completed: u32,
-        failed: u32,
-    ) -> Result<(), Error> {
-        let body =
-            serde_json::json!({ "operations_completed": completed, "operations_failed": failed });
-        self.send(
-            self.request(
-                reqwest::Method::POST,
-                &format!("/api/sync/sessions/{session_id}/complete"),
-            )
-            .json(&body),
-        )
-        .await
-        .map(|_| ())
     }
 
     pub async fn list_saves(
@@ -1410,47 +1366,6 @@ pub(crate) mod tests {
                 .as_deref(),
             Some("dev-uuid")
         );
-    }
-
-    #[tokio::test]
-    async fn negotiate_sends_device_and_saves() {
-        let server = MockServer::start().await;
-        let save = ClientSave {
-            rom_id: 5,
-            file_name: "Zelda.srm".into(),
-            slot: Some("autosave".into()),
-            emulator: Some("snes9x".into()),
-            content_hash: Some("abc".into()),
-            updated_at: "2026-09-26T10:00:00+00:00".into(),
-            file_size_bytes: 8192,
-        };
-        Mock::given(method("POST"))
-            .and(path("/api/sync/negotiate"))
-            .and(body_json(serde_json::json!({
-                "device_id": "dev", "rom_ids": [5], "emulators": ["snes9x"], "restore_unlisted": true,
-                "saves": [{"rom_id": 5, "file_name": "Zelda.srm", "slot": "autosave", "emulator": "snes9x",
-                           "content_hash": "abc", "updated_at": "2026-09-26T10:00:00+00:00", "file_size_bytes": 8192}]})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "session_id": 9, "operations": [{"action": "upload", "rom_id": 5, "save_id": null,
-                "file_name": "Zelda.srm", "slot": "autosave", "reason": "x"}], "total_upload": 1})))
-            .mount(&server)
-            .await;
-        let n = authed(&server)
-            .negotiate("dev", &[save], &[5], "snes9x")
-            .await
-            .unwrap();
-        assert_eq!(n.session_id, 9);
-        assert_eq!(n.operations[0].action, "upload");
-        Mock::given(method("POST"))
-            .and(path("/api/sync/sessions/9/complete"))
-            .and(body_json(
-                serde_json::json!({"operations_completed": 1, "operations_failed": 0}),
-            ))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
-            .expect(1)
-            .mount(&server)
-            .await;
-        authed(&server).complete_session(9, 1, 0).await.unwrap();
     }
 
     #[tokio::test]
