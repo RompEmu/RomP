@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-06 11:16\n"
+"PO-Revision-Date: 2026-10-08 14:07\n"
 "Last-Translator: \n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
@@ -249,14 +249,17 @@ msgstr "Captures d'écran"
 msgid "Screenshot {}"
 msgstr "Capture d'écran {}"
 
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-msgid "Save states"
-msgstr "Enregistrer les états"
+#: crates/romp-app/ui/app.slint
+msgid "Saves"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Loading save states is off in hardcore mode."
 msgstr "Chargement des états de sauvegarde est désactivé en mode hardcore."
+
+#: crates/romp-app/ui/app.slint
+msgid "Use this save"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Play from here"
@@ -627,6 +630,10 @@ msgstr "Mettre en pause"
 #: crates/romp-app/ui/game.slint
 msgid "Restart"
 msgstr "Redémarrer"
+
+#: crates/romp-app/ui/game.slint
+msgid "Save states"
+msgstr "Enregistrer les états"
 
 #: crates/romp-app/ui/game.slint
 msgid "Look  ·  {}"

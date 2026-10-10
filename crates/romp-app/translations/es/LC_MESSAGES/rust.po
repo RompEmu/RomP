@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-07 17:47\n"
+"PO-Revision-Date: 2026-10-08 14:07\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
@@ -257,8 +257,8 @@ msgid "A newer save is on the server. You'll be asked which to keep next time yo
 msgstr "Un nuevo guardado está en el servidor. Se te preguntará cuál mantener la próxima vez que juegues."
 
 #: crates/romp-app/src/app/save_sync.rs
-msgid "Saves synced."
-msgstr "Guardados sincronizados."
+msgid "In-game save and save states synced."
+msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "Couldn't sync saves: {e}."
@@ -361,6 +361,34 @@ msgstr "En {}"
 #: crates/romp-app/src/slots.rs
 msgid "Empty"
 msgstr "Vaciar"
+
+#: crates/romp-app/src/slots.rs
+msgid "Synced with RomM · {}"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "Not synced yet"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "Will sync when the server is reachable"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "On RomM · comes down when you play"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "On RomM from {} · {}"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "On this computer only · pair RomP to sync it"
+msgstr ""
+
+#: crates/romp-app/src/slots.rs
+msgid "In-game save"
+msgstr ""
 
 #: crates/romp-app/src/app.rs
 msgid "The request was declined."
@@ -539,6 +567,22 @@ msgstr "Atrás"
 #: crates/romp-app/src/app/navigation.rs
 msgid "Change section"
 msgstr "Cambiar sección"
+
+#: crates/romp-app/src/app/slots.rs
+msgid "Copying the save from {}…"
+msgstr ""
+
+#: crates/romp-app/src/app/slots.rs
+msgid "Using the save from {}. It becomes RomP's own the first time the game saves."
+msgstr ""
+
+#: crates/romp-app/src/app/slots.rs
+msgid "The save from {} isn't one this emulator can read."
+msgstr ""
+
+#: crates/romp-app/src/app/slots.rs
+msgid "Couldn't use the save: {e}."
+msgstr ""
 
 #: crates/romp-app/src/bios.rs
 msgid "This game needs BIOS files your server doesn't have: {}. Add them to this platform's firmware in RomM."
@@ -1173,6 +1217,10 @@ msgstr "No se pudo desempacar el juego: {e}"
 #: crates/romp-app/src/rpcs3.rs
 msgid "The archive has no PS3 game folder or ISO in it"
 msgstr "El archivo no tiene ninguna carpeta de juegos PS3 o ISO en él"
+
+#: crates/romp-app/src/saves.rs
+msgid "another emulator"
+msgstr ""
 
 #: crates/romp-app/src/storage.rs
 msgid "Saves and states"
