@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- RomP tells you when a newer version is out, with a link to the download for your computer and to what's new. It checks GitHub at most once a day, and you can skip a version or turn the check off in Settings. When Homebrew installed RomP, it says to run `brew upgrade romp` instead.
+
 ## [0.13.1] - 2026-10-11
 
 ### Fixed

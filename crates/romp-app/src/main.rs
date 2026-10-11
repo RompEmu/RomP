@@ -49,6 +49,7 @@ mod smoke;
 mod storage;
 mod store;
 mod sync;
+mod updates;
 mod vulkan;
 mod xemu;
 

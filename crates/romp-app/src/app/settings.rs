@@ -47,6 +47,7 @@ impl Controller {
         ui.set_pref_pause_unfocused(prefs.pause_unfocused);
         ui.set_pref_resume(prefs.resume);
         ui.set_pref_fullscreen(prefs.fullscreen);
+        ui.set_pref_check_updates(prefs.check_updates);
         ui.set_pref_volume(f32::from(prefs.volume));
         let names = |list: &[&str]| {
             ModelRc::new(VecModel::from(
@@ -101,6 +102,7 @@ impl Controller {
             achievement_popups: index_within(ui.get_pref_achievement_popups(), &popups::LEVELS),
             achievement_corner: index_within(ui.get_pref_achievement_corner(), &popups::CORNERS),
             language: u8::try_from(ui.get_pref_language()).unwrap_or(0),
+            check_updates: ui.get_pref_check_updates(),
         };
         let before = self.prefs.get();
         if prefs == before {
@@ -117,6 +119,9 @@ impl Controller {
             .set("prefs", &prefs.to_json());
         if let Some(running) = self.running.borrow().as_ref() {
             running.apply_prefs(&prefs);
+        }
+        if prefs.check_updates != before.check_updates {
+            self.check_for_updates();
         }
         if prefs.language != before.language {
             crate::i18n::apply(crate::i18n::pick(prefs.language));

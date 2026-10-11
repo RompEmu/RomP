@@ -17,6 +17,7 @@ pub struct Preferences {
     pub achievement_corner: u8,
     /// 0 follows the system, then English, then `i18n::LANGUAGES` in order.
     pub language: u8,
+    pub check_updates: bool,
 }
 
 impl Default for Preferences {
@@ -30,6 +31,7 @@ impl Default for Preferences {
             achievement_popups: 1,
             achievement_corner: 0,
             language: 0,
+            check_updates: true,
         }
     }
 }
@@ -71,6 +73,7 @@ mod tests {
         assert!(p.pause_unfocused && p.resume);
         assert!(!p.fullscreen);
         assert_eq!(p.volume, 100);
+        assert!(p.check_updates);
     }
 
     #[test]
@@ -83,7 +86,7 @@ mod tests {
         assert_eq!(Preferences::from_json(Some(&p.to_json())), p);
         let partial = Preferences::from_json(Some(r#"{"volume": 70}"#));
         assert_eq!(partial.volume, 70);
-        assert!(partial.pause_unfocused);
+        assert!(partial.pause_unfocused && partial.check_updates);
         assert_eq!(
             Preferences::from_json(Some("nonsense")),
             Preferences::default()

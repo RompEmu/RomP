@@ -180,15 +180,35 @@ msgid "Refresh library"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "RomP {} is available. Run “brew upgrade romp” to update."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "RomP {} is available."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Download"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "What's new"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Skip this version"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Hide until RomP restarts"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Loading your library…"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "No games found."
-msgstr ""
-
-#: crates/romp-app/ui/app.slint
-msgid "Download"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
@@ -351,6 +371,16 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Some text changes once you leave this screen."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Check for updates"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid ""
+"Once a day, RomP asks GitHub for its newest version, and tells you when "
+"there is one."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
@@ -568,6 +598,10 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Version {}"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Version {} is available"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint

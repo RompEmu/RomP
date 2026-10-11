@@ -600,6 +600,13 @@ component Library inherits Rectangle {
     in property <bool> needs-pairing;
     in property <string> pair-prompt;
     callback pair-again();
+    in property <bool> update-shown;
+    in property <string> update-version;
+    in property <bool> update-homebrew;
+    callback update-download();
+    callback update-notes();
+    callback update-skip();
+    callback update-dismiss();
     in-out property <bool> downloaded-only;
     in property <bool> offline;
     in-out property <int> sort-index;
@@ -852,6 +859,34 @@ component Library inherits Rectangle {
                             alignment: center;
                             if root.syncing: Spinner { indeterminate: true; width: 20px; height: 20px; }
                             if !root.syncing: IconButton { icon: @image-url("icons/refresh.svg"); tooltip: @tr("Refresh library"); clicked => { root.refresh(); } }
+                        }
+                    }
+                    if root.update-shown: Rectangle {
+                        vertical-stretch: 0;
+                        border-radius: 8px;
+                        background: Theme.accent-soft;
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 6px;
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            spacing: 8px;
+                            Text {
+                                horizontal-alignment: Locale.start;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                text: root.update-homebrew
+                                    ? @tr("RomP {} is available. Run “brew upgrade romp” to update.", root.update-version)
+                                    : @tr("RomP {} is available.", root.update-version);
+                                font-size: Theme.font-small;
+                                font-weight: 600;
+                                color: Theme.accent-text;
+                                overflow: elide;
+                            }
+                            if !root.update-homebrew: Button { text: @tr("Download"); primary: true; clicked => { root.update-download(); } }
+                            Button { text: @tr("What's new"); clicked => { root.update-notes(); } }
+                            Button { text: @tr("Skip this version"); clicked => { root.update-skip(); } }
+                            IconButton { icon: @image-url("icons/close.svg"); tooltip: @tr("Hide until RomP restarts"); clicked => { root.update-dismiss(); } }
                         }
                     }
                     grid := Rectangle {
@@ -1486,6 +1521,7 @@ component SettingsPage inherits FocusScope {
     in-out property <bool> pause-unfocused;
     in-out property <bool> resume;
     in-out property <bool> fullscreen;
+    in-out property <bool> check-updates;
     in-out property <float> volume;
     in-out property <int> ui-scale;
     in property <[string]> languages;
@@ -1602,6 +1638,13 @@ component SettingsPage inherits FocusScope {
                                     current-index <=> root.language;
                                     selected => { root.prefs-changed(); }
                                 }
+                            }
+                        }
+                        Panel {
+                            SettingRow {
+                                label: @tr("Check for updates");
+                                detail: @tr("Once a day, RomP asks GitHub for its newest version, and tells you when there is one.");
+                                Switch { checked <=> root.check-updates; toggled => { root.prefs-changed(); } }
                             }
                         }
                         Row {
@@ -1975,6 +2018,8 @@ component AboutFact inherits Text {
 
 component AboutDialog inherits Rectangle {
     in property <string> version;
+    in property <string> update-version;
+    callback open-update();
     in property <image> icon;
     in property <bool> has-icon;
     in property <[LicenseRow]> licenses;
@@ -2029,6 +2074,10 @@ component AboutDialog inherits Rectangle {
                 Text { text: Brand.name; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; horizontal-alignment: center; }
                 Rectangle { height: 4px; }
                 Text { text: @tr("Version {}", root.version); font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
+                if root.update-version != "": Row {
+                    alignment: center;
+                    LinkButton { text: @tr("Version {} is available", root.update-version); clicked => { root.open-update(); } }
+                }
                 Rectangle { height: 5px; }
                 Row {
                     alignment: center;
@@ -2188,6 +2237,7 @@ export component AppWindow inherits Window {
     in-out property <bool> pref-pause-unfocused;
     in-out property <bool> pref-resume;
     in-out property <bool> pref-fullscreen;
+    in-out property <bool> pref-check-updates;
     in-out property <float> pref-volume;
     in-out property <int> pref-achievement-popups;
     in-out property <int> pref-achievement-corner;
@@ -2269,6 +2319,13 @@ export component AppWindow inherits Window {
     callback keep-local-save();
     callback keep-server-save();
     in property <bool> needs-pairing;
+    in property <bool> update-shown;
+    in property <string> update-version;
+    in property <bool> update-homebrew;
+    callback update-download();
+    callback update-notes();
+    callback update-skip();
+    callback update-dismiss();
     in property <string> pair-prompt;
     callback pair-again();
     in property <bool> show-collections;
@@ -2390,6 +2447,13 @@ export component AppWindow inherits Window {
         needs-pairing: root.needs-pairing;
         pair-prompt: root.pair-prompt;
         pair-again => { root.pair-again(); }
+        update-shown: root.update-shown;
+        update-version: root.update-version;
+        update-homebrew: root.update-homebrew;
+        update-download => { root.update-download(); }
+        update-notes => { root.update-notes(); }
+        update-skip => { root.update-skip(); }
+        update-dismiss => { root.update-dismiss(); }
         downloaded-only <=> root.downloaded-only;
         offline: root.offline;
         downloaded-only-toggled(on) => { root.downloaded-only-toggled(on); }
@@ -2490,6 +2554,7 @@ export component AppWindow inherits Window {
             pause-unfocused <=> root.pref-pause-unfocused;
             resume <=> root.pref-resume;
             fullscreen <=> root.pref-fullscreen;
+            check-updates <=> root.pref-check-updates;
             volume <=> root.pref-volume;
             ui-scale <=> root.pref-ui-scale;
             languages: root.pref-languages;
@@ -2547,6 +2612,8 @@ export component AppWindow inherits Window {
     }
     if root.about-open: AboutDialog {
         version: root.app-version;
+        update-version: root.update-version;
+        open-update => { root.update-notes(); }
         icon: root.app-icon;
         has-icon: root.has-app-icon;
         licenses: root.about-licenses;

@@ -11,7 +11,7 @@ RomP only talks to these services, and only to do what you ask of it:
 | Your RomM server | While you use your library | Your sign-in, the requests for your library, covers and games, your saves, save states and screenshots, play sessions and play time, and a device name made of "RomP on" and your computer's name |
 | RetroAchievements (retroachievements.org) | Only after you sign in to it in Settings | Your username, a sign-in token, which game you're playing (by the game file's hash), the achievements you unlock, leaderboard scores and what you're doing in the game ("rich presence") |
 | libretro buildbot (buildbot.libretro.com) | When RomP installs or updates an emulator, or system files one needs | A request for that file |
-| GitHub (github.com) | When RomP installs or updates the PS2 emulator on macOS, xemu or RPCS3 | A request for that release |
+| GitHub (github.com) | Once a day, to check for a newer RomP, unless you turn this off in Settings. When RomP installs or updates the PS2 emulator on macOS, xemu or RPCS3 | A request for that release |
 
 Every request also carries your IP address and a short description of the app, such as `Romp/0.9.0 (macOS)`, as any internet request does. Each of these services handles that under its own privacy policy: [RetroAchievements](https://retroachievements.org/privacy), [GitHub](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement), and for your RomM server, whoever runs it.
 

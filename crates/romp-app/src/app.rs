@@ -7,6 +7,7 @@ mod save_sync;
 mod screenshots;
 mod settings;
 mod slots;
+mod updates;
 
 use crate::cores::Cores;
 use crate::covers::Covers;
@@ -133,6 +134,7 @@ struct Controller {
     nav_timer: RefCell<Option<Timer>>,
     restore_view: RefCell<Option<LastView>>,
     pending_top: Cell<Option<(i64, Instant)>>,
+    update_dismissed: Cell<bool>,
 }
 
 thread_local! {
@@ -231,6 +233,7 @@ pub fn run() -> anyhow::Result<()> {
         nav_timer: RefCell::new(None),
         restore_view: RefCell::new(last_view),
         pending_top: Cell::new(None),
+        update_dismissed: Cell::new(false),
     });
     ui.set_rows(ModelRc::from(controller.library.borrow().rows.clone()));
     CONTROLLER.with(|c| *c.borrow_mut() = Some(controller.clone()));
@@ -292,6 +295,10 @@ impl Controller {
         ui.on_cancel_pairing(|| with_controller(|c| c.cancel_pairing()));
         ui.on_retry_pairing(|| with_controller(|c| c.connect()));
         ui.on_sign_out(|| with_controller(|c| c.sign_out()));
+        ui.on_update_download(|| with_controller(|c| c.download_update()));
+        ui.on_update_notes(|| with_controller(|c| c.open_update_notes()));
+        ui.on_update_skip(|| with_controller(|c| c.skip_update()));
+        ui.on_update_dismiss(|| with_controller(|c| c.dismiss_update()));
         ui.on_open_settings(|| with_controller(|c| c.open_settings()));
         ui.on_settings_section_changed(|i| with_controller(|c| c.settings_section_changed(i)));
         ui.on_console_option_changed(|key, index| {
@@ -369,6 +376,7 @@ impl Controller {
 
     fn start(&self) {
         self.send_pending_unlocks();
+        self.check_for_updates();
         let server = self.shared.store.lock().unwrap().get("server");
         let token = server.as_deref().and_then(|s| self.shared.tokens.load(s));
         match (server.as_deref().map(url::Url::parse), token) {
