@@ -57,6 +57,13 @@ jobs:
             package: rpm
             cores: linux/x86_64
             library: so
+          # The same .rpm on openSUSE, whose packages are named differently from Fedora's.
+          - name: Linux rpm on openSUSE
+            os: ubuntu-latest
+            container: opensuse/leap:16.0
+            package: rpm-opensuse
+            cores: linux/x86_64
+            library: so
           - name: Windows
             os: windows-latest
             cores: windows/x86_64
@@ -98,6 +105,11 @@ jobs:
         run: |
           dnf install -y --setopt=install_weak_deps=False python3 xorg-x11-server-Xvfb xauth \
             mesa-dri-drivers util-linux dejavu-sans-fonts pulseaudio-libs ./dist/*.rpm
+      - name: Install a virtual display and the .rpm on openSUSE
+        if: matrix.package == 'rpm-opensuse'
+        run: |
+          zypper --non-interactive install --no-recommends --allow-unsigned-rpm curl python3 \
+            xvfb-run xauth Mesa-dri util-linux dejavu-fonts libpulse0 ./dist/*.rpm
       - name: Unpack Romp
         env:
           PACKAGE: ${{ matrix.package }}
