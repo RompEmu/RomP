@@ -22,6 +22,7 @@ jobs:
     if: ${{ !cancelled() && needs.build.result != 'failure' }}
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -33,8 +34,11 @@ jobs:
             os: macos-latest
             cores: apple/osx/arm64
             library: dylib
+          # A bare container of the oldest supported Ubuntu, so the AppImage can't lean on a
+          # library the runner happens to have.
           - name: Linux
             os: ubuntu-latest
+            container: ubuntu:22.04
             cores: linux/x86_64
             library: so
           - name: Windows
@@ -52,12 +56,18 @@ jobs:
         with:
           name: romp-${{ runner.os }}
           path: dist
-      # libpulse0 is on every Linux desktop, PipeWire ones included, but not on the runner.
-      - name: Install a virtual display and PulseAudio's library
+      # Only what every Linux desktop has, PipeWire ones included: Mesa, X11's client libraries,
+      # fontconfig with a font, and PulseAudio's library. libxkbcommon-x11 is left out on
+      # purpose, as minimal installs don't have it, so the AppImage has to bring its own.
+      - name: Install a virtual display and a desktop's libraries
         if: runner.os == 'Linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri libegl1 libxkbcommon-x11-0 libpulse0
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl python3 xvfb xauth \
+            libgl1-mesa-dri libegl1 libx11-6 libx11-xcb1 libxcursor1 libxi6 libxrender1 \
+            libfontconfig1 fonts-dejavu-core libpulse0
       - name: Unpack Romp
         run: |
           case "$RUNNER_OS" in
