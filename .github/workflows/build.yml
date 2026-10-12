@@ -53,7 +53,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libasound2-dev libegl-dev libfontconfig1-dev libpulse-dev libudev-dev libwayland-dev libxkbcommon-dev
+            libasound2-dev libegl-dev libfontconfig1-dev libpulse-dev libudev-dev libwayland-dev libxkbcommon-dev \
+            libxkbcommon-x11-0 patchelf
       - name: Install Make
         if: runner.os == 'Windows'
         run: choco install make --no-progress -y

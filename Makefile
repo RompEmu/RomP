@@ -25,6 +25,11 @@ LINUX_NAME := RomP-$(RELEASE)-linux-$(ARCH)
 LINUX_TAR := $(DIST)/$(LINUX_NAME).tar.gz
 APPDIR := $(DIST)/RomP.AppDir
 APPIMAGE := $(DIST)/RomP-$(RELEASE)-$(ARCH).AppImage
+# winit loads these when it starts on X11 and panics without them, and minimal installs
+# don't have libxkbcommon-x11, so the AppImage brings them. None is on AppImage's excludelist.
+LINUX_LIBDIR := /usr/lib/x86_64-linux-gnu
+APPIMAGE_LIBS := libxkbcommon.so.0 libxkbcommon-x11.so.0 libxcb-xkb.so.1
+APPIMAGE_LIB_PACKAGES := libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1
 WINDOWS_NAME := RomP-$(RELEASE)-windows-$(ARCH)
 WINDOWS_ZIP := $(DIST)/$(WINDOWS_NAME).zip
 
@@ -105,13 +110,19 @@ dist-macos: app
 
 appimage: build $(APPIMAGETOOL) $(APPIMAGE_RUNTIME)
 	rm -rf $(APPDIR) $(APPIMAGE)
-	mkdir -p $(APPDIR)/usr/bin $(APPDIR)/usr/share/applications $(APPDIR)/usr/share/icons/hicolor/256x256/apps
+	mkdir -p $(APPDIR)/usr/bin $(APPDIR)/usr/lib $(APPDIR)/usr/share/applications $(APPDIR)/usr/share/icons/hicolor/256x256/apps
 	cp $(BIN)/romp $(BIN)/romp-runner $(APPDIR)/usr/bin/
 	cp -R crates/romp-app/shaders $(APPDIR)/usr/bin/
 	cp packaging/linux/romp.desktop $(APPDIR)/
 	cp packaging/linux/romp.desktop $(APPDIR)/usr/share/applications/
 	cp packaging/linux/romp.png $(APPDIR)/
 	cp packaging/linux/romp.png $(APPDIR)/usr/share/icons/hicolor/256x256/apps/
+	cp -L $(addprefix $(LINUX_LIBDIR)/,$(APPIMAGE_LIBS)) $(APPDIR)/usr/lib/
+	patchelf --set-rpath '$$ORIGIN/../lib' $(APPDIR)/usr/bin/romp
+	patchelf --set-rpath '$$ORIGIN' $(addprefix $(APPDIR)/usr/lib/,$(APPIMAGE_LIBS))
+	for pkg in $(APPIMAGE_LIB_PACKAGES); do \
+		mkdir -p $(APPDIR)/usr/share/doc/$$pkg && cp /usr/share/doc/$$pkg/copyright $(APPDIR)/usr/share/doc/$$pkg/ || exit 1; \
+	done
 	ln -s usr/bin/romp $(APPDIR)/AppRun
 	ARCH=$(ARCH) $(APPIMAGETOOL) --no-appstream --runtime-file $(APPIMAGE_RUNTIME) $(APPDIR) $(APPIMAGE)
 	rm -rf $(APPDIR)
