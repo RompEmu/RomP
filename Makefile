@@ -110,11 +110,13 @@ dist-macos: app
 
 appimage: build $(APPIMAGETOOL) $(APPIMAGE_RUNTIME)
 	rm -rf $(APPDIR) $(APPIMAGE)
-	mkdir -p $(APPDIR)/usr/bin $(APPDIR)/usr/lib $(APPDIR)/usr/share/applications $(APPDIR)/usr/share/icons/hicolor/256x256/apps
+	mkdir -p $(APPDIR)/usr/bin $(APPDIR)/usr/lib $(APPDIR)/usr/share/applications $(APPDIR)/usr/share/metainfo $(APPDIR)/usr/share/icons/hicolor/256x256/apps
 	cp $(BIN)/romp $(BIN)/romp-runner $(APPDIR)/usr/bin/
 	cp -R crates/romp-app/shaders $(APPDIR)/usr/bin/
 	cp packaging/linux/romp.desktop $(APPDIR)/
 	cp packaging/linux/romp.desktop $(APPDIR)/usr/share/applications/
+	cp packaging/linux/$(BUNDLE_ID).metainfo.xml $(APPDIR)/usr/share/metainfo/
+	appstreamcli validate --no-net $(APPDIR)/usr/share/metainfo/$(BUNDLE_ID).metainfo.xml
 	cp packaging/linux/romp.png $(APPDIR)/
 	cp packaging/linux/romp.png $(APPDIR)/usr/share/icons/hicolor/256x256/apps/
 	cp -L $(addprefix $(LINUX_LIBDIR)/,$(APPIMAGE_LIBS)) $(APPDIR)/usr/lib/
@@ -124,7 +126,7 @@ appimage: build $(APPIMAGETOOL) $(APPIMAGE_RUNTIME)
 		mkdir -p $(APPDIR)/usr/share/doc/$$pkg && cp /usr/share/doc/$$pkg/copyright $(APPDIR)/usr/share/doc/$$pkg/ || exit 1; \
 	done
 	ln -s usr/bin/romp $(APPDIR)/AppRun
-	ARCH=$(ARCH) $(APPIMAGETOOL) --no-appstream --runtime-file $(APPIMAGE_RUNTIME) $(APPDIR) $(APPIMAGE)
+	ARCH=$(ARCH) $(APPIMAGETOOL) --runtime-file $(APPIMAGE_RUNTIME) $(APPDIR) $(APPIMAGE)
 	rm -rf $(APPDIR)
 	$(call checksum,$(APPIMAGE))
 
