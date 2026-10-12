@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-12
+
 ### Added
 
 - RomP tells you when a newer version is out, with a link to the download for your computer and to what's new. It checks GitHub at most once a day, and you can skip a version or turn the check off in Settings. When Homebrew installed RomP, it says to run `brew upgrade romp` instead.
@@ -237,7 +239,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/RompEmu/RomP/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/RompEmu/RomP/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/RompEmu/RomP/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/RompEmu/RomP/compare/v0.11.1...v0.12.0
