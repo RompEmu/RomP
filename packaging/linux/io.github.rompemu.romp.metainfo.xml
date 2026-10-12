@@ -25,7 +25,6 @@
   </provides>
   <url type="homepage">https://rompemu.github.io</url>
   <url type="bugtracker">https://github.com/RompEmu/RomP/issues</url>
-  <url type="vcs-browser">https://github.com/RompEmu/RomP</url>
   <url type="translate">https://crowdin.com/project/romp</url>
   <categories>
     <category>Game</category>
