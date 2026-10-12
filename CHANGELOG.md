@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-12
+
 ### Added
 
 - RomP comes as a .deb for Debian and Ubuntu and an .rpm for Fedora and openSUSE, beside the AppImage. They install the libraries RomP needs, and when a newer RomP is out, it offers the same kind of package.
@@ -248,7 +250,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/RompEmu/RomP/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/RompEmu/RomP/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/RompEmu/RomP/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/RompEmu/RomP/compare/v0.12.0...v0.13.0
