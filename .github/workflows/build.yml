@@ -72,5 +72,7 @@ jobs:
             dist/*.zip
             dist/*.tar.gz
             dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
             dist/*.sha512
           if-no-files-found: error
