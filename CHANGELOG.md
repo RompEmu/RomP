@@ -4,6 +4,14 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- The AppImage describes RomP to Linux software centers and AppImage catalogs, with a summary, screenshots and links.
+
+### Fixed
+
+- The Linux AppImage starts on systems without libxkbcommon-x11, such as minimal installs, instead of closing straight away. It now brings its own copy.
+
 ## [0.14.0] - 2026-10-12
 
 ### Added
