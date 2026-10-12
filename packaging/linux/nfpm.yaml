@@ -22,6 +22,13 @@ contents:
   - src: crates/romp-app/shaders
     dst: /opt/romp/shaders
     type: tree
+  # Tells RomP's update check which download replaces it.
+  - src: packaging/linux/package/deb
+    dst: /opt/romp/package
+    packager: deb
+  - src: packaging/linux/package/rpm
+    dst: /opt/romp/package
+    packager: rpm
   - src: /opt/romp/romp
     dst: /usr/bin/romp
     type: symlink

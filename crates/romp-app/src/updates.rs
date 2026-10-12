@@ -11,6 +11,8 @@ pub enum Platform {
     MacOs,
     Windows,
     AppImage,
+    Deb,
+    Rpm,
     Linux,
 }
 
@@ -23,7 +25,19 @@ impl Platform {
         } else if std::env::var_os("APPIMAGE").is_some() {
             Self::AppImage
         } else {
-            Self::Linux
+            let marker = std::env::current_exe()
+                .ok()
+                .and_then(|exe| std::fs::read_to_string(exe.with_file_name("package")).ok());
+            Self::installed_by(marker.as_deref()).unwrap_or(Self::Linux)
+        }
+    }
+
+    /// The .deb and .rpm put a file named `package` beside the program, saying which they are.
+    fn installed_by(marker: Option<&str>) -> Option<Self> {
+        match marker?.trim() {
+            "deb" => Some(Self::Deb),
+            "rpm" => Some(Self::Rpm),
+            _ => None,
         }
     }
 
@@ -32,6 +46,8 @@ impl Platform {
             Self::MacOs => format!("RomP-{version}-macos-arm64.zip"),
             Self::Windows => format!("RomP-{version}-windows-x86_64.zip"),
             Self::AppImage => format!("RomP-{version}-x86_64.AppImage"),
+            Self::Deb => format!("RomP-{version}-x86_64.deb"),
+            Self::Rpm => format!("RomP-{version}-x86_64.rpm"),
             Self::Linux => format!("RomP-{version}-linux-x86_64.tar.gz"),
         }
     }
@@ -173,7 +189,7 @@ mod tests {
         }
     }
 
-    const ALL_FILES: [&str; 8] = [
+    const ALL_FILES: [&str; 12] = [
         "RomP-0.13.1-linux-x86_64.tar.gz",
         "RomP-0.13.1-linux-x86_64.tar.gz.sha512",
         "RomP-0.13.1-macos-arm64.zip",
@@ -182,6 +198,10 @@ mod tests {
         "RomP-0.13.1-windows-x86_64.zip.sha512",
         "RomP-0.13.1-x86_64.AppImage",
         "RomP-0.13.1-x86_64.AppImage.sha512",
+        "RomP-0.13.1-x86_64.deb",
+        "RomP-0.13.1-x86_64.deb.sha512",
+        "RomP-0.13.1-x86_64.rpm",
+        "RomP-0.13.1-x86_64.rpm.sha512",
     ];
 
     fn release(version: &str) -> Release {
@@ -223,6 +243,16 @@ mod tests {
         assert!(pick(Platform::Windows).ends_with("/RomP-0.13.1-windows-x86_64.zip"));
         assert!(pick(Platform::AppImage).ends_with("/RomP-0.13.1-x86_64.AppImage"));
         assert!(pick(Platform::Linux).ends_with("/RomP-0.13.1-linux-x86_64.tar.gz"));
+        assert!(pick(Platform::Deb).ends_with("/RomP-0.13.1-x86_64.deb"));
+        assert!(pick(Platform::Rpm).ends_with("/RomP-0.13.1-x86_64.rpm"));
+    }
+
+    #[test]
+    fn a_package_says_which_kind_it_is() {
+        assert_eq!(Platform::installed_by(Some("deb\n")), Some(Platform::Deb));
+        assert_eq!(Platform::installed_by(Some("rpm\n")), Some(Platform::Rpm));
+        assert_eq!(Platform::installed_by(Some("snap\n")), None);
+        assert_eq!(Platform::installed_by(None), None);
     }
 
     #[test]
