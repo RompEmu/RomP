@@ -6,6 +6,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Added
 
+- RomP comes as a .deb for Debian and Ubuntu and an .rpm for Fedora and openSUSE, beside the AppImage. They install the libraries RomP needs, and when a newer RomP is out, it offers the same kind of package.
 - The AppImage describes RomP to Linux software centers and AppImage catalogs, with a summary, screenshots and links.
 
 ### Fixed

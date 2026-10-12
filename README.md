@@ -19,7 +19,7 @@
 
 <p align="center"><a href="https://rompemu.github.io">rompemu.github.io</a></p>
 
-Download the [latest release](https://github.com/RompEmu/RomP/releases/latest) or the [nightly build](https://github.com/RompEmu/RomP/releases/tag/nightly) for macOS, Windows and Linux. On a Mac you can also install it with [Homebrew](https://brew.sh): `brew install --cask rompemu/tap/romp`. The macOS download of each release is signed and notarized by Apple. Nightly macOS builds aren't: the first time, right-click RomP and choose Open. Windows builds aren't signed yet: the first time, choose More info, then Run anyway.
+Download the [latest release](https://github.com/RompEmu/RomP/releases/latest) or the [nightly build](https://github.com/RompEmu/RomP/releases/tag/nightly) for macOS, Windows and Linux. On Linux, pick the AppImage, or the .deb (Debian, Ubuntu) or .rpm (Fedora, openSUSE) to install it with the system's other software. On a Mac you can also install it with [Homebrew](https://brew.sh): `brew install --cask rompemu/tap/romp`. The macOS download of each release is signed and notarized by Apple. Nightly macOS builds aren't: the first time, right-click RomP and choose Open. Windows builds aren't signed yet: the first time, choose More info, then Run anyway.
 
 <p align="center">
   <img src="docs/screenshots/library.png" alt="The RomP library, showing Amiga games" width="820">
@@ -98,7 +98,7 @@ cargo build --release
 ./target/release/romp
 ```
 
-`make dist` packages the app into `dist/`: `RomP.app` and a zip on macOS, a zip on Windows, an AppImage and a tarball on Linux (Make downloads a pinned [appimagetool](https://github.com/AppImage/appimagetool) and checks it). On Windows, run it from Git Bash with Make and 7-Zip installed.
+`make dist` packages the app into `dist/`: `RomP.app` and a zip on macOS, a zip on Windows, an AppImage, a .deb, an .rpm and a tarball on Linux (Make downloads a pinned [appimagetool](https://github.com/AppImage/appimagetool) and [nfpm](https://nfpm.goreleaser.com) and checks them). On Windows, run it from Git Bash with Make and 7-Zip installed.
 
 `make check` runs the same checks as CI: formatting, Clippy, tests, [cargo-deny](https://github.com/EmbarkStudios/cargo-deny), [cargo-machete](https://github.com/bnjbvr/cargo-machete), [typos](https://github.com/crate-ci/typos), [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://github.com/zizmorcore/zizmor).
 
