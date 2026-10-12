@@ -36,9 +36,25 @@ jobs:
             library: dylib
           # A bare container of the oldest supported Ubuntu, so the AppImage can't lean on a
           # library the runner happens to have.
-          - name: Linux
+          - name: Linux AppImage
             os: ubuntu-latest
             container: ubuntu:22.04
+            package: appimage
+            cores: linux/x86_64
+            library: so
+          # The packages are installed the way a user would, so apt and dnf bring the libraries
+          # they depend on, and a missing dependency fails here.
+          - name: Linux deb
+            os: ubuntu-latest
+            container: ubuntu:22.04
+            package: deb
+            cores: linux/x86_64
+            library: so
+          # The oldest Fedora still supported.
+          - name: Linux rpm
+            os: ubuntu-latest
+            container: fedora:43
+            package: rpm
             cores: linux/x86_64
             library: so
           - name: Windows
@@ -60,7 +76,7 @@ jobs:
       # fontconfig with a font, and PulseAudio's library. libxkbcommon-x11 is left out on
       # purpose, as minimal installs don't have it, so the AppImage has to bring its own.
       - name: Install a virtual display and a desktop's libraries
-        if: runner.os == 'Linux'
+        if: matrix.package == 'appimage'
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -68,7 +84,23 @@ jobs:
           apt-get install -y --no-install-recommends ca-certificates curl python3 xvfb xauth \
             libgl1-mesa-dri libegl1 libx11-6 libx11-xcb1 libxcursor1 libxi6 libxrender1 \
             libfontconfig1 fonts-dejavu-core libpulse0
+      # Only the display and the tools the test needs besides the package, which brings the rest.
+      - name: Install a virtual display and the .deb
+        if: matrix.package == 'deb'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl python3 xvfb xauth \
+            libgl1-mesa-dri libpulse0 ./dist/*.deb
+      - name: Install a virtual display and the .rpm
+        if: matrix.package == 'rpm'
+        run: |
+          dnf install -y --setopt=install_weak_deps=False python3 xorg-x11-server-Xvfb xauth \
+            mesa-dri-drivers util-linux dejavu-sans-fonts pulseaudio-libs ./dist/*.rpm
       - name: Unpack Romp
+        env:
+          PACKAGE: ${{ matrix.package }}
         run: |
           case "$RUNNER_OS" in
             macOS)
@@ -76,8 +108,12 @@ jobs:
               echo "ROMP=$PWD/app/RomP.app" >> "$GITHUB_ENV"
               ;;
             Linux)
-              chmod +x dist/*.AppImage
-              echo "ROMP=$(ls "$PWD"/dist/*.AppImage)" >> "$GITHUB_ENV"
+              if [ "$PACKAGE" = appimage ]; then
+                chmod +x dist/*.AppImage
+                echo "ROMP=$(ls "$PWD"/dist/*.AppImage)" >> "$GITHUB_ENV"
+              else
+                echo "ROMP=/usr/bin/romp" >> "$GITHUB_ENV"
+              fi
               ;;
             Windows)
               7z x -bso0 -oapp dist/*-windows-*.zip
@@ -126,6 +162,6 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: smoke-${{ runner.os }}
+          name: smoke-${{ matrix.name }}
           path: out
           if-no-files-found: ignore
