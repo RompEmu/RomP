@@ -1,0 +1,85 @@
+# The .deb and .rpm, built by `make packages` from the release binaries. RomP finds romp-runner
+# and its shaders beside the program, so everything goes in /opt/romp and the command links there.
+name: romp
+arch: amd64
+platform: linux
+version: ${ROMP_VERSION}
+section: games
+maintainer: Beshr Kayali Reinholdsson <me@beshr.com>
+description: Play retro games from your RomM library, with each game running in its own sandboxed process.
+homepage: https://rompemu.github.io
+license: GPL-3.0-or-later
+
+contents:
+  - src: target/release/romp
+    dst: /opt/romp/romp
+    file_info:
+      mode: 0755
+  - src: target/release/romp-runner
+    dst: /opt/romp/romp-runner
+    file_info:
+      mode: 0755
+  - src: crates/romp-app/shaders
+    dst: /opt/romp/shaders
+    type: tree
+  - src: /opt/romp/romp
+    dst: /usr/bin/romp
+    type: symlink
+  - src: packaging/linux/romp.desktop
+    dst: /usr/share/applications/romp.desktop
+  - src: packaging/linux/romp.png
+    dst: /usr/share/icons/hicolor/256x256/apps/romp.png
+  - src: packaging/linux/io.github.rompemu.romp.metainfo.xml
+    dst: /usr/share/metainfo/io.github.rompemu.romp.metainfo.xml
+  - src: LICENSE
+    dst: /usr/share/doc/romp/LICENSE
+
+# What RomP links to, and what winit loads when it opens a window on X11 or Wayland. Sound and
+# Vulkan are only recommended: a game still plays without them.
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.35)
+      - libgcc-s1
+      - libstdc++6
+      - libfontconfig1
+      - libudev1
+      - libegl1
+      - libgl1
+      - libx11-6
+      - libx11-xcb1
+      - libxcursor1
+      - libxi6
+      - libxrender1
+      - libxkbcommon0
+      - libxkbcommon-x11-0
+      - libwayland-client0
+      - libwayland-egl1
+    recommends:
+      - libpulse0 | libasound2
+      - libvulkan1
+  # By library rather than package name, so the names don't tie it to one distribution.
+  rpm:
+    depends:
+      - libc.so.6(GLIBC_2.35)(64bit)
+      - libgcc_s.so.1()(64bit)
+      - libstdc++.so.6()(64bit)
+      - libfontconfig.so.1()(64bit)
+      - libudev.so.1()(64bit)
+      - libEGL.so.1()(64bit)
+      - libGL.so.1()(64bit)
+      - libX11.so.6()(64bit)
+      - libX11-xcb.so.1()(64bit)
+      - libXcursor.so.1()(64bit)
+      - libXi.so.6()(64bit)
+      - libXrender.so.1()(64bit)
+      - libxkbcommon.so.0()(64bit)
+      - libxkbcommon-x11.so.0()(64bit)
+      - libwayland-client.so.0()(64bit)
+      - libwayland-egl.so.1()(64bit)
+    recommends:
+      - libpulse.so.0()(64bit)
+      - libvulkan.so.1()(64bit)
+
+rpm:
+  group: Amusements/Games

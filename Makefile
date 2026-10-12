@@ -17,6 +17,9 @@ APPIMAGETOOL := target/appimagetool-$(APPIMAGETOOL_VERSION)-x86_64.AppImage
 APPIMAGE_RUNTIME_VERSION := 20251108
 APPIMAGE_RUNTIME_SHA256 := 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
 APPIMAGE_RUNTIME := target/appimage-runtime-$(APPIMAGE_RUNTIME_VERSION)-x86_64
+NFPM_VERSION := 2.47.0
+NFPM_SHA256 := 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
+NFPM := target/nfpm-$(NFPM_VERSION)
 
 APP := $(DIST)/RomP.app
 ICONSET := $(DIST)/RomP.iconset
@@ -30,6 +33,7 @@ APPIMAGE := $(DIST)/RomP-$(RELEASE)-$(ARCH).AppImage
 LINUX_LIBDIR := /usr/lib/x86_64-linux-gnu
 APPIMAGE_LIBS := libxkbcommon.so.0 libxkbcommon-x11.so.0 libxcb-xkb.so.1
 APPIMAGE_LIB_PACKAGES := libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1
+PACKAGE := $(DIST)/RomP-$(RELEASE)-$(ARCH)
 WINDOWS_NAME := RomP-$(RELEASE)-windows-$(ARCH)
 WINDOWS_ZIP := $(DIST)/$(WINDOWS_NAME).zip
 
@@ -57,7 +61,7 @@ ditto -c -k --keepParent $(APP) $(MACOS_ZIP)
 $(call checksum,$(MACOS_ZIP))
 endef
 
-.PHONY: build app appimage glibc-check dist dist-macos dist-linux dist-windows clean
+.PHONY: build app appimage packages glibc-check dist dist-macos dist-linux dist-windows clean
 .PHONY: check fmt-check clippy test deny machete typos workflows translation-tools translations translations-check pseudo release-notes update-rcheevos
 
 build:
@@ -80,6 +84,15 @@ $(APPIMAGE_RUNTIME):
 	mkdir -p $(dir $@)
 	curl -fsSL -o $@.tmp https://github.com/AppImage/type2-runtime/releases/download/$(APPIMAGE_RUNTIME_VERSION)/runtime-x86_64
 	echo "$(APPIMAGE_RUNTIME_SHA256)  $@.tmp" | sha256sum -c -
+	mv $@.tmp $@
+
+$(NFPM):
+	mkdir -p $(dir $@)
+	curl -fsSL -o $@.tar.gz https://github.com/goreleaser/nfpm/releases/download/v$(NFPM_VERSION)/nfpm_$(NFPM_VERSION)_Linux_x86_64.tar.gz
+	echo "$(NFPM_SHA256)  $@.tar.gz" | sha256sum -c -
+	tar -xzOf $@.tar.gz nfpm > $@.tmp
+	rm $@.tar.gz
+	chmod +x $@.tmp
 	mv $@.tmp $@
 
 app: build $(MOLTENVK_TAR)
@@ -130,6 +143,13 @@ appimage: build $(APPIMAGETOOL) $(APPIMAGE_RUNTIME)
 	rm -rf $(APPDIR)
 	$(call checksum,$(APPIMAGE))
 
+packages: build $(NFPM)
+	for packager in deb rpm; do \
+		ROMP_VERSION=$(CARGO_VERSION) $(NFPM) package --config packaging/linux/nfpm.yaml \
+			--packager $$packager --target $(PACKAGE).$$packager || exit 1; \
+		(cd $(DIST) && $(SHA512) $(notdir $(PACKAGE)).$$packager > $(notdir $(PACKAGE)).$$packager.sha512) || exit 1; \
+	done
+
 # The oldest supported Ubuntu LTS has this one; a newer requirement wouldn't start there.
 GLIBC_MAX := 2.35
 
@@ -140,7 +160,7 @@ glibc-check:
 		[ "$$(printf '%s\n' $$need $(GLIBC_MAX) | sort -V | tail -n 1)" = "$(GLIBC_MAX)" ] || { echo "that's newer than $(GLIBC_MAX)"; exit 1; }; \
 	done
 
-dist-linux: appimage
+dist-linux: appimage packages
 	rm -rf $(DIST)/$(LINUX_NAME) $(LINUX_TAR)
 	mkdir -p $(DIST)/$(LINUX_NAME)
 	cp $(BIN)/romp $(BIN)/romp-runner README.md LICENSE $(DIST)/$(LINUX_NAME)/
