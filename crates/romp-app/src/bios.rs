@@ -34,6 +34,7 @@ static REQUIRED: &[(&str, &[&[&str]])] = &[
     ("fds", &[&["disksys.rom"]]),
     ("colecovision", &[&["colecovision.rom", "coleco.rom"]]),
     ("philips-cd-i", &[&["cdimono1.zip"]]),
+    ("atari-st", &[&["tos.img"]]),
     ("neogeoaes", &[&["neogeo.zip"]]),
     ("neogeomvs", &[&["neogeo.zip"]]),
 ];
@@ -297,6 +298,15 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("same_cdi/bios")).unwrap();
         std::fs::write(dir.path().join("same_cdi/bios/cdimono1.zip"), b"x").unwrap();
         assert!(missing("philips-cd-i", dir.path()).is_empty());
+    }
+
+    #[test]
+    fn the_atari_st_needs_tos_but_the_cpc_needs_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(missing("atari-st", dir.path()), ["tos.img"]);
+        std::fs::write(dir.path().join("TOS.IMG"), b"x").unwrap();
+        assert!(missing("atari-st", dir.path()).is_empty());
+        assert!(missing("acpc", dir.path()).is_empty());
     }
 
     #[test]

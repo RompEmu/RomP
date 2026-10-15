@@ -173,6 +173,14 @@ static CORES: &[(&[&str], CoreInfo)] = &[
     (&["zxs"], core("fuse", "Fuse", "fuse_libretro", false)),
     (&["amiga"], core("puae", "PUAE", "puae_libretro", false)),
     (
+        &["atari-st"],
+        core("hatari", "Hatari", "hatari_libretro", false),
+    ),
+    (
+        &["acpc"],
+        core("cap32", "Caprice32", "cap32_libretro", false),
+    ),
+    (
         &["lynx"],
         core(
             "mednafen_lynx",
@@ -259,6 +267,8 @@ pub fn is_computer(core_id: &str) -> bool {
             | "vice_x128"
             | "fuse"
             | "atari800"
+            | "hatari"
+            | "cap32"
     )
 }
 
@@ -313,7 +323,7 @@ fn core_url(base: &str, core: &CoreInfo) -> String {
 }
 
 pub fn uses_mouse(core_id: &str) -> bool {
-    matches!(core_id, "puae" | "dosbox_pure")
+    matches!(core_id, "puae" | "dosbox_pure" | "hatari")
 }
 
 pub fn is_nintendo(platform_slug: &str) -> bool {
@@ -664,6 +674,10 @@ mod tests {
             assert_eq!(core_for_platform(slug).unwrap().id, "vice_xplus4");
         }
         assert_eq!(core_for_platform("c128").unwrap().id, "vice_x128");
+        assert_eq!(core_for_platform("atari-st").unwrap().id, "hatari");
+        assert!(is_computer("hatari") && uses_mouse("hatari"));
+        assert_eq!(core_for_platform("acpc").unwrap().id, "cap32");
+        assert!(is_computer("cap32") && !uses_mouse("cap32"));
         assert!(["vice_xvic", "vice_xplus4", "vice_x128"]
             .into_iter()
             .all(|id| is_computer(id)
