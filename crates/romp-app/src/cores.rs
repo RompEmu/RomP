@@ -400,7 +400,7 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
             ("puae_chipmem_size", "4"),
             ("puae_fastmem_size", "8"),
             ("puae_floppy_speed", "800"),
-            ("puae_immediate_blits", "true"),
+            ("puae_immediate_blits", "immediate"),
         ],
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
         "vice_x64sc" | "vice_xvic" | "vice_xplus4" | "vice_x128" => {
@@ -1012,6 +1012,7 @@ mod tests {
         let options = default_options("puae");
         assert!(options.contains(&("puae_kickstart".into(), "auto".into())));
         assert!(options.contains(&("puae_model".into(), "A600".into())));
+        assert!(options.contains(&("puae_immediate_blits".into(), "immediate".into())));
         assert!(default_options("mednafen_psx_hw")
             .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
         assert!(default_options("snes9x").is_empty());
