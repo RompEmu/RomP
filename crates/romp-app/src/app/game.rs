@@ -972,7 +972,12 @@ impl Controller {
             vulkan: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| crate::cores::uses_vulkan(core.id)),
             options: core_for_platform(&detail.platform_slug)
-                .map(|core| crate::console_settings::core_options(core.id, &self.console_choices()))
+                .map(|core| {
+                    crate::cores::with_platform_options(
+                        &detail.platform_slug,
+                        crate::console_settings::core_options(core.id, &self.console_choices()),
+                    )
+                })
                 .unwrap_or_default(),
             split_screens: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| core.id == "melondsds"),

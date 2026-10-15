@@ -37,6 +37,14 @@ static REQUIRED: &[(&str, &[&[&str]])] = &[
     ("atari-st", &[&["tos.img"]]),
     ("pc-fx", &[&["pcfx.rom"]]),
     (
+        "amiga-cd32",
+        &[&["kick40060.CD32"], &["kick40060.CD32.ext"]],
+    ),
+    (
+        "commodore-cdtv",
+        &[&["kick34005.A500"], &["kick34005.CDTV"]],
+    ),
+    (
         "neo-geo-cd",
         &[
             &[
@@ -347,6 +355,20 @@ mod tests {
         std::fs::write(dir.path().join("neocd/000-lo.lo"), b"x").unwrap();
         assert!(missing("neo-geo-cd", dir.path()).is_empty());
         assert_eq!(missing("pc-fx", dir.path()), ["pcfx.rom"]);
+    }
+
+    #[test]
+    fn the_cd32_and_cdtv_need_their_kickstarts_but_the_amiga_does_not() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            missing("amiga-cd32", dir.path()),
+            ["kick40060.CD32", "kick40060.CD32.ext"]
+        );
+        assert_eq!(
+            missing("commodore-cdtv", dir.path()),
+            ["kick34005.A500", "kick34005.CDTV"]
+        );
+        assert!(missing("amiga", dir.path()).is_empty());
     }
 
     #[test]

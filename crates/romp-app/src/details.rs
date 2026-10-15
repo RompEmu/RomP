@@ -83,7 +83,7 @@ const BOX_SHAPES: [(&[&str], f32); 12] = [
     (&["gb", "gbc", "gba", "dc"], 1.0),
     (&["snes"], 1.38),
     (&["n64"], 1.37),
-    (&["psx", "neo-geo-cd"], 1.16),
+    (&["psx", "neo-geo-cd", "amiga-cd32", "commodore-cdtv"], 1.16),
     (&["nds", "3ds"], 1.11),
     (&["virtualboy"], 1.12),
     (&["sfam"], 0.55),

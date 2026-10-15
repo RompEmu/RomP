@@ -184,7 +184,10 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         core("vice_x128", "VICE x128", "vice_x128_libretro", false),
     ),
     (&["zxs"], core("fuse", "Fuse", "fuse_libretro", false)),
-    (&["amiga"], core("puae", "PUAE", "puae_libretro", false)),
+    (
+        &["amiga", "amiga-cd32", "commodore-cdtv"],
+        core("puae", "PUAE", "puae_libretro", false),
+    ),
     (
         &["atari-st"],
         core("hatari", "Hatari", "hatari_libretro", false),
@@ -398,12 +401,38 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
-    for (key, value) in vulkan_options(core_id).unwrap_or_default() {
+    set_options(&mut options, vulkan_options(core_id).unwrap_or_default());
+    options
+}
+
+fn set_options(options: &mut Vec<(String, String)>, changes: &[(&str, &str)]) {
+    for (key, value) in changes {
         match options.iter_mut().find(|(k, _)| k == key) {
             Some(existing) => existing.1 = value.to_string(),
             None => options.push((key.to_string(), value.to_string())),
         }
     }
+}
+
+/// A console that shares its core with another one, set up as that console instead.
+pub fn with_platform_options(
+    platform_slug: &str,
+    mut options: Vec<(String, String)>,
+) -> Vec<(String, String)> {
+    let changes: &[(&str, &str)] = match platform_slug {
+        "amiga-cd32" => &[
+            ("puae_model", "CD32"),
+            ("puae_chipmem_size", "auto"),
+            ("puae_fastmem_size", "auto"),
+        ],
+        "commodore-cdtv" => &[
+            ("puae_model", "CDTV"),
+            ("puae_chipmem_size", "auto"),
+            ("puae_fastmem_size", "auto"),
+        ],
+        _ => &[],
+    };
+    set_options(&mut options, changes);
     options
 }
 
@@ -952,5 +981,18 @@ mod tests {
         assert!(default_options("mednafen_psx_hw")
             .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
         assert!(default_options("snes9x").is_empty());
+    }
+
+    #[test]
+    fn the_cd32_and_cdtv_run_puae_as_themselves() {
+        for (slug, model) in [("amiga-cd32", "CD32"), ("commodore-cdtv", "CDTV")] {
+            assert_eq!(core_for_platform(slug).unwrap().id, "puae");
+            let options = with_platform_options(slug, default_options("puae"));
+            assert!(options.contains(&("puae_model".into(), model.into())));
+            assert!(options.contains(&("puae_fastmem_size".into(), "auto".into())));
+            assert!(options.contains(&("puae_kickstart".into(), "auto".into())));
+        }
+        let amiga = with_platform_options("amiga", default_options("puae"));
+        assert_eq!(amiga, default_options("puae"));
     }
 }

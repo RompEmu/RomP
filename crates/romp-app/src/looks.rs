@@ -100,7 +100,7 @@ const HANDHELDS: [&str; 10] = [
     "nds",
 ];
 
-const TELEVISION: [&str; 24] = [
+const TELEVISION: [&str; 26] = [
     "nes",
     "famicom",
     "fds",
@@ -125,6 +125,8 @@ const TELEVISION: [&str; 24] = [
     "neogeoaes",
     "neo-geo-cd",
     "pc-fx",
+    "amiga-cd32",
+    "commodore-cdtv",
 ];
 
 /// Consoles whose games drew transparency as a checkerboard a TV blurred together.
