@@ -208,6 +208,16 @@ static CORE_LICENSES: &[(&str, &str, &str)] = &[
         "https://github.com/libretro/libretro-cap32/blob/master/cap32/COPYING.txt",
     ),
     (
+        "mednafen_pcfx",
+        "GPL-2.0",
+        "https://github.com/libretro/beetle-pcfx-libretro/blob/master/COPYING",
+    ),
+    (
+        "neocd",
+        "LGPL-3.0",
+        "https://github.com/libretro/neocd_libretro/blob/master/LICENSE.md",
+    ),
+    (
         "fuse",
         "GPL-3.0",
         "https://github.com/libretro/fuse-libretro/blob/master/LICENSE",

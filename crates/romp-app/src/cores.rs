@@ -94,6 +94,19 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         ),
     ),
     (
+        &["pc-fx"],
+        core(
+            "mednafen_pcfx",
+            "Beetle PC-FX",
+            "mednafen_pcfx_libretro",
+            false,
+        ),
+    ),
+    (
+        &["neo-geo-cd"],
+        core("neocd", "NeoCD", "neocd_libretro", false),
+    ),
+    (
         &["saturn"],
         core(
             "mednafen_saturn",
@@ -675,6 +688,8 @@ mod tests {
         }
         assert_eq!(core_for_platform("c128").unwrap().id, "vice_x128");
         assert_eq!(core_for_platform("atari-st").unwrap().id, "hatari");
+        assert_eq!(core_for_platform("pc-fx").unwrap().id, "mednafen_pcfx");
+        assert_eq!(core_for_platform("neo-geo-cd").unwrap().id, "neocd");
         assert!(is_computer("hatari") && uses_mouse("hatari"));
         assert_eq!(core_for_platform("acpc").unwrap().id, "cap32");
         assert!(is_computer("cap32") && !uses_mouse("cap32"));

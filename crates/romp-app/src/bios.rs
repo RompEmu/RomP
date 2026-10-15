@@ -35,6 +35,25 @@ static REQUIRED: &[(&str, &[&[&str]])] = &[
     ("colecovision", &[&["colecovision.rom", "coleco.rom"]]),
     ("philips-cd-i", &[&["cdimono1.zip"]]),
     ("atari-st", &[&["tos.img"]]),
+    ("pc-fx", &[&["pcfx.rom"]]),
+    (
+        "neo-geo-cd",
+        &[
+            &[
+                "neocd_f.rom",
+                "neocd_sf.rom",
+                "front-sp1.bin",
+                "neocd_t.rom",
+                "neocd_st.rom",
+                "top-sp1.bin",
+                "neocd_z.rom",
+                "neocd_sz.rom",
+                "neocd.bin",
+                "uni-bioscd.rom",
+            ],
+            &["000-lo.lo", "ng-lo.rom"],
+        ],
+    ),
     ("neogeoaes", &[&["neogeo.zip"]]),
     ("neogeomvs", &[&["neogeo.zip"]]),
 ];
@@ -50,6 +69,8 @@ pub fn placement(platform_slug: &str, file_name: &str) -> PathBuf {
         Path::new(PCSX2_BIOS_DIR).join(file_name)
     } else if platform_slug == "philips-cd-i" {
         Path::new("same_cdi/bios").join(file_name)
+    } else if platform_slug == "neo-geo-cd" {
+        Path::new("neocd").join(file_name)
     } else if DC_FILES.iter().any(|f| f.eq_ignore_ascii_case(file_name)) {
         Path::new("dc").join(file_name)
     } else {
@@ -307,6 +328,25 @@ mod tests {
         std::fs::write(dir.path().join("TOS.IMG"), b"x").unwrap();
         assert!(missing("atari-st", dir.path()).is_empty());
         assert!(missing("acpc", dir.path()).is_empty());
+    }
+
+    #[test]
+    fn the_neo_geo_cd_needs_a_bios_and_the_zoom_rom_in_neocd() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(missing("neo-geo-cd", dir.path()).len(), 2);
+        assert_eq!(
+            placement("neo-geo-cd", "neocd_z.rom"),
+            PathBuf::from("neocd/neocd_z.rom")
+        );
+        std::fs::create_dir_all(dir.path().join("neocd")).unwrap();
+        std::fs::write(dir.path().join("neocd/neocd_z.rom"), b"x").unwrap();
+        assert_eq!(
+            missing("neo-geo-cd", dir.path()),
+            ["000-lo.lo or ng-lo.rom"]
+        );
+        std::fs::write(dir.path().join("neocd/000-lo.lo"), b"x").unwrap();
+        assert!(missing("neo-geo-cd", dir.path()).is_empty());
+        assert_eq!(missing("pc-fx", dir.path()), ["pcfx.rom"]);
     }
 
     #[test]
