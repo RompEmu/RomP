@@ -37,6 +37,10 @@ static REQUIRED: &[(&str, &[&[&str]])] = &[
     ("atari-st", &[&["tos.img"]]),
     ("pc-fx", &[&["pcfx.rom"]]),
     (
+        "fairchild-channel-f",
+        &[&["sl31253.bin", "sl90025.bin"], &["sl31254.bin"]],
+    ),
+    (
         "amiga-cd32",
         &[&["kick40060.CD32"], &["kick40060.CD32.ext"]],
     ),
@@ -369,6 +373,19 @@ mod tests {
             ["kick34005.A500", "kick34005.CDTV"]
         );
         assert!(missing("amiga", dir.path()).is_empty());
+    }
+
+    #[test]
+    fn the_channel_f_needs_both_its_bios_halves() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            missing("fairchild-channel-f", dir.path()),
+            ["sl31253.bin or sl90025.bin", "sl31254.bin"]
+        );
+        std::fs::write(dir.path().join("sl90025.bin"), b"x").unwrap();
+        std::fs::write(dir.path().join("sl31254.bin"), b"x").unwrap();
+        assert!(missing("fairchild-channel-f", dir.path()).is_empty());
+        assert!(missing("pokemon-mini", dir.path()).is_empty());
     }
 
     #[test]

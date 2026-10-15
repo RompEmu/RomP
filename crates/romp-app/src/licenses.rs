@@ -218,6 +218,31 @@ static CORE_LICENSES: &[(&str, &str, &str)] = &[
         "https://github.com/libretro/neocd_libretro/blob/master/LICENSE.md",
     ),
     (
+        "pokemini",
+        "GPL-3.0",
+        "https://github.com/libretro/PokeMini/blob/master/LICENSE",
+    ),
+    (
+        "gw",
+        "Zlib",
+        "https://github.com/libretro/gw-libretro/blob/master/LICENSE",
+    ),
+    (
+        "potator",
+        "Unlicense",
+        "https://github.com/libretro/potator/blob/master/LICENSE",
+    ),
+    (
+        "sameduck",
+        "MIT",
+        "https://github.com/libretro/sameduck/blob/SameDuck-libretro/LICENSE",
+    ),
+    (
+        "freechaf",
+        "GPL-3.0",
+        "https://github.com/libretro/FreeChaF/blob/master/LICENSE",
+    ),
+    (
         "fuse",
         "GPL-3.0",
         "https://github.com/libretro/fuse-libretro/blob/master/LICENSE",

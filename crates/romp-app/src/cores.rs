@@ -168,6 +168,26 @@ static CORES: &[(&[&str], CoreInfo)] = &[
     ),
     (&["vectrex"], core("vecx", "Vecx", "vecx_libretro", false)),
     (
+        &["pokemon-mini"],
+        core("pokemini", "PokeMini", "pokemini_libretro", false),
+    ),
+    (
+        &["g-and-w"],
+        core("gw", "Game & Watch", "gw_libretro", false),
+    ),
+    (
+        &["supervision"],
+        core("potator", "Potator", "potator_libretro", false),
+    ),
+    (
+        &["mega-duck-slash-cougar-boy"],
+        core("sameduck", "SameDuck", "sameduck_libretro", false),
+    ),
+    (
+        &["fairchild-channel-f"],
+        core("freechaf", "FreeChaF", "freechaf_libretro", false),
+    ),
+    (
         &["c64"],
         core("vice_x64sc", "VICE x64sc", "vice_x64sc_libretro", false),
     ),
@@ -719,6 +739,15 @@ mod tests {
         assert_eq!(core_for_platform("atari-st").unwrap().id, "hatari");
         assert_eq!(core_for_platform("pc-fx").unwrap().id, "mednafen_pcfx");
         assert_eq!(core_for_platform("neo-geo-cd").unwrap().id, "neocd");
+        for (slug, id) in [
+            ("pokemon-mini", "pokemini"),
+            ("g-and-w", "gw"),
+            ("supervision", "potator"),
+            ("mega-duck-slash-cougar-boy", "sameduck"),
+            ("fairchild-channel-f", "freechaf"),
+        ] {
+            assert_eq!(core_for_platform(slug).unwrap().id, id);
+        }
         assert!(is_computer("hatari") && uses_mouse("hatari"));
         assert_eq!(core_for_platform("acpc").unwrap().id, "cap32");
         assert!(is_computer("cap32") && !uses_mouse("cap32"));

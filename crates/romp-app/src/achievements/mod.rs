@@ -32,6 +32,7 @@ const CONSOLES: &[(&[&str], u32)] = &[
     (&["wii"], 19),
     (&["ps2"], 21),
     (&["odyssey-2"], 23),
+    (&["pokemon-mini"], 24),
     (&["atari2600"], 25),
     (&["dos"], 26),
     (
@@ -58,7 +59,11 @@ const CONSOLES: &[(&[&str], u32)] = &[
     (&["atari7800"], 51),
     (&["wonderswan", "wonderswan-color"], 53),
     (&["neo-geo-cd"], 56),
+    (&["fairchild-channel-f"], 57),
     (&["zxs"], 59),
+    (&["g-and-w"], 60),
+    (&["supervision"], 63),
+    (&["mega-duck-slash-cougar-boy"], 69),
     (&["turbografx-cd"], 76),
     (&["fds"], 81),
 ];

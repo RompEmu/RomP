@@ -87,7 +87,7 @@ pub enum Row {
 }
 
 // Not the PSP: it draws at several times its screen's resolution, which a pixel grid can't follow.
-const HANDHELDS: [&str; 10] = [
+const HANDHELDS: [&str; 14] = [
     "gb",
     "gbc",
     "gba",
@@ -98,9 +98,13 @@ const HANDHELDS: [&str; 10] = [
     "wonderswan",
     "wonderswan-color",
     "nds",
+    "pokemon-mini",
+    "g-and-w",
+    "supervision",
+    "mega-duck-slash-cougar-boy",
 ];
 
-const TELEVISION: [&str; 26] = [
+const TELEVISION: [&str; 27] = [
     "nes",
     "famicom",
     "fds",
@@ -127,6 +131,7 @@ const TELEVISION: [&str; 26] = [
     "pc-fx",
     "amiga-cd32",
     "commodore-cdtv",
+    "fairchild-channel-f",
 ];
 
 /// Consoles whose games drew transparency as a checkerboard a TV blurred together.
