@@ -243,6 +243,11 @@ static CORE_LICENSES: &[(&str, &str, &str)] = &[
         "https://github.com/libretro/FreeChaF/blob/master/LICENSE",
     ),
     (
+        "tic80",
+        "MIT",
+        "https://github.com/nesbox/TIC-80/blob/main/LICENSE",
+    ),
+    (
         "fuse",
         "GPL-3.0",
         "https://github.com/libretro/fuse-libretro/blob/master/LICENSE",

@@ -63,6 +63,7 @@ const CONSOLES: &[(&[&str], u32)] = &[
     (&["zxs"], 59),
     (&["g-and-w"], 60),
     (&["supervision"], 63),
+    (&["tic-80"], 65),
     (&["mega-duck-slash-cougar-boy"], 69),
     (&["turbografx-cd"], 76),
     (&["fds"], 81),

@@ -188,6 +188,10 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         core("freechaf", "FreeChaF", "freechaf_libretro", false),
     ),
     (
+        &["tic-80"],
+        core("tic80", "TIC-80", "tic80_libretro", false),
+    ),
+    (
         &["c64"],
         core("vice_x64sc", "VICE x64sc", "vice_x64sc_libretro", false),
     ),
@@ -745,6 +749,7 @@ mod tests {
             ("supervision", "potator"),
             ("mega-duck-slash-cougar-boy", "sameduck"),
             ("fairchild-channel-f", "freechaf"),
+            ("tic-80", "tic80"),
         ] {
             assert_eq!(core_for_platform(slug).unwrap().id, id);
         }
