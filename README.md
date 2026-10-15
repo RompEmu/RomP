@@ -51,20 +51,31 @@ RomP downloads the emulator for each system the first time you play one of its g
 | System | Emulator |
 |---|---|
 | Arcade, including Neo Geo and CPS 1–3 | FinalBurn Neo |
+| Amstrad CPC | Caprice32 |
 | Atari 2600 | Stella |
+| Atari 5200 | a5200 |
+| Atari 7800 | ProSystem |
+| Atari 8-bit computers and XEGS | Atari800 |
 | Atari Jaguar | Virtual Jaguar |
 | Atari Lynx | Beetle Lynx |
+| Atari ST | Hatari |
 | Bandai WonderSwan and WonderSwan Color | Beetle WonderSwan |
 | ColecoVision | Gearcoleco |
 | Commodore 64 | VICE x64sc |
-| Commodore Amiga | PUAE |
+| Commodore 128 | VICE x128 |
+| Commodore VIC-20 | VICE xvic |
+| Commodore Plus/4 and 16 | VICE xplus4 |
+| Commodore Amiga, Amiga CD32 and CDTV | PUAE |
 | DOS | DOSBox Pure |
+| Fairchild Channel F | FreeChaF |
 | Intellivision | FreeIntv |
 | Magnavox Odyssey 2 | O2EM |
+| Mega Duck / Cougar Boy | SameDuck |
 | MSX, MSX2 and MSX2+ | blueMSX |
 | NEC PC Engine / TurboGrafx-16 | Beetle PCE Fast |
 | NEC PC Engine CD / TurboGrafx-CD | Beetle PCE |
 | NEC SuperGrafx | Beetle SuperGrafx |
+| NEC PC-FX | Beetle PC-FX |
 | Nintendo Entertainment System, Famicom and Famicom Disk System | Nestopia UE |
 | Super Nintendo and Super Famicom | Snes9x |
 | Nintendo 64 | Mupen64Plus-Next |
@@ -72,18 +83,23 @@ RomP downloads the emulator for each system the first time you play one of its g
 | Nintendo DS | melonDS DS |
 | Nintendo GameCube and Wii | Dolphin |
 | Nintendo Virtual Boy | Beetle VB |
+| Nintendo Game & Watch | Game & Watch |
+| Nintendo Pokémon Mini | PokeMini |
 | Philips CD-i | SAME CDi |
 | 3DO | Opera |
 | Sega Master System, Genesis / Mega Drive, Game Gear, Sega CD and SG-1000 | Genesis Plus GX |
 | Sega 32X | PicoDrive |
 | Sega Saturn | Beetle Saturn |
 | Sega Dreamcast | Flycast |
+| SNK Neo Geo CD | NeoCD |
 | SNK Neo Geo Pocket and Pocket Color | Beetle NeoPop |
 | Sony PlayStation | Beetle PSX HW |
 | Sony PlayStation 2 | PCSX2 on Windows and Linux, [ARMSX2](https://github.com/RompEmu/ARMSX2) on macOS |
 | Sony PlayStation 3 | RPCS3 |
 | Sony PSP | PPSSPP |
+| TIC-80 | TIC-80 |
 | Vectrex | Vecx |
+| Watara Supervision | Potator |
 | Microsoft Xbox | xemu |
 | ZX Spectrum | Fuse |
 
