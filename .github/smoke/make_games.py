@@ -49,6 +49,18 @@ def c64():
     return bytes([0x01, 0x08]) + basic + code
 
 
+def atari8bit():
+    # A DOS executable loaded at $2000: light blue background and border, forever.
+    code = bytes([
+        0xA9, 0x98, 0x8D, 0xC6, 0x02,  # lda #$98, sta COLOR2 (the text screen's background)
+        0x8D, 0xC8, 0x02,              # sta COLOR4 (the border)
+        0x4C, 0x08, 0x20,              # jmp $2008, forever
+    ])
+    start, end = 0x2000, 0x2000 + len(code) - 1
+    run = struct.pack("<HHH", 0x02E0, 0x02E1, start)  # RUNAD: where to start once loaded
+    return b"\xff\xff" + struct.pack("<HH", start, end) + code + run
+
+
 def dos():
     return bytes([
         0xB8, 0x13, 0x00, 0xCD, 0x10,  # 320x200 in 256 colours
@@ -252,6 +264,7 @@ GAMES = {
     "nes.nes": nes,
     "atari2600.a26": atari2600,
     "c64.prg": c64,
+    "atari8bit.xex": atari8bit,
     "dos.com": dos,
     "gameboy.gb": gameboy,
     "gba.gba": gba,

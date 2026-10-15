@@ -100,7 +100,7 @@ const HANDHELDS: [&str; 10] = [
     "nds",
 ];
 
-const TELEVISION: [&str; 20] = [
+const TELEVISION: [&str; 22] = [
     "nes",
     "famicom",
     "fds",
@@ -116,6 +116,8 @@ const TELEVISION: [&str; 20] = [
     "turbografx-cd",
     "saturn",
     "atari2600",
+    "atari5200",
+    "atari7800",
     "colecovision",
     "intellivision",
     "odyssey-2",
@@ -126,7 +128,7 @@ const TELEVISION: [&str; 20] = [
 /// Consoles whose games drew transparency as a checkerboard a TV blurred together.
 const DITHERED: [&str; 4] = ["genesis", "segacd", "sega32", "saturn"];
 
-const MONITOR: [&str; 11] = [
+const MONITOR: [&str; 14] = [
     "arcade",
     "neogeomvs",
     "cps1",
@@ -134,6 +136,9 @@ const MONITOR: [&str; 11] = [
     "cps3",
     "amiga",
     "c64",
+    "atari800",
+    "atari8bit",
+    "atari-xegs",
     "msx",
     "msx2",
     "msx2plus",

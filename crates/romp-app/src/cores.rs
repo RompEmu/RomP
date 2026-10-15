@@ -107,6 +107,18 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         core("stella", "Stella", "stella_libretro", false),
     ),
     (
+        &["atari5200"],
+        core("a5200", "a5200", "a5200_libretro", false),
+    ),
+    (
+        &["atari7800"],
+        core("prosystem", "ProSystem", "prosystem_libretro", false),
+    ),
+    (
+        &["atari800", "atari8bit", "atari-xegs"],
+        core("atari800", "Atari800", "atari800_libretro", false),
+    ),
+    (
         &["neo-geo-pocket", "neo-geo-pocket-color"],
         core(
             "mednafen_ngp",
@@ -225,7 +237,10 @@ pub fn resumes_reliably(core_id: &str) -> bool {
 }
 
 pub fn is_computer(core_id: &str) -> bool {
-    matches!(core_id, "puae" | "dosbox_pure" | "vice_x64sc" | "fuse")
+    matches!(
+        core_id,
+        "puae" | "dosbox_pure" | "vice_x64sc" | "fuse" | "atari800"
+    )
 }
 
 // These draw through Vulkan where this computer has a working Vulkan device, which on
@@ -617,6 +632,12 @@ mod tests {
             assert_eq!(core_for_platform(slug).unwrap().id, "bluemsx");
         }
         assert_eq!(core_for_platform("colecovision").unwrap().id, "gearcoleco");
+        assert_eq!(core_for_platform("atari5200").unwrap().id, "a5200");
+        assert_eq!(core_for_platform("atari7800").unwrap().id, "prosystem");
+        for slug in ["atari800", "atari8bit", "atari-xegs"] {
+            assert_eq!(core_for_platform(slug).unwrap().id, "atari800");
+        }
+        assert!(is_computer("atari800"));
         assert_eq!(core_for_platform("philips-cd-i").unwrap().id, "same_cdi");
         for slug in ["arcade", "neogeoaes", "cps2"] {
             assert_eq!(core_for_platform(slug).unwrap().id, "fbneo");

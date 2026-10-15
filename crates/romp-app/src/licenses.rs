@@ -133,6 +133,21 @@ static CORE_LICENSES: &[(&str, &str, &str)] = &[
         "https://github.com/stella-emu/stella/blob/master/License.txt",
     ),
     (
+        "a5200",
+        "GPL-2.0",
+        "https://github.com/libretro/a5200/blob/master/License.txt",
+    ),
+    (
+        "prosystem",
+        "GPL-2.0",
+        "https://github.com/libretro/prosystem-libretro/blob/master/License.txt",
+    ),
+    (
+        "atari800",
+        "GPL-2.0",
+        "https://github.com/libretro/libretro-atari800/blob/master/atari800/COPYING",
+    ),
+    (
         "mednafen_ngp",
         "GPL-2.0",
         "https://github.com/libretro/beetle-ngp-libretro/blob/master/COPYING",

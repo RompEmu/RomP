@@ -50,6 +50,8 @@ const CONSOLES: &[(&[&str], u32)] = &[
     (&["colecovision"], 44),
     (&["intellivision"], 45),
     (&["vectrex"], 46),
+    (&["atari5200"], 50),
+    (&["atari7800"], 51),
     (&["wonderswan", "wonderswan-color"], 53),
     (&["zxs"], 59),
     (&["turbografx-cd"], 76),
@@ -512,6 +514,8 @@ mod tests {
         assert_eq!(console_id("snes"), 3);
         assert_eq!(console_id("psx"), 12);
         assert_eq!(console_id("neogeomvs"), 27);
+        assert_eq!(console_id("atari7800"), 51);
+        assert_eq!(console_id("atari8bit"), 0);
         assert_eq!(console_id("xbox"), 0);
     }
 

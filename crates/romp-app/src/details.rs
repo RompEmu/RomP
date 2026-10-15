@@ -90,7 +90,18 @@ const BOX_SHAPES: [(&[&str], f32); 12] = [
     (&["psp"], 0.58),
     (&["saturn"], 0.65),
     (&["wonderswan", "wonderswan-color"], 0.69),
-    (&["nes", "famicom", "gamegear", "atari2600", "arcade"], 0.73),
+    (
+        &[
+            "nes",
+            "famicom",
+            "gamegear",
+            "atari2600",
+            "atari5200",
+            "atari7800",
+            "arcade",
+        ],
+        0.73,
+    ),
     (&["lynx", "dos"], 0.8),
 ];
 
