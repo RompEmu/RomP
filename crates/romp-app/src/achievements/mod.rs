@@ -41,6 +41,7 @@ const CONSOLES: &[(&[&str], u32)] = &[
     (&["virtualboy"], 28),
     (&["msx", "msx2", "msx2plus"], 29),
     (&["c64"], 30),
+    (&["vic-20"], 34),
     (&["amiga"], 35),
     (&["saturn"], 39),
     (&["dc"], 40),

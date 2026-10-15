@@ -183,6 +183,21 @@ static CORE_LICENSES: &[(&str, &str, &str)] = &[
         "https://github.com/libretro/vice-libretro/blob/master/COPYING",
     ),
     (
+        "vice_xvic",
+        "GPL-2.0",
+        "https://github.com/libretro/vice-libretro/blob/master/COPYING",
+    ),
+    (
+        "vice_xplus4",
+        "GPL-2.0",
+        "https://github.com/libretro/vice-libretro/blob/master/COPYING",
+    ),
+    (
+        "vice_x128",
+        "GPL-2.0",
+        "https://github.com/libretro/vice-libretro/blob/master/COPYING",
+    ),
+    (
         "fuse",
         "GPL-3.0",
         "https://github.com/libretro/fuse-libretro/blob/master/LICENSE",

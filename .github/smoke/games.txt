@@ -14,6 +14,9 @@ mednafen_supergrafx     pcengine.pce        supergrafx
 stella                  atari2600.a26       atari2600
 vice_x64sc              c64.prg             c64
 atari800                atari8bit.xex       atari8bit
+vice_xvic               vic20.prg           vic-20
+vice_xplus4             plus4.prg           c-plus-4
+vice_x128               c128.prg            c128
 dosbox_pure             dos.com             dos
 fuse                    zxspectrum.z80      zxs
 melondsds               nintendods.nds      nds

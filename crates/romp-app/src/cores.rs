@@ -158,6 +158,18 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         &["c64"],
         core("vice_x64sc", "VICE x64sc", "vice_x64sc_libretro", false),
     ),
+    (
+        &["vic-20"],
+        core("vice_xvic", "VICE xvic", "vice_xvic_libretro", false),
+    ),
+    (
+        &["c-plus-4", "c16"],
+        core("vice_xplus4", "VICE xplus4", "vice_xplus4_libretro", false),
+    ),
+    (
+        &["c128"],
+        core("vice_x128", "VICE x128", "vice_x128_libretro", false),
+    ),
     (&["zxs"], core("fuse", "Fuse", "fuse_libretro", false)),
     (&["amiga"], core("puae", "PUAE", "puae_libretro", false)),
     (
@@ -239,7 +251,14 @@ pub fn resumes_reliably(core_id: &str) -> bool {
 pub fn is_computer(core_id: &str) -> bool {
     matches!(
         core_id,
-        "puae" | "dosbox_pure" | "vice_x64sc" | "fuse" | "atari800"
+        "puae"
+            | "dosbox_pure"
+            | "vice_x64sc"
+            | "vice_xvic"
+            | "vice_xplus4"
+            | "vice_x128"
+            | "fuse"
+            | "atari800"
     )
 }
 
@@ -334,7 +353,9 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
             ("puae_immediate_blits", "true"),
         ],
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
-        "vice_x64sc" => &[("vice_drive_true_emulation", "disabled")],
+        "vice_x64sc" | "vice_xvic" | "vice_xplus4" | "vice_x128" => {
+            &[("vice_drive_true_emulation", "disabled")]
+        }
         "nestopia" => &[("nestopia_zapper_device", "lightgun")],
         "pcsx2" => &[
             ("pcsx2_renderer", "OpenGL"),
@@ -638,6 +659,16 @@ mod tests {
             assert_eq!(core_for_platform(slug).unwrap().id, "atari800");
         }
         assert!(is_computer("atari800"));
+        assert_eq!(core_for_platform("vic-20").unwrap().id, "vice_xvic");
+        for slug in ["c-plus-4", "c16"] {
+            assert_eq!(core_for_platform(slug).unwrap().id, "vice_xplus4");
+        }
+        assert_eq!(core_for_platform("c128").unwrap().id, "vice_x128");
+        assert!(["vice_xvic", "vice_xplus4", "vice_x128"]
+            .into_iter()
+            .all(|id| is_computer(id)
+                && default_options(id)
+                    .contains(&("vice_drive_true_emulation".into(), "disabled".into()))));
         assert_eq!(core_for_platform("philips-cd-i").unwrap().id, "same_cdi");
         for slug in ["arcade", "neogeoaes", "cps2"] {
             assert_eq!(core_for_platform(slug).unwrap().id, "fbneo");

@@ -49,6 +49,32 @@ def c64():
     return bytes([0x01, 0x08]) + basic + code
 
 
+def basic_stub(start, code):
+    # 10 SYS to the machine code just after this one BASIC line, for a Commodore that keeps BASIC at start.
+    sys_at = start + 12
+    line = struct.pack("<HH", start + 10, 10) + b"\x9e" + str(sys_at).encode() + b"\x00"
+    assert len(line) == 10
+    return struct.pack("<H", start) + line + b"\x00\x00" + code(sys_at)
+
+
+def vic20():
+    # Blue background and border on an unexpanded VIC-20, forever.
+    return basic_stub(0x1001, lambda at: bytes([0xA9, 0x6E, 0x8D, 0x0F, 0x90, 0x4C])
+                      + struct.pack("<H", at + 5))
+
+
+def plus4():
+    # Blue background and border through the TED chip, forever.
+    return basic_stub(0x1001, lambda at: bytes([0xA9, 0x56, 0x8D, 0x15, 0xFF, 0x8D, 0x19, 0xFF, 0x4C])
+                      + struct.pack("<H", at + 8))
+
+
+def c128():
+    # Light blue border and background in 40 columns, forever.
+    return basic_stub(0x1C01, lambda at: bytes([0xA9, 0x0E, 0x8D, 0x20, 0xD0, 0x8D, 0x21, 0xD0, 0x4C])
+                      + struct.pack("<H", at + 8))
+
+
 def atari8bit():
     # A DOS executable loaded at $2000: light blue background and border, forever.
     code = bytes([
@@ -265,6 +291,9 @@ GAMES = {
     "atari2600.a26": atari2600,
     "c64.prg": c64,
     "atari8bit.xex": atari8bit,
+    "vic20.prg": vic20,
+    "plus4.prg": plus4,
+    "c128.prg": c128,
     "dos.com": dos,
     "gameboy.gb": gameboy,
     "gba.gba": gba,

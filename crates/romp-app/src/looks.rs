@@ -128,7 +128,7 @@ const TELEVISION: [&str; 22] = [
 /// Consoles whose games drew transparency as a checkerboard a TV blurred together.
 const DITHERED: [&str; 4] = ["genesis", "segacd", "sega32", "saturn"];
 
-const MONITOR: [&str; 14] = [
+const MONITOR: [&str; 18] = [
     "arcade",
     "neogeomvs",
     "cps1",
@@ -136,6 +136,10 @@ const MONITOR: [&str; 14] = [
     "cps3",
     "amiga",
     "c64",
+    "vic-20",
+    "c-plus-4",
+    "c16",
+    "c128",
     "atari800",
     "atari8bit",
     "atari-xegs",
