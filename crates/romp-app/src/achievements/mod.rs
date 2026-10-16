@@ -66,6 +66,7 @@ const CONSOLES: &[(&[&str], u32)] = &[
     (&["tic-80"], 65),
     (&["mega-duck-slash-cougar-boy"], 69),
     (&["turbografx-cd"], 76),
+    (&["atari-jaguar-cd"], 77),
     (&["fds"], 81),
 ];
 
@@ -526,6 +527,7 @@ mod tests {
         assert_eq!(console_id("psx"), 12);
         assert_eq!(console_id("neogeomvs"), 27);
         assert_eq!(console_id("atari7800"), 51);
+        assert_eq!(console_id("atari-jaguar-cd"), 77);
         assert_eq!(console_id("atari8bit"), 0);
         assert_eq!(console_id("xbox"), 0);
     }

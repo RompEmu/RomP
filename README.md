@@ -56,7 +56,7 @@ RomP downloads the emulator for each system the first time you play one of its g
 | Atari 5200 | a5200 |
 | Atari 7800 | ProSystem |
 | Atari 8-bit computers and XEGS | Atari800 |
-| Atari Jaguar | Virtual Jaguar |
+| Atari Jaguar and Jaguar CD | Virtual Jaguar |
 | Atari Lynx | Beetle Lynx |
 | Atari ST | Hatari |
 | Bandai WonderSwan and WonderSwan Color | Beetle WonderSwan |

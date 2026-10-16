@@ -6,7 +6,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Added
 
-- Games for 19 more systems play: Atari 5200, 7800, 8-bit computers and ST, Amstrad CPC, Commodore VIC-20, Plus/4, 16 and 128, Amiga CD32 and CDTV, Neo Geo CD, PC-FX, Pokémon Mini, Game & Watch, Watara Supervision, Mega Duck, Fairchild Channel F and TIC-80. RomP downloads each one's emulator on first play, and the BIOS files the Atari ST, Neo Geo CD, PC-FX, CD32, CDTV and Channel F need from RomM's firmware.
+- Games for 20 more systems play: Atari 5200, 7800, 8-bit computers and ST, Amstrad CPC, Commodore VIC-20, Plus/4, 16 and 128, Amiga CD32 and CDTV, Neo Geo CD, PC-FX, Pokémon Mini, Game & Watch, Watara Supervision, Mega Duck, Fairchild Channel F and TIC-80, plus Atari Jaguar CD on the Virtual Jaguar core that already plays Jaguar cartridges. RomP downloads each one's emulator on first play, and the BIOS files the Atari ST, Neo Geo CD, PC-FX, CD32, CDTV and Channel F need from RomM's firmware.
 
 ## [0.15.0] - 2026-10-12
 

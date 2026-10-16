@@ -145,7 +145,7 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         core("picodrive", "PicoDrive", "picodrive_libretro", false),
     ),
     (
-        &["jaguar"],
+        &["jaguar", "atari-jaguar-cd"],
         core(
             "virtualjaguar",
             "Virtual Jaguar",
@@ -730,6 +730,9 @@ mod tests {
         }
         assert_eq!(core_for_platform("colecovision").unwrap().id, "gearcoleco");
         assert_eq!(core_for_platform("atari5200").unwrap().id, "a5200");
+        for slug in ["jaguar", "atari-jaguar-cd"] {
+            assert_eq!(core_for_platform(slug).unwrap().id, "virtualjaguar");
+        }
         assert_eq!(core_for_platform("atari7800").unwrap().id, "prosystem");
         for slug in ["atari800", "atari8bit", "atari-xegs"] {
             assert_eq!(core_for_platform(slug).unwrap().id, "atari800");
