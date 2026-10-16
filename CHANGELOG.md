@@ -7,6 +7,15 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Added
 
 - Games for 20 more systems play: Atari 5200, 7800, 8-bit computers and ST, Amstrad CPC, Commodore VIC-20, Plus/4, 16 and 128, Amiga CD32 and CDTV, Neo Geo CD, PC-FX, Pokémon Mini, Game & Watch, Watara Supervision, Mega Duck, Fairchild Channel F and TIC-80, plus Atari Jaguar CD on the Virtual Jaguar core that already plays Jaguar cartridges. RomP downloads each one's emulator on first play, and the BIOS files the Atari ST, Neo Geo CD, PC-FX, CD32, CDTV and Channel F need from RomM's firmware.
+- A filter at the top of the sidebar finds consoles by name or RomM's short name, ignoring case and accents. It works alongside Downloaded only, and the console you picked stays selected and named while the filter hides it.
+- A game RomM keeps in another emulator's own format, such as BigPEmu's .bigpimg, says so before downloading, along with the formats that would play. When an emulator can't play a game's file type, RomP now says which types it plays instead of passing the emulator a file it can't read.
+
+### Fixed
+
+- Zipped ZX Spectrum games start instead of stopping at the Sinclair screen. Emulators that open zips but don't start what's in them now get the game unpacked, which also lets zipped Atari 8-bit and Amstrad CPC games boot.
+- Games that are archives under another name, such as Game & Watch games, download instead of failing as corrupted.
+- With the Platforms section collapsed, the library's heading names the selected console instead of saying "Games".
+- Amiga games run with the immediate blitter RomP meant to turn on: the setting used a value PUAE doesn't accept, so it never applied.
 
 ## [0.15.0] - 2026-10-12
 
