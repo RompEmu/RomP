@@ -481,6 +481,10 @@ msgid "Platforms"
 msgstr ""
 
 #: crates/romp-app/src/app/collections.rs
+msgid "No consoles match"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
 msgid "Collections"
 msgstr ""
 

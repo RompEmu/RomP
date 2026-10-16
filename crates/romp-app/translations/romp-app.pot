@@ -138,6 +138,10 @@ msgid "Syncing…"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Filter consoles"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Rename…"
 msgstr ""
 

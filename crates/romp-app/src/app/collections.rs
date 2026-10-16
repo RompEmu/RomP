@@ -2,9 +2,9 @@ use super::{on_ui, Controller};
 use crate::collections::record;
 use crate::romm::client::Error;
 use crate::romm::types::RemoteCollection;
-use crate::store::{CollectionItem, CollectionKind, Scope};
+use crate::store::{CollectionItem, CollectionKind, PlatformItem, Scope};
 use crate::{Membership, SidebarEntry};
-use slint::{Image, Model, ModelRc, VecModel};
+use slint::{Image, ModelRc, VecModel};
 use tr::tr;
 
 const AUTO_SECTIONS: [(&str, &str, CollectionKind); 3] = [
@@ -42,6 +42,38 @@ fn initial_of(name: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Lower case without accents, so "poke" finds "Pokémon".
+fn fold(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'à'..='å' => 'a',
+            'ç' => 'c',
+            'è'..='ë' => 'e',
+            'ì'..='ï' => 'i',
+            'ñ' => 'n',
+            'ò'..='ö' | 'ø' => 'o',
+            'ù'..='ü' => 'u',
+            'ý' | 'ÿ' => 'y',
+            c => c,
+        })
+        .collect()
+}
+
+/// The consoles whose name or RomM slug holds the filter.
+pub(super) fn filter_platforms<'a>(
+    platforms: &'a [PlatformItem],
+    filter: &str,
+) -> Vec<&'a PlatformItem> {
+    let filter = fold(filter.trim());
+    platforms
+        .iter()
+        .filter(|p| {
+            filter.is_empty() || fold(&p.name).contains(&filter) || fold(&p.slug).contains(&filter)
+        })
+        .collect()
+}
+
 fn item(key: &str, name: &str, count: i64, glyph: &str) -> SidebarEntry {
     SidebarEntry {
         header: false,
@@ -55,6 +87,7 @@ fn item(key: &str, name: &str, count: i64, glyph: &str) -> SidebarEntry {
         expanded: false,
         can_add: false,
         editable: false,
+        note: false,
     }
 }
 
@@ -210,15 +243,32 @@ impl Controller {
             keys.push(FOR_YOU_KEY.to_string());
         }
 
-        let open = expanded.contains("platforms");
+        let filter = self.platform_filter.borrow().clone();
+        let filtering = !filter.trim().is_empty();
+        // A filter shows its matches even in a collapsed section. Every console keeps its key,
+        // so hiding the selected one doesn't change what the library shows.
+        let open = expanded.contains("platforms") || filtering;
         entries.push(header("platforms", &tr!("Platforms"), open, false));
-        let mut missing_icons = Vec::new();
-        for p in platforms {
+        let mut names: Vec<(String, String)> = Vec::new();
+        for p in &platforms {
             let key = format!("p:{}", p.id);
             keys.push(key.clone());
-            if !open {
-                continue;
-            }
+            names.push((key, p.name.clone()));
+        }
+        let shown = if open {
+            filter_platforms(&platforms, &filter)
+        } else {
+            Vec::new()
+        };
+        if filtering && shown.is_empty() {
+            entries.push(SidebarEntry {
+                note: true,
+                ..item("", &tr!("No consoles match"), -1, "")
+            });
+        }
+        let mut missing_icons = Vec::new();
+        for p in shown {
+            let key = format!("p:{}", p.id);
             let image = self
                 .shared
                 .covers
@@ -248,6 +298,7 @@ impl Controller {
             entries.push(header("collections", &tr!("Collections"), open, can_edit));
             for c in listed {
                 keys.push(c.key.clone());
+                names.push((c.key.clone(), c.name.clone()));
                 if !open {
                     continue;
                 }
@@ -275,12 +326,14 @@ impl Controller {
             entries.push(header(section, &crate::i18n::translate(label), open, false));
             for c in members {
                 keys.push(c.key.clone());
+                names.push((c.key.clone(), c.name.clone()));
                 if open {
                     entries.push(item(&c.key, &c.name, c.count, ""));
                 }
             }
         }
         ui.set_sidebar(ModelRc::new(VecModel::from(entries)));
+        *self.sidebar_names.borrow_mut() = names;
         self.update_heading();
         self.fetch_icons(missing_icons);
         let selected = self.selected.borrow().clone();
@@ -289,21 +342,20 @@ impl Controller {
         }
     }
 
+    /// Named from every console and collection, as the sidebar may be hiding the selected one.
     pub(super) fn update_heading(&self) {
         let Some(ui) = self.ui() else { return };
-        let entries: Vec<(String, String)> = ui
-            .get_sidebar()
-            .iter()
-            .filter(|e| !e.header)
-            .map(|e| (e.key.to_string(), e.name.to_string()))
-            .collect();
-        ui.set_heading(heading_for(&self.selected.borrow(), &entries).into());
+        let names = self.sidebar_names.borrow();
+        ui.set_heading(heading_for(&self.selected.borrow(), &names).into());
         ui.set_heading_detail(games_label(self.library.borrow().games.len()).into());
     }
 
     pub(super) fn select(&self, key: String) {
         if key == PAIR_KEY {
             return self.pair_again();
+        }
+        if key.is_empty() {
+            return;
         }
         self.library.borrow_mut().filter.scope = scope_for(&key);
         if let Some(ui) = self.ui() {
@@ -313,8 +365,22 @@ impl Controller {
         self.reload_games();
     }
 
+    pub(super) fn set_platform_filter(&self, text: String) {
+        *self.platform_filter.borrow_mut() = text;
+        self.reload_sidebar();
+    }
+
     pub(super) fn toggle_section(&self, key: String) {
         let section = key.trim_start_matches("section:").to_string();
+        // The filter holds the section open, so collapsing it lets the filter go too.
+        if section == "platforms" && !self.platform_filter.borrow().trim().is_empty() {
+            self.platform_filter.borrow_mut().clear();
+            self.expanded.borrow_mut().remove(&section);
+            if let Some(ui) = self.ui() {
+                ui.set_platform_filter("".into());
+            }
+            return self.reload_sidebar();
+        }
         {
             let mut expanded = self.expanded.borrow_mut();
             if !expanded.remove(&section) {
@@ -631,6 +697,45 @@ mod tests {
         assert_eq!(initial_of("3DO"), "3");
         assert_eq!(initial_of("\"Couch\" co-op"), "C");
         assert_eq!(initial_of(""), "");
+    }
+
+    fn console(id: i64, slug: &str, name: &str) -> PlatformItem {
+        PlatformItem {
+            id,
+            slug: slug.into(),
+            name: name.into(),
+            count: 1,
+        }
+    }
+
+    #[test]
+    fn consoles_filter_by_name_or_slug_ignoring_case_and_accents() {
+        let consoles = [
+            console(1, "snes", "Super Nintendo Entertainment System"),
+            console(2, "pokemon-mini", "Pokémon Mini"),
+            console(3, "genesis", "Sega Mega Drive/Genesis"),
+            console(4, "n64", "Nintendo 64"),
+        ];
+        let names = |filter: &str| -> Vec<i64> {
+            filter_platforms(&consoles, filter)
+                .iter()
+                .map(|p| p.id)
+                .collect()
+        };
+        assert_eq!(names(""), [1, 2, 3, 4]);
+        assert_eq!(names("   "), [1, 2, 3, 4]);
+        assert_eq!(names("SNES"), [1]);
+        assert_eq!(names("nin"), [1, 4]);
+        assert_eq!(names("pokemon"), [2]);
+        assert_eq!(names("POKÉ"), [2]);
+        assert_eq!(names(" mega "), [3]);
+        assert!(names("xbox").is_empty());
+    }
+
+    #[test]
+    fn the_heading_names_a_console_the_sidebar_is_not_showing() {
+        let names = vec![("p:3".to_string(), "Super Nintendo".to_string())];
+        assert_eq!(heading_for("p:3", &names), "Super Nintendo");
     }
 
     #[test]

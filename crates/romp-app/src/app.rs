@@ -120,6 +120,8 @@ struct Controller {
     offline_retry: RefCell<Option<Timer>>,
     selected: RefCell<String>,
     expanded: RefCell<HashSet<String>>,
+    platform_filter: RefCell<String>,
+    sidebar_names: RefCell<Vec<(String, String)>>,
     gamepads: Rc<RefCell<crate::gamepads::Gamepads>>,
     players: Rc<RefCell<crate::players::Assignments>>,
     settings_timer: RefCell<Option<Timer>>,
@@ -213,6 +215,8 @@ pub fn run() -> anyhow::Result<()> {
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
         selected: RefCell::new("all".into()),
+        platform_filter: RefCell::default(),
+        sidebar_names: RefCell::default(),
         expanded: RefCell::new(
             ["platforms", "collections"]
                 .into_iter()
@@ -348,6 +352,9 @@ impl Controller {
         ui.on_dialog_accepted(|value| with_controller(|c| c.dialog_accepted(value.to_string())));
         ui.on_dialog_cancelled(|| with_controller(|c| c.close_dialog()));
         ui.on_search_edited(|text| with_controller(|c| c.set_search(text.to_string())));
+        ui.on_platform_filter_edited(|text| {
+            with_controller(|c| c.set_platform_filter(text.to_string()));
+        });
         ui.on_sort_changed(|index| with_controller(|c| c.set_sort(SortOrder::from_index(index))));
         ui.on_columns_changed(|n| with_controller(|c| c.set_columns(n)));
         ui.on_row_shown(|i| with_controller(|c| c.row_shown(i.max(0) as usize)));

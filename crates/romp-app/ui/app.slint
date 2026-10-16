@@ -4,7 +4,7 @@ import { AchievementItem, AchievementRow } from "achievements.slint";
 import { SlotCard, SlotPicture } from "slots.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
-export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool }
+export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool, note: bool }
 export struct Membership { key: string, name: string, member: bool }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
@@ -586,6 +586,8 @@ component Library inherits Rectangle {
     in property <string> sync-status;
     in property <bool> syncing;
     in-out property <string> search;
+    in-out property <string> platform-filter;
+    callback platform-filter-edited(string);
     callback select(string);
     callback toggle-section(string);
     callback new-collection();
@@ -617,6 +619,13 @@ component Library inherits Rectangle {
     in property <length> focus-top;
     in property <length> focus-bottom;
     background: Theme.background;
+    // A narrow window has no room for the console filter, so it lets go of it.
+    changed compact => {
+        if root.compact && root.platform-filter != "" {
+            root.platform-filter = "";
+            root.platform-filter-edited("");
+        }
+    }
     changed focus-row => {
         if root.focus-row >= 0 {
             if root.focus-top < -games.content-y {
@@ -686,6 +695,23 @@ component Library inherits Rectangle {
                         if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
                     }
                 }
+                if !root.compact: FocusScope {
+                    height: platform-filter-field.preferred-height;
+                    key-pressed(event) => {
+                        if event.text == Key.Escape && root.platform-filter != "" {
+                            root.platform-filter = "";
+                            root.platform-filter-edited("");
+                            return accept;
+                        }
+                        reject
+                    }
+                    platform-filter-field := LineEdit {
+                        width: parent.width;
+                        placeholder-text: @tr("Filter consoles");
+                        text <=> root.platform-filter;
+                        edited(text) => { root.platform-filter-edited(text); }
+                    }
+                }
                 ListView {
 
                     vertical-stretch: 1;
@@ -706,7 +732,15 @@ component Library inherits Rectangle {
                             toggled => { root.toggle-section(e.key); }
                             add => { root.new-collection(); }
                         }
-                        if !e.header && e.editable: ContextMenuArea {
+                        if e.note && !root.compact: Text {
+                            height: 34px;
+                            vertical-alignment: center;
+                            horizontal-alignment: Locale.start;
+                            text: e.name;
+                            color: Theme.text-muted;
+                            font-size: Theme.font-small;
+                        }
+                        if !e.header && !e.note && e.editable: ContextMenuArea {
                             height: 34px;
                             Menu {
                                 MenuItem { title: @tr("Rename…"); activated => { root.rename-collection(e.key); } }
@@ -725,7 +759,7 @@ component Library inherits Rectangle {
                                 clicked => { root.select(e.key); }
                             }
                         }
-                        if !e.header && !e.editable: SidebarItem {
+                        if !e.header && !e.note && !e.editable: SidebarItem {
                             compact: root.compact;
                             initial: e.initial;
                             label: e.name;
@@ -2277,6 +2311,8 @@ export component AppWindow inherits Window {
     callback rename-collection(string);
     callback delete-collection(string);
     callback search-edited(string);
+    in-out property <string> platform-filter;
+    callback platform-filter-edited(string);
     callback columns-changed(int);
     callback row-shown(int);
     callback refresh();
@@ -2434,6 +2470,8 @@ export component AppWindow inherits Window {
         sync-status: root.sync-status;
         syncing: root.syncing;
         search <=> root.search;
+        platform-filter <=> root.platform-filter;
+        platform-filter-edited(text) => { root.platform-filter-edited(text); }
         select(key) => { root.select(key); }
         toggle-section(key) => { root.toggle-section(key); }
         new-collection => { root.new-collection(); }
