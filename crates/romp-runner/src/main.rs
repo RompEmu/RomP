@@ -143,6 +143,22 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         &sys.valid_extensions,
         archive::opens_zips(&args.core),
     )?;
+    if !archive::plays(&sys.valid_extensions, &rom.effective_path) {
+        let ext = rom
+            .effective_path
+            .extension()
+            .map_or_else(String::new, |e| format!(".{}", e.to_string_lossy()));
+        let listed: Vec<String> = sys
+            .valid_extensions
+            .split('|')
+            .map(|e| format!(".{}", e.trim()))
+            .collect();
+        anyhow::bail!(
+            "{} can't play {ext} files. It plays {}.",
+            sys.library_name,
+            listed.join(", ")
+        );
+    }
 
     core.init(frontend);
     core.load_game(

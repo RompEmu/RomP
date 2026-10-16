@@ -84,6 +84,17 @@ pub fn open_rom(
     })
 }
 
+/// Whether the core lists this file's type. Cores that list none take anything, and RomP's own
+/// .m3u playlists go to cores whether or not they mention them.
+pub fn plays(valid_extensions: &str, path: &Path) -> bool {
+    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+        return valid_extensions.trim().is_empty();
+    };
+    valid_extensions.trim().is_empty()
+        || ext.eq_ignore_ascii_case("m3u")
+        || core_accepts_extension(valid_extensions, ext)
+}
+
 fn core_accepts_extension(valid_extensions: &str, ext: &str) -> bool {
     valid_extensions
         .split('|')
@@ -784,6 +795,16 @@ mod tests {
         let rom = open_rom(&archive, "test-atari-zip", true, "xfd|atr|zip|xex", false).unwrap();
         assert_eq!(rom.effective_path.file_name().unwrap(), "Game - Disk 1.atr");
         assert_eq!(std::fs::read(&rom.effective_path).unwrap(), b"disk one");
+    }
+
+    #[test]
+    fn a_core_plays_the_files_it_lists_and_romps_own_playlists() {
+        let jaguar = "j64|jag|rom|abs|cof|bin|prg|cue|cdi|chd";
+        assert!(plays(jaguar, Path::new("/g/Game.CUE")));
+        assert!(!plays(jaguar, Path::new("/g/Battle Morph.bigpimg")));
+        assert!(!plays(jaguar, Path::new("/g/no-extension")));
+        assert!(plays(jaguar, Path::new("/g/Game.m3u")));
+        assert!(plays("", Path::new("/g/anything.xyz")));
     }
 
     #[test]
