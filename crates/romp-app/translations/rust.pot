@@ -800,6 +800,10 @@ msgstr ""
 msgid "The server sent an invalid file path"
 msgstr ""
 
+#: crates/romp-app/src/download.rs
+msgid "This copy is in {0}'s own format ({1}), which RomP can't play. A {2} copy of the game would play."
+msgstr ""
+
 #: crates/romp-app/src/external.rs
 msgid "Could not reach GitHub to download {name}"
 msgstr ""

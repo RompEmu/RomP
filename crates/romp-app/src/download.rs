@@ -14,6 +14,15 @@ pub enum DownloadError {
     Cancelled,
     UnsafePath,
     Unpack(String),
+    Foreign(Foreign),
+}
+
+/// A game kept in another emulator's own format, which no core RomP runs can read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Foreign {
+    pub ext: String,
+    pub owner: &'static str,
+    pub instead: &'static str,
 }
 
 impl std::fmt::Display for DownloadError {
@@ -26,6 +35,12 @@ impl std::fmt::Display for DownloadError {
             Self::Cancelled => f.write_str(&tr!("Download cancelled")),
             Self::UnsafePath => f.write_str(&tr!("The server sent an invalid file path")),
             Self::Unpack(e) => write!(f, "{e}"),
+            Self::Foreign(found) => f.write_str(&tr!(
+                "This copy is in {0}'s own format ({1}), which RomP can't play. A {2} copy of the game would play.",
+                found.owner,
+                found.ext,
+                found.instead
+            )),
         }
     }
 }

@@ -1,10 +1,28 @@
-use crate::download::{download_file, DownloadError};
+use crate::download::{download_file, DownloadError, Foreign};
 use crate::layout::{launch_target, m3u, plan, safe_component, Launch};
 use crate::romm::client::Client;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 const CONTENT_HASHED: [&str; 2] = ["zip", "7z"];
+
+/// Formats only another emulator reads: (extension, that emulator, what RomP plays instead).
+const FOREIGN_FORMATS: [(&str, &str, &str); 1] = [("bigpimg", "BigPEmu", ".cue, .cdi or .chd")];
+
+pub fn foreign_format(file_name: &str) -> Option<Foreign> {
+    let ext = Path::new(file_name)
+        .extension()?
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    FOREIGN_FORMATS
+        .iter()
+        .find(|(e, _, _)| *e == ext)
+        .map(|(e, owner, instead)| Foreign {
+            ext: format!(".{e}"),
+            owner,
+            instead,
+        })
+}
 
 // RomM hashes the ROM inside an archive, not the archive's own bytes.
 fn verifiable_sha1<'a>(file_name: &str, sha1: Option<&'a str>) -> Option<&'a str> {
@@ -30,6 +48,10 @@ pub async fn download_game(
         return Err(DownloadError::UnsafePath);
     }
     let files = plan(&rom).map_err(|_| DownloadError::UnsafePath)?;
+    // Said before a byte is fetched, rather than by the emulator after the whole download.
+    if let Some(found) = files.iter().find_map(|f| foreign_format(&f.file.file_name)) {
+        return Err(DownloadError::Foreign(found));
+    }
     let dir = roms_dir.join(&rom.platform_slug).join(rom.id.to_string());
     let total: u64 = files
         .iter()
@@ -70,6 +92,18 @@ pub async fn download_game(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn another_emulators_own_format_is_named_before_downloading() {
+        let found = foreign_format("Battle Morph.bigpimg").unwrap();
+        assert_eq!(found.owner, "BigPEmu");
+        assert_eq!(found.instead, ".cue, .cdi or .chd");
+        assert!(foreign_format("Battle Morph.BIGPIMG").is_some());
+        assert!(foreign_format("Battle Morph.cue").is_none());
+        assert!(foreign_format("bigpimg").is_none());
+        let text = DownloadError::Foreign(found).to_string();
+        assert!(text.contains("BigPEmu") && text.contains(".bigpimg") && text.contains(".chd"));
+    }
     use crate::romm::client::tests::base_of;
     use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
