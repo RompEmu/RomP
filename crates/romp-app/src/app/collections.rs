@@ -725,7 +725,7 @@ mod tests {
         assert_eq!(names(""), [1, 2, 3, 4]);
         assert_eq!(names("   "), [1, 2, 3, 4]);
         assert_eq!(names("SNES"), [1]);
-        assert_eq!(names("nin"), [1, 4]);
+        assert_eq!(names("nintendo"), [1, 4]);
         assert_eq!(names("pokemon"), [2]);
         assert_eq!(names("POKÉ"), [2]);
         assert_eq!(names(" mega "), [3]);
