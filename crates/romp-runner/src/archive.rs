@@ -8,11 +8,31 @@ pub struct LoadedRom {
     pub bytes: Option<Vec<u8>>,
 }
 
+/// Cores that boot a game from inside a zip. Others that list zips, such as Atari800,
+/// Caprice32 and Fuse, open one but don't start what's in it, so they get it unpacked.
+const OPENS_ZIPS: [&str; 7] = [
+    "fbneo",
+    "dosbox_pure",
+    "puae",
+    "vice_x64sc",
+    "vice_xvic",
+    "vice_xplus4",
+    "vice_x128",
+];
+
+pub fn opens_zips(core: &Path) -> bool {
+    core.file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_suffix("_libretro"))
+        .is_some_and(|id| OPENS_ZIPS.contains(&id))
+}
+
 pub fn open_rom(
     rom_path: &Path,
     session_id: &str,
     need_fullpath: bool,
     valid_extensions: &str,
+    opens_zips: bool,
 ) -> Result<LoadedRom> {
     let ext = rom_path
         .extension()
@@ -20,7 +40,7 @@ pub fn open_rom(
         .map(str::to_ascii_lowercase);
     if let Some(ext_str) = ext.as_deref() {
         // .7z is never passed through: cores that list it often cannot decode it.
-        if ext_str == "zip" && core_accepts_extension(valid_extensions, ext_str) {
+        if ext_str == "zip" && opens_zips && core_accepts_extension(valid_extensions, ext_str) {
             // A zip holding only a disc is unpacked anyway: Beetle Saturn, for one, takes zips
             // only as arcade (ST-V) sets and otherwise boots with no disc.
             if let Some(disc) = disc_only_zip(rom_path)? {
@@ -674,7 +694,7 @@ mod tests {
         let archive = tmp.path().join("game.7z");
         sevenz_rust2::compress_to_path(&src, &archive).unwrap();
 
-        let rom = open_rom(&archive, "test-7z", false, "sfc|smc").unwrap();
+        let rom = open_rom(&archive, "test-7z", false, "sfc|smc", false).unwrap();
         assert_eq!(rom.bytes.as_deref(), Some(&b"the whole game"[..]));
         assert_eq!(rom.effective_path, tmp.path().join("game.sfc"));
     }
@@ -717,7 +737,14 @@ mod tests {
             &[("Game.cue", CUE), ("Game (Track 01).bin", b"track")],
         );
 
-        let rom = open_rom(&archive, "test-disc-zip", true, "cue|ccd|chd|toc|m3u|zip").unwrap();
+        let rom = open_rom(
+            &archive,
+            "test-disc-zip",
+            true,
+            "cue|ccd|chd|toc|m3u|zip",
+            true,
+        )
+        .unwrap();
         assert_eq!(rom.effective_path.file_name().unwrap(), "Game.cue");
         assert!(rom
             .effective_path
@@ -738,7 +765,51 @@ mod tests {
             ],
         );
 
-        let rom = open_rom(&archive, "test-dos-zip", true, "zip|dosz|exe|cue|iso").unwrap();
+        let rom = open_rom(&archive, "test-dos-zip", true, "zip|dosz|exe|cue|iso", true).unwrap();
         assert_eq!(rom.effective_path, archive);
+    }
+
+    #[test]
+    fn a_core_that_lists_zips_but_cant_boot_from_one_gets_the_game_unpacked() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("Game.zip");
+        zip_of(
+            &archive,
+            &[
+                ("Game - Disk 1.atr", b"disk one"),
+                ("Game - Disk 2.atr", b"disk 2"),
+            ],
+        );
+
+        let rom = open_rom(&archive, "test-atari-zip", true, "xfd|atr|zip|xex", false).unwrap();
+        assert_eq!(rom.effective_path.file_name().unwrap(), "Game - Disk 1.atr");
+        assert_eq!(std::fs::read(&rom.effective_path).unwrap(), b"disk one");
+    }
+
+    #[test]
+    fn only_cores_known_to_boot_from_zips_get_them_whole() {
+        for core in [
+            "fbneo_libretro.dylib",
+            "dosbox_pure_libretro.so",
+            "puae_libretro.dll",
+            "vice_x64sc_libretro.dylib",
+            "vice_xvic_libretro.so",
+        ] {
+            assert!(
+                opens_zips(Path::new("/cores/x").join(core).as_path()),
+                "{core}"
+            );
+        }
+        for core in [
+            "atari800_libretro.dylib",
+            "cap32_libretro.so",
+            "fuse_libretro.dll",
+            "snes9x_libretro.dylib",
+        ] {
+            assert!(
+                !opens_zips(Path::new("/cores/x").join(core).as_path()),
+                "{core}"
+            );
+        }
     }
 }

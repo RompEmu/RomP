@@ -141,6 +141,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         &session_tag,
         sys.need_fullpath,
         &sys.valid_extensions,
+        archive::opens_zips(&args.core),
     )?;
 
     core.init(frontend);
