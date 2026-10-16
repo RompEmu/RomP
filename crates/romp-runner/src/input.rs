@@ -48,6 +48,10 @@ impl InputState {
             lr::RETRO_DEVICE_MOUSE => self.mouse_state(port, id),
             lr::RETRO_DEVICE_LIGHTGUN => self.lightgun_state(port, id),
             lr::RETRO_DEVICE_KEYBOARD => self.key_state(id),
+            _ if id == lr::RETRO_DEVICE_ID_JOYPAD_MASK => (0..BUTTONS)
+                .filter(|&button| self.is_pressed(port, button))
+                .fold(0u16, |mask, button| mask | (1 << button))
+                as i16,
             _ => i16::from(self.is_pressed(port, id)),
         }
     }
@@ -234,6 +238,40 @@ mod tests {
         assert!(!input.is_pressed(0, lr::RETRO_DEVICE_ID_JOYPAD_A));
         input.apply_pad(1, PadState::default());
         assert!(!input.is_pressed(1, lr::RETRO_DEVICE_ID_JOYPAD_A));
+    }
+
+    #[test]
+    fn a_core_can_read_every_button_at_once() {
+        let input = InputState::default();
+        input.apply_pad(
+            0,
+            pad(
+                &[
+                    lr::RETRO_DEVICE_ID_JOYPAD_UP,
+                    lr::RETRO_DEVICE_ID_JOYPAD_START,
+                ],
+                [0; 6],
+            ),
+        );
+        let mask = input.state(
+            0,
+            lr::RETRO_DEVICE_JOYPAD,
+            0,
+            lr::RETRO_DEVICE_ID_JOYPAD_MASK,
+        );
+        assert_eq!(
+            mask as u16,
+            (1 << lr::RETRO_DEVICE_ID_JOYPAD_UP) | (1 << lr::RETRO_DEVICE_ID_JOYPAD_START)
+        );
+        assert_eq!(
+            input.state(
+                1,
+                lr::RETRO_DEVICE_JOYPAD,
+                0,
+                lr::RETRO_DEVICE_ID_JOYPAD_MASK
+            ),
+            0
+        );
     }
 
     #[test]

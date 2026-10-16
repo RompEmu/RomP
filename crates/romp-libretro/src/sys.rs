@@ -44,6 +44,8 @@ pub const RETRO_DEVICE_ID_JOYPAD_L2: c_uint = 12;
 pub const RETRO_DEVICE_ID_JOYPAD_R2: c_uint = 13;
 pub const RETRO_DEVICE_ID_JOYPAD_L3: c_uint = 14;
 pub const RETRO_DEVICE_ID_JOYPAD_R3: c_uint = 15;
+/// Asks for every button at once, as a bitmask, from frontends that report bitmask support.
+pub const RETRO_DEVICE_ID_JOYPAD_MASK: c_uint = 256;
 
 pub const RETRO_DEVICE_INDEX_ANALOG_LEFT: c_uint = 0;
 pub const RETRO_DEVICE_INDEX_ANALOG_RIGHT: c_uint = 1;
