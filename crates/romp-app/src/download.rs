@@ -53,8 +53,30 @@ pub fn sha1_file(path: &Path) -> std::io::Result<String> {
         .collect())
 }
 
+/// RomM hashes what's inside an archive, which it tells by its first bytes rather than its
+/// name: a Game & Watch .mgw, for one, is a zip.
+fn is_archive(path: &Path) -> bool {
+    let mut head = [0u8; 262];
+    let Ok(n) = std::fs::File::open(path).and_then(|mut f| f.read(&mut head)) else {
+        return false;
+    };
+    let head = &head[..n];
+    let starts = |magic: &[u8]| head.starts_with(magic);
+    starts(b"PK\x03\x04")
+        || starts(b"PK\x05\x06")
+        || starts(b"PK\x07\x08")
+        || starts(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C])
+        || starts(&[0x1F, 0x8B])
+        || starts(b"BZh")
+        || head.get(257..262) == Some(b"ustar")
+}
+
 async fn matches(path: &Path, sha1: Option<&str>, size: Option<u64>) -> bool {
-    let Some(expected) = sha1.filter(|h| !h.is_empty()) else {
+    let owned = path.to_path_buf();
+    let archive = tokio::task::spawn_blocking(move || is_archive(&owned))
+        .await
+        .unwrap_or(false);
+    let Some(expected) = sha1.filter(|h| !h.is_empty() && !archive) else {
         let len = tokio::fs::metadata(path).await.map(|m| m.len()).ok();
         return size.is_none() || len == size;
     };
@@ -265,6 +287,46 @@ mod tests {
         assert!(matches!(err, DownloadError::HashMismatch));
         assert!(!dest.exists());
         assert!(!dir.path().join("game.bin.part").exists());
+    }
+
+    #[tokio::test]
+    async fn an_archive_under_another_name_is_checked_by_size() {
+        // A Game & Watch .mgw is a zip, which RomM hashes by what's inside it.
+        const MGW: &[u8] = b"PK\x03\x04 the rest of a zip";
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/f"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(MGW))
+            .mount(&server)
+            .await;
+        let (client, url, dir) = setup(&server);
+        let dest = dir.path().join("Banana.mgw");
+        let len = MGW.len() as u64;
+        download_file(
+            &client,
+            url.clone(),
+            &dest,
+            Some("00"),
+            Some(len),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), MGW);
+        std::fs::remove_file(&dest).unwrap();
+        let err = download_file(
+            &client,
+            url,
+            &dest,
+            Some("00"),
+            Some(len + 1),
+            &|_| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, DownloadError::HashMismatch));
     }
 
     #[tokio::test]
