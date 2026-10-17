@@ -13,6 +13,8 @@ pub enum Cancelled {
 pub struct Queue {
     waiting: VecDeque<InstallRequest>,
     running: Option<InstallRequest>,
+    /// RomM withdrew the running request, so a stopped download needn't be reported.
+    romm_cancelled: bool,
 }
 
 impl Queue {
@@ -32,6 +34,7 @@ impl Queue {
         if self.running.is_some() {
             return None;
         }
+        self.romm_cancelled = false;
         self.running = self.waiting.pop_front();
         self.running.clone()
     }
@@ -42,10 +45,22 @@ impl Queue {
 
     pub fn finish(&mut self) {
         self.running = None;
+        self.romm_cancelled = false;
+    }
+
+    /// Forgets everything, the running request too: for when nothing is downloading it.
+    pub fn abandon(&mut self) {
+        self.waiting.clear();
+        self.finish();
+    }
+
+    pub fn cancelled_by_romm(&self, id: &str) -> bool {
+        self.romm_cancelled && self.running.as_ref().is_some_and(|r| r.id == id)
     }
 
     pub fn cancel(&mut self, id: &str) -> Cancelled {
         if self.running.as_ref().is_some_and(|r| r.id == id) {
+            self.romm_cancelled = true;
             return Cancelled::Running;
         }
         let before = self.waiting.len();
@@ -115,6 +130,27 @@ mod tests {
         assert_eq!(q.cancel("b"), Cancelled::Queued);
         assert_eq!(q.cancel("a"), Cancelled::Running);
         assert_eq!(q.cancel("zzz"), Cancelled::Unknown);
+    }
+
+    #[test]
+    fn a_stop_from_romm_is_told_apart_from_a_pause_here() {
+        let mut q = Queue::default();
+        q.add(vec![request("a", 1)]);
+        let _ = q.next();
+        assert!(!q.cancelled_by_romm("a"), "a pause on this device");
+        assert_eq!(q.cancel("a"), Cancelled::Running);
+        assert!(q.cancelled_by_romm("a"));
+        q.finish();
+        assert!(!q.cancelled_by_romm("a"), "forgotten once finished");
+    }
+
+    #[test]
+    fn a_running_request_with_nothing_downloading_can_be_dropped() {
+        let mut q = Queue::default();
+        q.add(vec![request("a", 1), request("b", 2)]);
+        let _ = q.next();
+        q.abandon();
+        assert!(q.is_idle());
     }
 
     #[test]
