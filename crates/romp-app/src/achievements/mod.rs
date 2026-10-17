@@ -528,6 +528,8 @@ mod tests {
         assert_eq!(console_id("neogeomvs"), 27);
         assert_eq!(console_id("atari7800"), 51);
         assert_eq!(console_id("atari-jaguar-cd"), 77);
+        // RetroAchievements' console 68 is the Sega Pico, not PICO-8.
+        assert_eq!(console_id("pico"), 0);
         assert_eq!(console_id("atari8bit"), 0);
         assert_eq!(console_id("xbox"), 0);
     }

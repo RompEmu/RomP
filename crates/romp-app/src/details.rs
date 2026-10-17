@@ -80,7 +80,7 @@ pub fn category(name: &str) -> String {
 const DVD_CASE: f32 = 0.71;
 
 const BOX_SHAPES: [(&[&str], f32); 12] = [
-    (&["gb", "gbc", "gba", "dc"], 1.0),
+    (&["gb", "gbc", "gba", "dc", "pico"], 1.0),
     (&["snes"], 1.38),
     (&["n64"], 1.37),
     (

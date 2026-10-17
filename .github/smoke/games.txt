@@ -20,3 +20,4 @@ vice_x128               c128.prg            c128
 dosbox_pure             dos.com             dos
 fuse                    zxspectrum.z80      zxs
 melondsds               nintendods.nds      nds
+fake08                  pico8.p8            pico

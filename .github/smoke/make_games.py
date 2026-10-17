@@ -87,6 +87,14 @@ def atari8bit():
     return b"\xff\xff" + struct.pack("<HH", start, end) + code + run
 
 
+def pico8():
+    # PICO-8 carts are text: a light blue screen with a word on it, every frame.
+    return (
+        b"pico-8 cartridge // http://www.pico-8.com\nversion 41\n__lua__\n"
+        b"function _draw()\n cls(12)\n print(\"romp\",52,60,7)\nend\n"
+    )
+
+
 def dos():
     return bytes([
         0xB8, 0x13, 0x00, 0xCD, 0x10,  # 320x200 in 256 colours
@@ -295,6 +303,7 @@ GAMES = {
     "plus4.prg": plus4,
     "c128.prg": c128,
     "dos.com": dos,
+    "pico8.p8": pico8,
     "gameboy.gb": gameboy,
     "gba.gba": gba,
     "snes.sfc": snes,

@@ -148,7 +148,17 @@ jobs:
             case "$core" in ''|'#'*) continue ;; esac
             library="cores/${core}_libretro.$LIBRARY"
             if [ ! -f "$library" ]; then
-              curl -fsSL -o core.zip "https://buildbot.libretro.com/nightly/$CORES/latest/${core}_libretro.$LIBRARY.zip"
+              url="https://buildbot.libretro.com/nightly/$CORES/latest/${core}_libretro.$LIBRARY.zip"
+              # FAKE-08 isn't on the buildbot: Romp downloads it from RompEmu's own fork.
+              if [ "$core" = fake08 ]; then
+                case "$CORES" in
+                  apple/*) target=macos-arm64 ;;
+                  windows/*) target=windows-x86_64 ;;
+                  *) target=linux-x86_64 ;;
+                esac
+                url="https://github.com/RompEmu/fake-08/releases/latest/download/fake08_libretro-$target.zip"
+              fi
+              curl -fsSL -o core.zip "$url"
               "$python" -m zipfile -e core.zip cores
             fi
             name="$core-${game%.*}"
