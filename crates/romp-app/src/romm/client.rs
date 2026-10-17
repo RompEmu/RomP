@@ -571,6 +571,8 @@ impl Client {
             ("emulator", upload.emulator.to_string()),
             ("device_id", upload.device_id.to_string()),
             ("overwrite", upload.overwrite.to_string()),
+            // RomM 5.4 records it as the version this device holds; older RomM ignores it.
+            ("content_hash", crate::saves::md5_hex(&upload.bytes)),
         ];
         if let Some(session) = upload.session_id {
             query.push(("session_id", session.to_string()));
@@ -586,6 +588,24 @@ impl Client {
             )
             .await?;
         resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    /// Tells RomM 5.4 this device now holds the save, so other devices can tell it didn't change.
+    pub async fn confirm_save_download(
+        &self,
+        save_id: i64,
+        device_id: &str,
+        content_hash: &str,
+    ) -> Result<(), Error> {
+        self.send(
+            self.request(
+                reqwest::Method::POST,
+                &format!("/api/saves/{save_id}/downloaded"),
+            )
+            .json(&serde_json::json!({"device_id": device_id, "content_hash": content_hash})),
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn download_save(
@@ -1386,6 +1406,10 @@ pub(crate) mod tests {
             .and(query_param("device_id", "dev"))
             .and(query_param("session_id", "9"))
             .and(query_param("overwrite", "false"))
+            .and(query_param(
+                "content_hash",
+                crate::saves::md5_hex(b"SRAMDATA"),
+            ))
             .and(header_regex("content-type", "^multipart/form-data"))
             .and(body_string_contains(
                 "name=\"saveFile\"; filename=\"Zelda.srm\"",
@@ -1408,6 +1432,24 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(saved.id, 1);
+    }
+
+    #[tokio::test]
+    async fn a_downloaded_save_is_confirmed_with_its_hash() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/saves/7/downloaded"))
+            .and(wiremock::matchers::body_json(serde_json::json!({
+                "device_id": "dev", "content_hash": "abc"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(save_json(7)))
+            .expect(1)
+            .mount(&server)
+            .await;
+        authed(&server)
+            .confirm_save_download(7, "dev", "abc")
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

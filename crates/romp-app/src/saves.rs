@@ -479,6 +479,25 @@ async fn upload_sram(
         .map(|_| ())
 }
 
+/// Downloads a save, puts it in place, then tells RomM this device holds it. Only RomM 5.4
+/// takes the confirmation, and missing it changes nothing here, so a failure is only logged.
+async fn download_into(
+    client: &Client,
+    device_id: &str,
+    game: &GameSaves,
+    save_id: i64,
+) -> Result<SramOutcome, Error> {
+    let bytes = client.download_save(save_id, device_id, None).await?;
+    let outcome = install_download(game, &bytes)?;
+    if let Err(e) = client
+        .confirm_save_download(save_id, device_id, &md5_hex(&bytes))
+        .await
+    {
+        tracing::debug!("RomM didn't take the download confirmation: {e}");
+    }
+    Ok(outcome)
+}
+
 pub fn install_download(game: &GameSaves, bytes: &[u8]) -> Result<SramOutcome, Error> {
     let io_err = |e: io::Error| Error::Decode(format!("could not write the save: {e}"));
     let backup = backup(&game.dir, &game.save_file).map_err(io_err)?;
@@ -552,8 +571,7 @@ pub async fn sync_sram(
             }
         }
         (SramAction::Download, _, Some(server)) => {
-            let bytes = client.download_save(server.id, device_id, None).await?;
-            install_download(game, &bytes)
+            download_into(client, device_id, game, server.id).await
         }
         (SramAction::Ask, _, server) => Ok(conflict(server)),
         _ => Ok(SramOutcome::InSync),
@@ -584,8 +602,7 @@ pub async fn resolve_sram(
                 .map(|s| s.id)
                 .ok_or_else(|| Error::Decode("no server save to use".into()))?,
             };
-            let bytes = client.download_save(save_id, device_id, None).await?;
-            install_download(game, &bytes)
+            download_into(client, device_id, game, save_id).await
         }
     }
 }
@@ -1230,6 +1247,15 @@ mod tests {
             .await;
             content(&server, 20, b"from romm", 1).await;
             content(&server, 6, b"other", 0).await;
+            Mock::given(method("POST"))
+                .and(path("/api/saves/20/downloaded"))
+                .and(wiremock::matchers::body_json(json!({
+                    "device_id": "dev", "content_hash": md5_hex(b"from romm")
+                })))
+                .respond_with(ResponseTemplate::new(200).set_body_json(remote(20, "b", "t")))
+                .expect(1)
+                .mount(&server)
+                .await;
             let dir = tempfile::tempdir().unwrap();
             let outcome = sync_sram(&client(&server), "dev", &game(dir.path()), None).await;
             assert_eq!(outcome.unwrap(), SramOutcome::Downloaded { backup: None });
