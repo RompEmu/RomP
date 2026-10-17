@@ -536,9 +536,12 @@ fn extract_into(
     let mut entries = Vec::new();
     for i in 0..archive.len() {
         let entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = entry
-            .enclosed_name()
-            .ok_or_else(|| format!("unsafe path in download: {}", entry.name()))?;
+        let name = entry.enclosed_name().ok_or_else(|| {
+            format!(
+                "unsafe path in download: {}",
+                entry.name().unwrap_or_default()
+            )
+        })?;
         entries.push((i, name, entry.is_dir()));
     }
     entries.sort_by_key(|(_, name, _)| name == marker);
@@ -654,8 +657,10 @@ impl Cores {
                 let index = (0..archive.len())
                     .find(|&i| {
                         archive.name_for_index(i).is_some_and(|name| {
-                            std::path::Path::new(name).file_name()
-                                == Some(std::ffi::OsStr::new(&file))
+                            name.is_ok_and(|name| {
+                                std::path::Path::new(name.as_ref()).file_name()
+                                    == Some(std::ffi::OsStr::new(&file))
+                            })
                         })
                     })
                     .ok_or_else(|| format!("{file} is missing from the download"))?;

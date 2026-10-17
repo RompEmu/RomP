@@ -120,7 +120,7 @@ fn open_zip(
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name().to_string();
+        let name = entry.name()?.to_string();
         let Some(entry_ext) = Path::new(&name)
             .extension()
             .and_then(|e| e.to_str())
@@ -311,7 +311,7 @@ fn detect_disc_image_in_zip(archive_path: &Path) -> Result<Option<DiscImageKind>
         if entry.is_dir() {
             continue;
         }
-        record_disc_entry(entry.name(), &mut index_kind, &mut data_kind);
+        record_disc_entry(&entry.name()?, &mut index_kind, &mut data_kind);
     }
     Ok(index_kind.or(data_kind))
 }
@@ -333,7 +333,8 @@ fn disc_only_zip(archive_path: &Path) -> Result<Option<DiscImageKind>> {
         if entry.is_dir() {
             continue;
         }
-        let ext = Path::new(entry.name())
+        let name = entry.name()?;
+        let ext = Path::new(name.as_ref())
             .extension()
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase);
@@ -455,7 +456,7 @@ fn extract_disc_entries_single_pass(
                 if entry.is_dir() {
                     continue;
                 }
-                let name = entry.name().to_string();
+                let name = entry.name()?.to_string();
                 if !is_disc_relevant_entry(&name, primary_entry) {
                     continue;
                 }

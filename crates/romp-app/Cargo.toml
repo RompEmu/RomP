@@ -54,7 +54,7 @@ tr = { version = "0.1.11", default-features = false, features = ["mo-translator"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
-zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [build-dependencies]
 slint-build = "1"
