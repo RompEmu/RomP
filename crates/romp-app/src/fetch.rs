@@ -37,6 +37,7 @@ pub async fn download_game(
     client: &Client,
     rom_id: i64,
     roms_dir: &Path,
+    only: Option<&[i64]>,
     progress: &(dyn Fn(u64, u64) + Send + Sync),
     cancel: &AtomicBool,
 ) -> Result<PathBuf, DownloadError> {
@@ -51,6 +52,17 @@ pub async fn download_game(
     // Said before a byte is fetched, rather than by the emulator after the whole download.
     if let Some(found) = files.iter().find_map(|f| foreign_format(&f.file.file_name)) {
         return Err(DownloadError::Foreign(found));
+    }
+    // RomM's "Install on device" names the files to send: the game, its updates and DLC.
+    let files: Vec<_> = match only {
+        Some(ids) => files
+            .into_iter()
+            .filter(|f| ids.contains(&f.file.id))
+            .collect(),
+        None => files,
+    };
+    if files.is_empty() {
+        return Err(DownloadError::Io("nothing to download".into()));
     }
     let dir = roms_dir.join(&rom.platform_slug).join(rom.id.to_string());
     let total: u64 = files
@@ -109,6 +121,46 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
+    async fn only_the_files_romm_chose_come_down() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 7, "platform_id": 32, "platform_slug": "psx", "fs_name": "Arc", "fs_path": "roms/psx",
+                "has_multiple_files": true,
+                "files": [
+                    {"id": 1, "file_name": "Arc (Disc 1).chd", "file_path": "roms/psx/Arc", "file_size_bytes": 3, "sha1_hash": null},
+                    {"id": 2, "file_name": "Arc (Disc 2).chd", "file_path": "roms/psx/Arc", "file_size_bytes": 4, "sha1_hash": null}
+                ]})))
+            .mount(&server)
+            .await;
+        for (id, body, times) in [("1", "one", 0), ("2", "disc", 1)] {
+            Mock::given(method("GET"))
+                .and(query_param("file_ids", id))
+                .respond_with(ResponseTemplate::new(200).set_body_string(body))
+                .expect(times)
+                .mount(&server)
+                .await;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/")).with_token("t".into());
+        let launch = download_game(
+            &client,
+            7,
+            dir.path(),
+            Some(&[2]),
+            &|_, _| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        let game_dir = dir.path().join("psx/7");
+        assert!(launch.starts_with(&game_dir));
+        assert!(game_dir.join("Arc (Disc 2).chd").exists());
+        assert!(!game_dir.join("Arc (Disc 1).chd").exists());
+    }
+
+    #[tokio::test]
     async fn downloads_discs_and_writes_playlist() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
@@ -136,6 +188,7 @@ mod tests {
             &client,
             7,
             dir.path(),
+            None,
             &|d, t| *last.lock().unwrap() = (d, t),
             &AtomicBool::new(false),
         )
@@ -167,9 +220,16 @@ mod tests {
             .await;
         let dir = tempfile::tempdir().unwrap();
         let client = Client::new(base_of(&server, "/"));
-        let err = download_game(&client, 7, dir.path(), &|_, _| {}, &AtomicBool::new(false))
-            .await
-            .unwrap_err();
+        let err = download_game(
+            &client,
+            7,
+            dir.path(),
+            None,
+            &|_, _| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, DownloadError::UnsafePath));
     }
 
@@ -186,9 +246,16 @@ mod tests {
             .await;
         let dir = tempfile::tempdir().unwrap();
         let client = Client::new(base_of(&server, "/"));
-        let err = download_game(&client, 7, dir.path(), &|_, _| {}, &AtomicBool::new(false))
-            .await
-            .unwrap_err();
+        let err = download_game(
+            &client,
+            7,
+            dir.path(),
+            None,
+            &|_, _| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, DownloadError::UnsafePath));
     }
 
@@ -211,9 +278,16 @@ mod tests {
             .await;
         let dir = tempfile::tempdir().unwrap();
         let client = Client::new(base_of(&server, "/"));
-        let launch = download_game(&client, 8, dir.path(), &|_, _| {}, &AtomicBool::new(false))
-            .await
-            .unwrap();
+        let launch = download_game(
+            &client,
+            8,
+            dir.path(),
+            None,
+            &|_, _| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
         assert_eq!(std::fs::read(launch).unwrap(), b"zipdata");
     }
 }
