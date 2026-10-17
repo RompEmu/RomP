@@ -1,6 +1,71 @@
 //! Games sent from RomM, waiting their turn: one downloads at a time, in the order they came.
 use crate::romm::types::InstallRequest;
 use std::collections::VecDeque;
+use tr::tr;
+
+/// Where a game sent from RomM has got to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stage {
+    Waiting,
+    Downloading(f32),
+    Done,
+    Failed(String),
+}
+
+/// What the install card in the library shows. `progress` is below zero when there's no bar.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Card {
+    pub title: String,
+    pub detail: String,
+    pub progress: f32,
+    pub done: bool,
+    pub failed: bool,
+}
+
+pub fn card(game: &str, stage: &Stage, playing: bool, more: usize) -> Card {
+    let more_waiting = |detail: String| {
+        if more == 0 {
+            detail
+        } else {
+            let waiting = tr!("{n} more waiting" | "{n} more waiting" % more);
+            format!("{detail} · {waiting}")
+        }
+    };
+    match stage {
+        Stage::Waiting => Card {
+            title: tr!("{0} sent from RomM", game),
+            detail: more_waiting(if playing {
+                tr!("Waits until you stop playing")
+            } else {
+                tr!("Downloading…")
+            }),
+            progress: -1.0,
+            done: false,
+            failed: false,
+        },
+        Stage::Downloading(fraction) => Card {
+            title: tr!("{0} sent from RomM", game),
+            detail: more_waiting(tr!("Downloading · {0}%", (fraction * 100.0).round() as u32)),
+            progress: fraction.clamp(0.0, 1.0),
+            done: false,
+            failed: false,
+        },
+        Stage::Done => Card {
+            title: tr!("{0} is ready to play", game),
+            detail: String::new(),
+            progress: -1.0,
+            done: true,
+            failed: false,
+        },
+        Stage::Failed(reason) => Card {
+            title: tr!("{0} couldn't download", game),
+            detail: reason.clone(),
+            progress: -1.0,
+            done: false,
+            failed: true,
+        },
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cancelled {
@@ -37,6 +102,14 @@ impl Queue {
         self.romm_cancelled = false;
         self.running = self.waiting.pop_front();
         self.running.clone()
+    }
+
+    pub fn waiting(&self) -> usize {
+        self.waiting.len()
+    }
+
+    pub fn first_waiting(&self) -> Option<&InstallRequest> {
+        self.waiting.front()
     }
 
     pub fn running(&self) -> Option<&InstallRequest> {
@@ -86,6 +159,38 @@ impl Queue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_card_follows_a_game_from_sent_to_ready() {
+        let waiting = card("Super Mario 64", &Stage::Waiting, false, 0);
+        assert_eq!(waiting.title, "Super Mario 64 sent from RomM");
+        assert_eq!(waiting.detail, "Downloading…");
+        assert!(waiting.progress < 0.0);
+
+        let playing = card("Super Mario 64", &Stage::Waiting, true, 2);
+        assert_eq!(
+            playing.detail,
+            "Waits until you stop playing · 2 more waiting"
+        );
+
+        let half = card("Super Mario 64", &Stage::Downloading(0.42), false, 1);
+        assert_eq!(half.detail, "Downloading · 42% · 1 more waiting");
+        assert!((half.progress - 0.42).abs() < f32::EPSILON);
+
+        let done = card("Super Mario 64", &Stage::Done, false, 0);
+        assert_eq!(done.title, "Super Mario 64 is ready to play");
+        assert!(done.done && !done.failed);
+
+        let failed = card(
+            "Super Mario 64",
+            &Stage::Failed("No space left".into()),
+            false,
+            0,
+        );
+        assert_eq!(failed.title, "Super Mario 64 couldn't download");
+        assert_eq!(failed.detail, "No space left");
+        assert!(failed.failed);
+    }
 
     fn request(id: &str, rom_id: i64) -> InstallRequest {
         InstallRequest {
