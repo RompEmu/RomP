@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio_tungstenite::tungstenite::Message;
 
 const NAMESPACE: &str = "/devices";
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeviceEvent {
@@ -26,6 +27,15 @@ pub fn socket_url(base: &url::Url) -> url::Url {
     url.set_scheme(scheme).expect("websocket scheme");
     url.set_query(Some("EIO=4&transport=websocket"));
     url
+}
+
+/// How long the link may stay silent: RomM pings every `pingInterval` and gives up after
+/// `pingTimeout` more, so nothing for that long means the connection is gone.
+pub fn quiet_limit(open: &str) -> Duration {
+    let fields = serde_json::from_str::<serde_json::Value>(open.get(1..).unwrap_or_default())
+        .unwrap_or_default();
+    let ms = |key: &str, default: u64| fields[key].as_u64().unwrap_or(default);
+    Duration::from_millis(ms("pingInterval", 25_000) + ms("pingTimeout", 20_000))
 }
 
 pub fn backoff(attempt: u32) -> Duration {
@@ -86,25 +96,34 @@ async fn run(
     attempt: &mut u32,
 ) -> Ended {
     let connector = tokio_tungstenite::Connector::Rustls(std::sync::Arc::new(tls_config()));
-    let connected = tokio_tungstenite::connect_async_tls_with_config(
-        socket_url(base).as_str(),
-        None,
-        false,
-        Some(connector),
+    let connected = tokio::time::timeout(
+        CONNECT_TIMEOUT,
+        tokio_tungstenite::connect_async_tls_with_config(
+            socket_url(base).as_str(),
+            None,
+            false,
+            Some(connector),
+        ),
     )
     .await;
-    let Ok((mut ws, _)) = connected else {
+    let Ok(Ok((mut ws, _))) = connected else {
         return Ended::Dropped;
     };
-    while let Some(Ok(message)) = ws.next().await {
+    // Until the open packet says otherwise, RomM's defaults.
+    let mut quiet = quiet_limit("0{}");
+    // A link that dies without closing (sleep, a dropped Wi-Fi) shows only as silence.
+    while let Ok(Some(Ok(message))) = tokio::time::timeout(quiet, ws.next()).await {
         let Message::Text(text) = message else {
             continue;
         };
         let reply = match socketio::parse(&text) {
-            Frame::Open => Some(socketio::connect(
-                NAMESPACE,
-                &serde_json::json!({ "token": token }),
-            )),
+            Frame::Open => {
+                quiet = quiet_limit(&text);
+                Some(socketio::connect(
+                    NAMESPACE,
+                    &serde_json::json!({ "token": token }),
+                ))
+            }
             Frame::Ping => Some(socketio::PONG.to_string()),
             Frame::Connected { namespace } if namespace == NAMESPACE => {
                 *attempt = 0;
@@ -153,6 +172,7 @@ fn tls_config() -> rustls::ClientConfig {
 mod tests {
     use super::*;
     use futures_util::{SinkExt, StreamExt};
+    use std::time::Duration;
     use tokio_tungstenite::tungstenite::Message;
 
     const OPEN: &str = r#"0{"sid":"s","pingInterval":25000,"pingTimeout":20000}"#;
@@ -232,6 +252,47 @@ mod tests {
             Some(DeviceEvent::InstallCancelled { id: "r1".into() })
         );
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn a_connection_that_goes_quiet_is_dropped_and_reopened() {
+        let (listener, base) = romm().await;
+        tokio::spawn(async move {
+            // RomM promises a ping every 50 ms, then never sends one, as a dead link would.
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(tcp).await.unwrap();
+            ws.send(Message::text(
+                r#"0{"sid":"s","pingInterval":50,"pingTimeout":50}"#,
+            ))
+            .await
+            .unwrap();
+            let _ = ws.next().await;
+            ws.send(Message::text(r#"40/devices,{"sid":"x"}"#))
+                .await
+                .unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let _socket = spawn(
+            &tokio::runtime::Handle::current(),
+            base,
+            "rmm_t".into(),
+            move |e| {
+                let _ = tx.send(e);
+            },
+        );
+        assert_eq!(rx.recv().await, Some(DeviceEvent::Connected));
+        let next = tokio::time::timeout(Duration::from_secs(3), rx.recv()).await;
+        assert_eq!(next.ok().flatten(), Some(DeviceEvent::Disconnected));
+    }
+
+    #[test]
+    fn the_open_packet_says_how_long_a_quiet_link_lasts() {
+        assert_eq!(
+            quiet_limit(r#"0{"sid":"s","pingInterval":25000,"pingTimeout":20000}"#),
+            Duration::from_secs(45)
+        );
+        assert_eq!(quiet_limit("0{}"), Duration::from_secs(45));
     }
 
     #[tokio::test]
