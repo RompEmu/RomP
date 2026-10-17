@@ -533,8 +533,10 @@ impl Client {
 
     pub fn rom_file_url(&self, rom_id: i64, file: &RomFile) -> Url {
         let mut url = self.content_url(&format!("/api/roms/{rom_id}/content/"), &file.file_name);
+        // RomM 5.4's audit log records why a file was fetched; RomP keeps a copy to play.
         url.query_pairs_mut()
-            .append_pair("file_ids", &file.id.to_string());
+            .append_pair("file_ids", &file.id.to_string())
+            .append_pair("purpose", "download");
         url
     }
 
@@ -1280,7 +1282,7 @@ pub(crate) mod tests {
         };
         assert_eq!(
             client.rom_file_url(3672, &f).as_str(),
-            "https://host/romm/api/roms/3672/content/Arc%20(Disc%201)%20%231%3F.chd?file_ids=3705"
+            "https://host/romm/api/roms/3672/content/Arc%20(Disc%201)%20%231%3F.chd?file_ids=3705&purpose=download"
         );
         let fw = Firmware {
             id: 81,
