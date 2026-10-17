@@ -4,6 +4,21 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- RomP can be chosen under Install on device in RomM 5.4: a game sent to it starts downloading straight away, or the next time RomP is open, and RomM hears whether it worked. Turn it off under Settings › RomM › Accept games sent from RomM.
+- RomM 5.4's notifications, such as a finished library scan, show behind a bell in the sidebar, checked every minute. Opening them marks them read, and each can be dismissed.
+- The console filter also finds consoles by the short and other names RomM 5.4 gives them, such as MD or Mega Drive for the Genesis.
+- RomM 5.4 learns which version of each in-game save RomP holds, so its web player and other devices can tell a save unchanged here from one changed in two places.
+
+### Fixed
+
+- Creating or renaming a collection to a name already taken, or one that's too long, says so, instead of "the server has a newer version".
+
+### Security
+
+- Archives RomP unpacks can no longer place links or privileged files outside their folder (zip 9: RUSTSEC-2026-0367, RUSTSEC-2026-0368, RUSTSEC-2026-0369).
+
 ## [0.16.0] - 2026-10-16
 
 ### Added
