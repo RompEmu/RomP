@@ -3,6 +3,7 @@ mod activity;
 mod collections;
 mod game;
 mod navigation;
+mod notifications;
 mod save_sync;
 mod screenshots;
 mod settings;
@@ -114,6 +115,8 @@ struct Controller {
     icon_requests: RefCell<HashSet<String>>,
     running: RefCell<Option<crate::play::RunningGame>>,
     session: RefCell<Option<activity::Session>>,
+    notifications: RefCell<Vec<crate::romm::types::RemoteNotification>>,
+    notifications_timer: RefCell<Option<Timer>>,
     ra_hash: RefCell<Option<(i64, String)>>,
     requested_slot: Cell<Option<u8>>,
     offline: Cell<bool>,
@@ -210,6 +213,8 @@ pub fn run() -> anyhow::Result<()> {
         icon_requests: RefCell::default(),
         running: RefCell::new(None),
         session: RefCell::new(None),
+        notifications: RefCell::default(),
+        notifications_timer: RefCell::new(None),
         ra_hash: RefCell::new(None),
         requested_slot: Cell::new(None),
         offline: Cell::new(false),
@@ -379,11 +384,17 @@ impl Controller {
         ui.on_play_slot(|slot| with_controller(|c| c.play_slot(slot)));
         ui.on_use_other_save(|| with_controller(|c| c.use_other_save()));
         ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
+        ui.on_open_notifications(|| with_controller(|c| c.open_notifications()));
+        ui.on_dismiss_notification(|id| {
+            with_controller(|c| c.dismiss_notification(i64::from(id)));
+        });
+        ui.on_dismiss_all_notifications(|| with_controller(|c| c.dismiss_all_notifications()));
     }
 
     fn start(&self) {
         self.send_pending_unlocks();
         self.check_for_updates();
+        self.start_notifications();
         let server = self.shared.store.lock().unwrap().get("server");
         let token = server.as_deref().and_then(|s| self.shared.tokens.load(s));
         match (server.as_deref().map(url::Url::parse), token) {
@@ -1083,6 +1094,7 @@ impl Controller {
                 self.upload_screenshots();
                 self.send_pending_unlocks();
                 self.refresh_recommendations();
+                self.refresh_notifications();
             }
             Err(Error::Cancelled) => return,
             Err(Error::Unauthorized) => return self.needs_repair(),

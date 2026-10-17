@@ -216,6 +216,46 @@ msgstr ""
 msgid "Close the running game first."
 msgstr ""
 
+#: crates/romp-app/src/notifications.rs
+msgid "Library scan finished"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Library scan failed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A task finished"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A task failed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Your stream ended"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Your role changed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A notification channel was turned off"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A game was installed on a device"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A game couldn't be installed on a device"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Notification"
+msgstr ""
+
 #: crates/romp-app/src/app/save_sync.rs
 msgid "unknown"
 msgstr ""

@@ -5,6 +5,7 @@ import { SlotCard, SlotPicture } from "slots.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool, note: bool }
+export struct NotificationRow { id: int, title: string, body: string, level: string, when: string, unread: bool }
 export struct Membership { key: string, name: string, member: bool }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
@@ -98,6 +99,33 @@ component IconButton inherits Rectangle {
     keys := KeyActivator { enabled: root.enabled; activate => { root.clicked(); } }
     if keys.has-focus: FocusRing { border-radius: root.border-radius; }
     if root.tooltip != "": Tooltip { text: @markdown("\{root.tooltip}"); }
+}
+
+// The inbox button, with how many notifications are unread.
+component BellButton inherits Rectangle {
+    in property <int> unread;
+    callback clicked();
+    width: 32px;
+    height: 32px;
+    IconButton {
+        icon: @image-url("icons/bell.svg");
+        tooltip: root.unread > 0 ? @tr("Notifications ({0} unread)", root.unread) : @tr("Notifications");
+        clicked => { root.clicked(); }
+    }
+    if root.unread > 0: Rectangle {
+        x: parent.width - self.width + 2px;
+        y: -2px;
+        width: max(16px, badge-text.preferred-width + 8px);
+        height: 16px;
+        border-radius: 8px;
+        background: Theme.danger;
+        badge-text := Text {
+            text: root.unread > 99 ? "99+" : root.unread;
+            font-size: 10px;
+            font-weight: 700;
+            color: Theme.text-strong;
+        }
+    }
 }
 
 component CountPill inherits Rectangle {
@@ -602,6 +630,13 @@ component Library inherits Rectangle {
     in property <bool> needs-pairing;
     in property <string> pair-prompt;
     callback pair-again();
+    in property <bool> notifications-shown;
+    in property <int> notifications-unread;
+    in property <[NotificationRow]> notifications;
+    in-out property <bool> notifications-open;
+    callback open-notifications();
+    callback dismiss-notification(int);
+    callback dismiss-all-notifications();
     in property <bool> update-shown;
     in property <string> update-version;
     in property <bool> update-homebrew;
@@ -788,6 +823,10 @@ component Library inherits Rectangle {
                             Tooltip { text: @markdown("\{root.user-label != "" ? root.user-label : @tr("Signed in")}"); }
                         }
                     }
+                    if root.notifications-shown: Row {
+                        alignment: center;
+                        BellButton { unread: root.notifications-unread; clicked => { root.open-notifications(); } }
+                    }
                     Row {
                         alignment: center;
                         IconButton { icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
@@ -817,6 +856,7 @@ component Library inherits Rectangle {
                             overflow: elide;
                         }
                     }
+                    if root.notifications-shown: BellButton { unread: root.notifications-unread; clicked => { root.open-notifications(); } }
                     IconButton { icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
                     IconButton { icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
                 }
@@ -953,6 +993,120 @@ component Library inherits Rectangle {
                 }
             }
             @children
+        }
+    }
+    // The inbox, opened from the bell, above the sidebar's foot.
+    if root.notifications-open: FocusScope {
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.notifications-open = false;
+                return accept;
+            }
+            reject
+        }
+        TouchArea { clicked => { root.notifications-open = false; } }
+        Rectangle {
+            x: Locale.rtl ? parent.width - self.width - (root.compact ? 72px : 256px) : (root.compact ? 72px : 256px);
+            y: parent.height - self.height - 12px;
+            width: min(360px, parent.width - (root.compact ? 88px : 272px));
+            height: min(460px, parent.height - 24px);
+            border-radius: Theme.radius-large;
+            background: Theme.surface-raised;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: Theme.shadow;
+            TouchArea { }
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        horizontal-stretch: 1;
+                        horizontal-alignment: Locale.start;
+                        vertical-alignment: center;
+                        text: @tr("Notifications");
+                        font-size: Theme.font-subtitle;
+                        font-weight: 700;
+                        color: Theme.text-strong;
+                    }
+                    if root.notifications.length > 0: Rectangle {
+                        width: dismiss-all-label.preferred-width + 12px;
+                        border-radius: Theme.radius-small;
+                        background: dismiss-all-touch.has-hover ? Theme.hover : transparent;
+                        accessible-role: button;
+                        accessible-label: dismiss-all-label.text;
+                        accessible-action-default => { root.dismiss-all-notifications(); }
+                        dismiss-all-label := Text { text: @tr("Dismiss all"); font-size: Theme.font-small; color: Theme.accent-text; }
+                        dismiss-all-touch := TouchArea { mouse-cursor: pointer; clicked => { root.dismiss-all-notifications(); } }
+                    }
+                    IconButton { icon: @image-url("icons/close.svg"); tooltip: @tr("Close"); clicked => { root.notifications-open = false; } }
+                }
+                if root.notifications.length == 0: Text {
+                    vertical-stretch: 1;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    text: @tr("No notifications");
+                    color: Theme.text-muted;
+                    font-size: Theme.font-small;
+                }
+                if root.notifications.length > 0: ListView {
+                    vertical-stretch: 1;
+                    for n in root.notifications: HorizontalLayout {
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        spacing: 10px;
+                        VerticalLayout {
+                            padding-top: 5px;
+                            alignment: start;
+                            Rectangle {
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 4px;
+                                background: n.level == "error" ? Theme.danger
+                                    : n.level == "warning" ? Theme.warning
+                                    : n.level == "success" ? Theme.success
+                                    : Theme.accent;
+                                opacity: n.unread ? 1.0 : 0.45;
+                            }
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 2px;
+                            Text {
+                                horizontal-alignment: Locale.start;
+                                text: n.title;
+                                font-weight: n.unread ? 700 : 500;
+                                color: Theme.text-strong;
+                                wrap: word-wrap;
+                            }
+                            if n.body != "": Text {
+                                horizontal-alignment: Locale.start;
+                                text: n.body;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-small;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                horizontal-alignment: Locale.start;
+                                text: n.when;
+                                color: Theme.text-muted;
+                                font-size: Theme.font-caption;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: start;
+                            IconButton {
+                                icon: @image-url("icons/close.svg");
+                                tooltip: @tr("Dismiss");
+                                clicked => { root.dismiss-notification(n.id); }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -2355,6 +2509,13 @@ export component AppWindow inherits Window {
     callback keep-local-save();
     callback keep-server-save();
     in property <bool> needs-pairing;
+    in property <bool> notifications-shown;
+    in property <int> notifications-unread;
+    in property <[NotificationRow]> notifications;
+    in-out property <bool> notifications-open;
+    callback open-notifications();
+    callback dismiss-notification(int);
+    callback dismiss-all-notifications();
     in property <bool> update-shown;
     in property <string> update-version;
     in property <bool> update-homebrew;
@@ -2485,6 +2646,13 @@ export component AppWindow inherits Window {
         needs-pairing: root.needs-pairing;
         pair-prompt: root.pair-prompt;
         pair-again => { root.pair-again(); }
+        notifications-shown: root.notifications-shown;
+        notifications-unread: root.notifications-unread;
+        notifications: root.notifications;
+        notifications-open <=> root.notifications-open;
+        open-notifications => { root.open-notifications(); }
+        dismiss-notification(id) => { root.dismiss-notification(id); }
+        dismiss-all-notifications => { root.dismiss-all-notifications(); }
         update-shown: root.update-shown;
         update-version: root.update-version;
         update-homebrew: root.update-homebrew;

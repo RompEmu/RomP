@@ -16,6 +16,14 @@ msgid "Play your RomM library, each game in its own sandboxed emulator."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Notifications ({0} unread)"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Notifications"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Welcome to {}"
 msgstr ""
 
@@ -216,6 +224,24 @@ msgid "No games found."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Dismiss all"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
+#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
+msgid "Close"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "No notifications"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Dismiss"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Cancel"
 msgstr ""
 
@@ -297,11 +323,6 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Similar in your library"
-msgstr ""
-
-#: crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-msgid "Close"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
