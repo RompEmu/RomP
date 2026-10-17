@@ -39,7 +39,14 @@ fn playable(platform_slug: &str) -> bool {
         || (platform_slug == rpcs3::PLATFORM && rpcs3::available())
 }
 
-fn downloaded_path(detail: &GameDetail) -> Option<PathBuf> {
+/// What started a download: the game page's button, or a game sent from RomM.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Origin {
+    Page,
+    Install(String),
+}
+
+pub(super) fn downloaded_path(detail: &GameDetail) -> Option<PathBuf> {
     detail
         .local_path
         .as_deref()
@@ -59,8 +66,8 @@ fn download_dir(detail: &GameDetail) -> Option<PathBuf> {
 }
 
 impl Controller {
-    fn downloading_id(&self) -> Option<i64> {
-        self.downloading.borrow().as_ref().map(|(id, _)| *id)
+    pub(super) fn downloading_id(&self) -> Option<i64> {
+        self.downloading.borrow().as_ref().map(|(id, _, _)| *id)
     }
 
     pub(super) fn server(&self) -> String {
@@ -381,9 +388,18 @@ impl Controller {
     }
 
     pub(super) fn download_game(&self) {
-        let Some(detail) = self.current_game() else {
-            return;
-        };
+        if let Some(detail) = self.current_game() {
+            self.start_download(detail, Origin::Page, None);
+        }
+    }
+
+    /// Downloads a game, with its cover, screenshots and BIOS. `only` names the files to fetch.
+    pub(super) fn start_download(
+        &self,
+        detail: GameDetail,
+        origin: Origin,
+        only: Option<Vec<i64>>,
+    ) {
         let Some(client) = self.client.borrow().clone() else {
             return;
         };
@@ -391,11 +407,13 @@ impl Controller {
             return;
         }
         let cancel = Arc::new(AtomicBool::new(false));
-        *self.downloading.borrow_mut() = Some((detail.id, cancel.clone()));
+        *self.downloading.borrow_mut() = Some((detail.id, cancel.clone(), origin.clone()));
         self.download_fraction.set(0.0);
-        if let Some(ui) = self.ui() {
-            ui.set_game_progress(0.0);
-            ui.set_game_status(tr!("Downloading…").into());
+        if self.current_game().map(|g| g.id) == Some(detail.id) {
+            if let Some(ui) = self.ui() {
+                ui.set_game_progress(0.0);
+                ui.set_game_status(tr!("Downloading…").into());
+            }
         }
         self.refresh_game_page(false);
         let covers = self.shared.covers.clone();
@@ -409,7 +427,8 @@ impl Controller {
                 }
             };
             let roms = paths::server_roms_dir(client.base().as_str());
-            let mut result = download_game(&client, id, &roms, None, &progress, &cancel).await;
+            let mut result =
+                download_game(&client, id, &roms, only.as_deref(), &progress, &cancel).await;
             if let Ok(path) = &result {
                 if detail.platform_slug == rpcs3::PLATFORM && rpcs3::is_archive(path) {
                     on_ui(move |c| c.game_status(id, tr!("Unpacking…")));
@@ -451,6 +470,12 @@ impl Controller {
 
     fn download_progress(&self, id: i64, fraction: f32) {
         self.download_fraction.set(fraction);
+        if matches!(
+            self.downloading.borrow().as_ref(),
+            Some((_, _, Origin::Install(_)))
+        ) {
+            self.install_progress(fraction);
+        }
         if self.current_game().map(|g| g.id) == Some(id) {
             if let Some(ui) = self.ui() {
                 ui.set_game_progress(fraction);
@@ -464,7 +489,16 @@ impl Controller {
         result: Result<PathBuf, DownloadError>,
         missing: Vec<String>,
     ) {
-        self.downloading.borrow_mut().take();
+        let origin = self
+            .downloading
+            .borrow_mut()
+            .take()
+            .map_or(Origin::Page, |(_, _, origin)| origin);
+        let outcome = match &result {
+            Ok(_) => Ok(()),
+            Err(DownloadError::Cancelled) => Err(None),
+            Err(e) => Err(Some(e.to_string())),
+        };
         let status = match result {
             Ok(path) => {
                 self.shared
@@ -489,10 +523,14 @@ impl Controller {
             }
         }
         self.refresh_game_page(true);
+        match origin {
+            Origin::Install(request_id) => self.install_finished(request_id, outcome),
+            Origin::Page => self.pump_installs(),
+        }
     }
 
     pub(super) fn cancel_download(&self) {
-        if let Some((_, cancel)) = self.downloading.borrow().as_ref() {
+        if let Some((_, cancel, _)) = self.downloading.borrow().as_ref() {
             cancel.store(true, Ordering::SeqCst);
         }
     }
@@ -1066,6 +1104,7 @@ impl Controller {
     fn game_closed(&self, identity: Option<CoreIdentity>) {
         self.running.borrow_mut().take();
         self.end_session();
+        self.pump_installs();
         self.save_players();
         let playing = self.playing.borrow_mut().take();
         if let Some(detail) = playing

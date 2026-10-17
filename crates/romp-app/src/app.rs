@@ -2,6 +2,7 @@ mod achievements;
 mod activity;
 mod collections;
 mod game;
+mod installs;
 mod navigation;
 mod notifications;
 mod save_sync;
@@ -103,7 +104,10 @@ struct Controller {
     sync_generation: Cell<u64>,
     sync_cancel: RefCell<Arc<AtomicBool>>,
     game: RefCell<Option<game::GameState>>,
-    downloading: RefCell<Option<(i64, Arc<AtomicBool>)>>,
+    downloading: RefCell<Option<(i64, Arc<AtomicBool>, game::Origin)>>,
+    device_socket: RefCell<Option<crate::romm::device_socket::DeviceSocket>>,
+    installs: RefCell<crate::installs::Queue>,
+    install_awaiting_sync: RefCell<Option<String>>,
     preparing: Cell<bool>,
     download_fraction: Cell<f32>,
     pending_launch: RefCell<Option<save_sync::PendingLaunch>>,
@@ -203,6 +207,9 @@ pub fn run() -> anyhow::Result<()> {
         sync_cancel: RefCell::default(),
         game: RefCell::new(None),
         downloading: RefCell::new(None),
+        device_socket: RefCell::new(None),
+        installs: RefCell::default(),
+        install_awaiting_sync: RefCell::new(None),
         preparing: Cell::new(false),
         download_fraction: Cell::new(0.0),
         pending_launch: RefCell::new(None),
@@ -737,6 +744,9 @@ impl Controller {
         if !changed {
             return;
         }
+        if offline {
+            self.close_installs();
+        }
         *self.offline_retry.borrow_mut() = offline.then(|| {
             let timer = Timer::default();
             timer.start(TimerMode::Repeated, OFFLINE_RETRY, || {
@@ -750,6 +760,7 @@ impl Controller {
     }
 
     fn sign_out(&self) {
+        self.close_installs();
         self.clear_conflict();
         self.stop_sync();
         self.set_offline(false);
@@ -1095,6 +1106,8 @@ impl Controller {
                 self.send_pending_unlocks();
                 self.refresh_recommendations();
                 self.refresh_notifications();
+                self.refresh_installs();
+                self.pump_installs();
             }
             Err(Error::Cancelled) => return,
             Err(Error::Unauthorized) => return self.needs_repair(),

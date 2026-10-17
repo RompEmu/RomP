@@ -584,6 +584,18 @@ msgstr ""
 msgid "Couldn't delete \"{0}\": {1}."
 msgstr ""
 
+#: crates/romp-app/src/app/installs.rs
+msgid "This game isn't in RomP's library."
+msgstr ""
+
+#: crates/romp-app/src/app/installs.rs
+msgid "Downloading {0}, sent from RomM · {1}%"
+msgstr ""
+
+#: crates/romp-app/src/app/installs.rs
+msgid "A game sent from RomM didn't download: {0}"
+msgstr ""
+
 #: crates/romp-app/src/app/navigation.rs
 msgid "D-pad"
 msgstr ""

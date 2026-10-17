@@ -62,6 +62,7 @@ impl Queue {
         self.waiting.clear();
     }
 
+    #[cfg(test)]
     pub fn is_idle(&self) -> bool {
         self.running.is_none() && self.waiting.is_empty()
     }

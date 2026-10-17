@@ -125,6 +125,9 @@ impl Controller {
         if prefs.check_updates != before.check_updates {
             self.check_for_updates();
         }
+        if prefs.accept_installs != before.accept_installs {
+            self.refresh_installs();
+        }
         if prefs.language != before.language {
             crate::i18n::apply(crate::i18n::pick(prefs.language));
             ui.global::<crate::Locale>().set_rtl(crate::i18n::rtl());
