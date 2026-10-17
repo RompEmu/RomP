@@ -810,21 +810,27 @@ component Library inherits Rectangle {
                         if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
                     }
                 }
-                if !root.compact: FocusScope {
-                    height: platform-filter-field.preferred-height;
-                    key-pressed(event) => {
-                        if event.text == Key.Escape && root.platform-filter != "" {
-                            root.platform-filter = "";
-                            root.platform-filter-edited("");
-                            return accept;
+                // Spaced from the rows below as the title is from it, and inset like them.
+                if !root.compact: HorizontalLayout {
+                    padding-bottom: 10px;
+                    padding-left: Locale.rtl ? 14px : 0;
+                    padding-right: Locale.rtl ? 0 : 14px;
+                    FocusScope {
+                        height: platform-filter-field.preferred-height;
+                        key-pressed(event) => {
+                            if event.text == Key.Escape && root.platform-filter != "" {
+                                root.platform-filter = "";
+                                root.platform-filter-edited("");
+                                return accept;
+                            }
+                            reject
                         }
-                        reject
-                    }
-                    platform-filter-field := LineEdit {
-                        width: parent.width;
-                        placeholder-text: @tr("Filter consoles");
-                        text <=> root.platform-filter;
-                        edited(text) => { root.platform-filter-edited(text); }
+                        platform-filter-field := LineEdit {
+                            width: parent.width;
+                            placeholder-text: @tr("Filter consoles");
+                            text <=> root.platform-filter;
+                            edited(text) => { root.platform-filter-edited(text); }
+                        }
                     }
                 }
                 ListView {
