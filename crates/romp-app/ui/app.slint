@@ -700,6 +700,8 @@ component Library inherits Rectangle {
     in property <bool> needs-pairing;
     in property <string> pair-prompt;
     callback pair-again();
+    in property <bool> filters-active;
+    callback clear-filters();
     in property <bool> install-card-shown;
     in property <string> install-card-title;
     in property <string> install-card-detail;
@@ -967,11 +969,33 @@ component Library inherits Rectangle {
                             alignment: center;
                             spacing: 2px;
                             Text { horizontal-alignment: Locale.start; text: root.heading; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; overflow: elide; }
-                            Text { horizontal-alignment: Locale.start;
-                                text: root.sync-status != "" ? root.heading-detail + "  ·  " + root.sync-status : root.heading-detail;
-                                font-size: Theme.font-small;
-                                color: Theme.text-muted;
-                                overflow: elide;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Text { horizontal-alignment: Locale.start;
+                                    text: root.sync-status != "" ? root.heading-detail + "  ·  " + root.sync-status : root.heading-detail;
+                                    font-size: Theme.font-small;
+                                    color: Theme.text-muted;
+                                    overflow: elide;
+                                    horizontal-stretch: 0;
+                                }
+                                if root.filters-active: Text {
+                                    text: "·";
+                                    font-size: Theme.font-small;
+                                    color: Theme.text-muted;
+                                }
+                                if root.filters-active: Rectangle {
+                                    width: clear-label.preferred-width;
+                                    accessible-role: button;
+                                    accessible-label: clear-label.text;
+                                    accessible-action-default => { root.clear-filters(); }
+                                    clear-label := Text {
+                                        text: @tr("Clear filters");
+                                        font-size: Theme.font-small;
+                                        color: clear-touch.has-hover ? Theme.text-strong : Theme.accent-text;
+                                    }
+                                    clear-touch := TouchArea { mouse-cursor: pointer; clicked => { root.clear-filters(); } }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
                             }
                         }
                         if root.needs-pairing: VerticalLayout {
@@ -1054,11 +1078,19 @@ component Library inherits Rectangle {
                         property <int> columns: max(1, floor((self.width - 24px) / 188px));
                         changed columns => { root.columns-changed(self.columns); }
                         init => { root.columns-changed(self.columns); }
-                        if root.rows.length == 0: Text {
-                            text: root.syncing ? @tr("Loading your library…") : @tr("No games found.");
-                            color: Theme.text-muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        if root.rows.length == 0: VerticalLayout {
+                            alignment: center;
+                            spacing: 12px;
+                            Text {
+                                text: root.syncing ? @tr("Loading your library…")
+                                    : root.filters-active ? @tr("No games match.") : @tr("No games found.");
+                                color: Theme.text-muted;
+                                horizontal-alignment: center;
+                            }
+                            if !root.syncing && root.filters-active: HorizontalLayout {
+                                alignment: center;
+                                Button { text: @tr("Clear filters"); clicked => { root.clear-filters(); } }
+                            }
                         }
                         games := ListView {
                             for row[i] in root.rows: HorizontalLayout {
@@ -2616,6 +2648,8 @@ export component AppWindow inherits Window {
     callback keep-local-save();
     callback keep-server-save();
     in property <bool> needs-pairing;
+    in property <bool> filters-active;
+    callback clear-filters();
     in property <bool> install-card-shown;
     in property <string> install-card-title;
     in property <string> install-card-detail;
@@ -2763,6 +2797,8 @@ export component AppWindow inherits Window {
         needs-pairing: root.needs-pairing;
         pair-prompt: root.pair-prompt;
         pair-again => { root.pair-again(); }
+        filters-active: root.filters-active;
+        clear-filters => { root.clear-filters(); }
         install-card-shown: root.install-card-shown;
         install-card-title: root.install-card-title;
         install-card-detail: root.install-card-detail;

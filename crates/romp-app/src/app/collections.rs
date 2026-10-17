@@ -44,6 +44,12 @@ fn collection_error(e: &Error) -> String {
     }
 }
 
+/// Whether something narrows the library: a game search, a console filter, or a sidebar pick
+/// other than All games. Downloaded only isn't counted: it's a mode, and offline turns it on.
+pub(super) fn filters_active(search: &str, platform_filter: &str, selected: &str) -> bool {
+    !search.trim().is_empty() || !platform_filter.trim().is_empty() || selected != "all"
+}
+
 fn initial_of(name: &str) -> String {
     name.chars()
         .find(|c| c.is_alphanumeric())
@@ -360,6 +366,11 @@ impl Controller {
         let Some(ui) = self.ui() else { return };
         let names = self.sidebar_names.borrow();
         ui.set_heading(heading_for(&self.selected.borrow(), &names).into());
+        ui.set_filters_active(filters_active(
+            &self.library.borrow().filter.search,
+            &self.platform_filter.borrow(),
+            &self.selected.borrow(),
+        ));
         ui.set_heading_detail(games_label(self.library.borrow().games.len()).into());
     }
 
@@ -376,6 +387,18 @@ impl Controller {
         }
         *self.selected.borrow_mut() = key;
         self.reload_games();
+    }
+
+    /// Back to everything: no search, no console filter, All games.
+    pub(super) fn clear_filters(&self) {
+        if let Some(ui) = self.ui() {
+            ui.set_search("".into());
+            ui.set_platform_filter("".into());
+        }
+        self.library.borrow_mut().filter.search.clear();
+        self.platform_filter.borrow_mut().clear();
+        self.reload_sidebar();
+        self.select("all".into());
     }
 
     pub(super) fn set_platform_filter(&self, text: String) {
@@ -792,6 +815,19 @@ mod tests {
             collection_error(&Error::Unreachable),
             Error::Unreachable.to_string()
         );
+    }
+
+    #[test]
+    fn the_view_is_narrowed_by_a_search_a_console_filter_or_a_pick() {
+        assert!(!filters_active("", "", "all"));
+        assert!(
+            !filters_active("  ", " ", "all"),
+            "blank text doesn't count"
+        );
+        assert!(filters_active("zelda", "", "all"));
+        assert!(filters_active("", "nin", "all"));
+        assert!(filters_active("", "", "p:3"));
+        assert!(filters_active("", "", RECENT_KEY));
     }
 
     #[test]

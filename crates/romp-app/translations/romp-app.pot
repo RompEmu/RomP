@@ -186,6 +186,10 @@ msgid "Settings"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Clear filters"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Search games"
 msgstr ""
 
@@ -231,6 +235,10 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Loading your library…"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "No games match."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint

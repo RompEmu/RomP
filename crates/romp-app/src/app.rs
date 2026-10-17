@@ -400,6 +400,12 @@ impl Controller {
             with_controller(|c| c.dismiss_notification(i64::from(id)));
         });
         ui.on_dismiss_all_notifications(|| with_controller(|c| c.dismiss_all_notifications()));
+        ui.on_clear_filters(|| {
+            with_controller(|c| {
+                c.clear_filters();
+                c.leave_page();
+            });
+        });
         ui.on_install_card_open(|| with_controller(|c| c.install_card_open()));
         ui.on_install_card_play(|| with_controller(|c| c.install_card_play()));
         ui.on_install_card_cancel(|| with_controller(|c| c.cancel_download()));
