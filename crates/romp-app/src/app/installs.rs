@@ -81,15 +81,34 @@ impl Controller {
     /// Stops listening; an install already downloading finishes.
     pub(super) fn close_installs(&self) {
         self.device_socket.borrow_mut().take();
-        self.installs.borrow_mut().clear();
+        if self.install_downloading().is_some() {
+            self.installs.borrow_mut().clear();
+        } else {
+            self.installs.borrow_mut().abandon();
+        }
+    }
+
+    /// The request whose download is running, if the running download is an install.
+    fn install_downloading(&self) -> Option<String> {
+        match self.downloading.borrow().as_ref() {
+            Some((_, _, Origin::Install(id))) => Some(id.clone()),
+            _ => None,
+        }
     }
 
     fn device_event(&self, event: DeviceEvent) {
         match event {
             DeviceEvent::Connected | DeviceEvent::InstallQueued { .. } => self.claim_installs(),
             DeviceEvent::InstallCancelled { id } => {
-                if self.installs.borrow_mut().cancel(&id) == Cancelled::Running {
+                if self.installs.borrow_mut().cancel(&id) != Cancelled::Running {
+                    return;
+                }
+                // Only the install's own download stops; one started from a game page doesn't.
+                if self.install_downloading().as_deref() == Some(id.as_str()) {
                     self.cancel_download();
+                } else {
+                    self.installs.borrow_mut().finish();
+                    self.pump_installs();
                 }
             }
             DeviceEvent::Refused(reason) => {
@@ -119,6 +138,9 @@ impl Controller {
     /// Starts the next install, unless a game or another download is running.
     pub(super) fn pump_installs(&self) {
         if self.running.borrow().is_some() || self.downloading_id().is_some() {
+            return;
+        }
+        if self.device_socket.borrow().is_none() || !self.prefs.get().accept_installs {
             return;
         }
         let request = {
@@ -174,6 +196,7 @@ impl Controller {
             .running()
             .filter(|r| r.id == request_id)
             .cloned();
+        let romm_cancelled = self.installs.borrow().cancelled_by_romm(&request_id);
         self.installs.borrow_mut().finish();
         let status = match (&outcome, &request) {
             (Ok(()), Some(request)) => {
@@ -183,6 +206,13 @@ impl Controller {
             (Err(Some(reason)), Some(request)) => {
                 self.report_install(request, InstallOutcome::Failed, Some(reason));
                 tr!("A game sent from RomM didn't download: {0}", reason)
+            }
+            // Paused here rather than withdrawn in RomM: RomM would otherwise keep it as taken
+            // and send it again on the next connection.
+            (Err(None), Some(request)) if !romm_cancelled => {
+                let reason = tr!("Paused on this device");
+                self.report_install(request, InstallOutcome::Failed, Some(&reason));
+                String::new()
             }
             _ => String::new(),
         };

@@ -549,6 +549,8 @@ impl Controller {
     }
 
     fn enter_library(&self, client: Client) {
+        // A socket opened with the previous token would be refused once that token is revoked.
+        self.close_installs();
         if let Some(ui) = self.ui() {
             ui.set_server_label(client.base().host_str().unwrap_or_default().into());
         }
