@@ -64,6 +64,16 @@ const EXTRAS: [&str; 22] = [
     "gif", "bmp", "xml", "sfv", "md5", "sha1", "srm", "sav", "log",
 ];
 
+/// Readmes, covers and the like. A PICO-8 cart saved as a picture (`.p8.png`) is the game.
+fn is_extra(p: &Path) -> bool {
+    let pico8_cart = p.file_name().is_some_and(|n| {
+        n.to_string_lossy()
+            .to_ascii_lowercase()
+            .ends_with(".p8.png")
+    });
+    EXTRAS.contains(&ext(p).as_str()) && !pico8_cart
+}
+
 pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch> {
     let depth = |p: &PathBuf| p.components().count();
     if rom.platform_slug == crate::rpcs3::PLATFORM {
@@ -107,7 +117,7 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
     }
     files
         .iter()
-        .filter(|(p, _)| !EXTRAS.contains(&ext(p).as_str()))
+        .filter(|(p, _)| !is_extra(p))
         .min_by(|(a, sa), (b, sb)| depth(a).cmp(&depth(b)).then(sb.cmp(sa)).then(a.cmp(b)))
         .map(|(p, _)| Launch::File(p.clone()))
 }
@@ -296,5 +306,17 @@ mod tests {
             Some(Launch::File(PathBuf::from("game.bin")))
         );
         assert_eq!(launch_target(&r, &[(PathBuf::from("notes.txt"), 1)]), None);
+    }
+
+    #[test]
+    fn a_pico8_cart_saved_as_a_picture_is_the_game() {
+        let r = rom(false, vec![]);
+        let cart = PathBuf::from("Across The River.p8.png");
+        assert_eq!(
+            launch_target(&r, &[(cart.clone(), 32_224)]),
+            Some(Launch::File(cart.clone()))
+        );
+        let with_cover = [(PathBuf::from("cover.png"), 90_000), (cart.clone(), 32_224)];
+        assert_eq!(launch_target(&r, &with_cover), Some(Launch::File(cart)));
     }
 }
