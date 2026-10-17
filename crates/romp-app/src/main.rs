@@ -20,6 +20,7 @@ mod grid;
 mod i18n;
 mod identity;
 mod input;
+mod installs;
 mod keyboard;
 mod layout;
 mod licenses;
