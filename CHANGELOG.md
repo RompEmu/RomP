@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-16
+
 ### Added
 
 - Games for 20 more systems play: Atari 5200, 7800, 8-bit computers and ST, Amstrad CPC, Commodore VIC-20, Plus/4, 16 and 128, Amiga CD32 and CDTV, Neo Geo CD, PC-FX, Pokémon Mini, Game & Watch, Watara Supervision, Mega Duck, Fairchild Channel F and TIC-80, plus Atari Jaguar CD on the Virtual Jaguar core that already plays Jaguar cartridges. RomP downloads each one's emulator on first play, and the BIOS files the Atari ST, Neo Geo CD, PC-FX, CD32, CDTV and Channel F need from RomM's firmware.
@@ -263,7 +265,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/RompEmu/RomP/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/RompEmu/RomP/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/RompEmu/RomP/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/RompEmu/RomP/compare/v0.13.0...v0.13.1
