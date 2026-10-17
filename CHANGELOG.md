@@ -6,7 +6,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Added
 
-- RomP can be chosen under Install on device in RomM 5.4: a game sent to it starts downloading straight away, or the next time RomP is open, and RomM hears whether it worked. Turn it off under Settings › RomM › Accept games sent from RomM.
+- RomP can be chosen under Install on device in RomM 5.4: a game sent to it starts downloading straight away, or the next time RomP is open, with a card in the library showing its progress and a Play button when it's ready, and RomM hears whether it worked. Turn it off under Settings › RomM › Accept games sent from RomM.
 - RomM 5.4's notifications, such as a finished library scan, show behind a bell in the sidebar, checked every minute. Opening them marks them read, and each can be dismissed.
 - The console filter also finds consoles by the short and other names RomM 5.4 gives them, such as MD or Mega Drive for the Genesis.
 - RomM 5.4 learns which version of each in-game save RomP holds, so its web player and other devices can tell a save unchanged here from one changed in two places.
