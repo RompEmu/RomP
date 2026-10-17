@@ -1,6 +1,6 @@
 use crate::romm::types::{
-    DeviceAuth, Firmware, Heartbeat, Platform, PollOutcome, RemoteCollection, RemoteSave,
-    RemoteState, RomDetail, RomFile, RomPage, User,
+    DeviceAuth, Firmware, Heartbeat, Platform, PollOutcome, RemoteCollection, RemoteNotification,
+    RemoteSave, RemoteState, RomDetail, RomFile, RomPage, User,
 };
 use crate::store::PlaySession;
 use serde::de::DeserializeOwned;
@@ -588,6 +588,39 @@ impl Client {
             )
             .await?;
         resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    /// The player's notifications, newest first, or `None` from RomM before 5.4, which has none.
+    pub async fn notifications(&self) -> Result<Option<Vec<RemoteNotification>>, Error> {
+        match self.get_json("/api/notifications", &[]).await {
+            Ok(list) => Ok(Some(list)),
+            Err(Error::Status(404)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn mark_notifications_read(&self, ids: &[i64]) -> Result<(), Error> {
+        // RomM takes at most 200 at a time.
+        for chunk in ids.chunks(200) {
+            self.send(
+                self.request(reqwest::Method::POST, "/api/notifications/read")
+                    .json(&serde_json::json!({ "ids": chunk })),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn dismiss_notification(&self, id: i64) -> Result<(), Error> {
+        self.send(self.request(reqwest::Method::DELETE, &format!("/api/notifications/{id}")))
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn dismiss_all_notifications(&self) -> Result<(), Error> {
+        self.send(self.request(reqwest::Method::DELETE, "/api/notifications"))
+            .await
+            .map(|_| ())
     }
 
     /// Tells RomM 5.4 this device now holds the save, so other devices can tell it didn't change.
@@ -1432,6 +1465,68 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(saved.id, 1);
+    }
+
+    #[tokio::test]
+    async fn notifications_come_newest_first_and_older_romm_has_none() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/notifications"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": 2, "kind": "scan_completed", "level": "success", "title": null, "body": null,
+                 "link": null, "icon": null, "data": {}, "actor": null, "read_at": null,
+                 "created_at": "2026-10-17T09:00:00Z"},
+                {"id": 1, "kind": "custom", "level": "info", "title": "Hello", "body": "From the admin",
+                 "link": null, "icon": null, "data": {}, "actor": null,
+                 "read_at": "2026-10-16T09:00:00Z", "created_at": "2026-10-16T08:00:00Z"}
+            ])))
+            .mount(&server)
+            .await;
+        let list = authed(&server).notifications().await.unwrap().unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(
+            (list[0].id, list[0].kind.as_str(), list[0].title.as_deref()),
+            (2, "scan_completed", None)
+        );
+        assert!(list[0].read_at.is_none() && list[1].read_at.is_some());
+
+        let old = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/notifications"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&old)
+            .await;
+        assert_eq!(authed(&old).notifications().await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn notifications_are_marked_read_and_dismissed() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/notifications/read"))
+            .and(wiremock::matchers::body_json(
+                serde_json::json!({"ids": [3, 4]}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/api/notifications/3"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/api/notifications"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        client.mark_notifications_read(&[3, 4]).await.unwrap();
+        client.dismiss_notification(3).await.unwrap();
+        client.dismiss_all_notifications().await.unwrap();
     }
 
     #[tokio::test]

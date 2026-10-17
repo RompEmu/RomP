@@ -80,6 +80,19 @@ impl User {
     }
 }
 
+/// One of the player's notifications in RomM 5.4's inbox. A known `kind` comes without a
+/// title for the client to word it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct RemoteNotification {
+    pub id: i64,
+    pub kind: String,
+    pub level: String,
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub read_at: Option<String>,
+    pub created_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Platform {
     pub id: i64,
