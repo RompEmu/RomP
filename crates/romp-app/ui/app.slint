@@ -820,9 +820,15 @@ component Library inherits Rectangle {
                     FocusScope {
                         height: platform-filter-field.preferred-height;
                         key-pressed(event) => {
-                            if event.text == Key.Escape && root.platform-filter != "" {
-                                root.platform-filter = "";
-                                root.platform-filter-edited("");
+                            if event.text == Key.Escape {
+                                if root.platform-filter != "" {
+                                    root.platform-filter = "";
+                                    root.platform-filter-edited("");
+                                } else if root.filters-active {
+                                    root.clear-filters();
+                                } else {
+                                    return reject;
+                                }
                                 return accept;
                             }
                             reject
@@ -832,6 +838,19 @@ component Library inherits Rectangle {
                             placeholder-text: @tr("Filter consoles");
                             text <=> root.platform-filter;
                             edited(text) => { root.platform-filter-edited(text); }
+                        }
+                        if root.platform-filter != "": IconButton {
+                            x: Locale.rtl ? 4px : parent.width - self.width - 4px;
+                            y: (parent.height - self.height) / 2;
+                            width: 24px;
+                            height: 24px;
+                            icon: @image-url("icons/close.svg");
+                            tooltip: @tr("Clear filter");
+                            clicked => {
+                                root.platform-filter = "";
+                                root.platform-filter-edited("");
+                                platform-filter-field.focus();
+                            }
                         }
                     }
                 }
@@ -1016,11 +1035,43 @@ component Library inherits Rectangle {
                         }
                         VerticalLayout {
                             alignment: center;
-                            search-field := LineEdit {
+                            // Esc clears the search, then a second Esc clears every filter.
+                            FocusScope {
                                 width: 240px;
-                                placeholder-text: @tr("Search games");
-                                text <=> root.search;
-                                edited(text) => { root.search-edited(text); }
+                                height: search-field.preferred-height;
+                                key-pressed(event) => {
+                                    if event.text == Key.Escape {
+                                        if root.search != "" {
+                                            root.search = "";
+                                            root.search-edited("");
+                                        } else if root.filters-active {
+                                            root.clear-filters();
+                                        } else {
+                                            return reject;
+                                        }
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                                search-field := LineEdit {
+                                    width: parent.width;
+                                    placeholder-text: @tr("Search games");
+                                    text <=> root.search;
+                                    edited(text) => { root.search-edited(text); }
+                                }
+                                if root.search != "": IconButton {
+                                    x: Locale.rtl ? 4px : parent.width - self.width - 4px;
+                                    y: (parent.height - self.height) / 2;
+                                    width: 24px;
+                                    height: 24px;
+                                    icon: @image-url("icons/close.svg");
+                                    tooltip: @tr("Clear search");
+                                    clicked => {
+                                        root.search = "";
+                                        root.search-edited("");
+                                        search-field.focus();
+                                    }
+                                }
                             }
                         }
                         VerticalLayout {

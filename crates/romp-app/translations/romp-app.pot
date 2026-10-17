@@ -164,6 +164,10 @@ msgid "Filter consoles"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Clear filter"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Rename…"
 msgstr ""
 
@@ -191,6 +195,10 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Search games"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Clear search"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
