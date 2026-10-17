@@ -4,6 +4,25 @@ use serde::{Deserialize, Serialize};
 pub struct Heartbeat {
     #[serde(rename = "SYSTEM")]
     pub system: SystemInfo,
+    /// From RomM 5.4: whether games can be sent to devices.
+    #[serde(rename = "DEVICE_INSTALL", default)]
+    pub device_install: Option<DeviceInstall>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct DeviceInstall {
+    #[serde(rename = "ENABLED", default)]
+    pub enabled: bool,
+}
+
+/// A game sent to this device from RomM's "Install on device".
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct InstallRequest {
+    pub id: String,
+    pub rom_id: i64,
+    #[serde(default)]
+    pub file_ids: Vec<i64>,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

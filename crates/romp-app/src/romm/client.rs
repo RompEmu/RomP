@@ -1,6 +1,6 @@
 use crate::romm::types::{
-    DeviceAuth, Firmware, Heartbeat, Platform, PollOutcome, RemoteCollection, RemoteNotification,
-    RemoteSave, RemoteState, RomDetail, RomFile, RomPage, User,
+    DeviceAuth, Firmware, Heartbeat, InstallRequest, Platform, PollOutcome, RemoteCollection,
+    RemoteNotification, RemoteSave, RemoteState, RomDetail, RomFile, RomPage, User,
 };
 use crate::store::PlaySession;
 use serde::de::DeserializeOwned;
@@ -78,6 +78,29 @@ pub struct SaveUpload<'a> {
     pub bytes: Vec<u8>,
 }
 
+/// How an install sent from RomM ended, as RomM records it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallOutcome {
+    Done,
+    AlreadyInstalled,
+    Failed,
+}
+
+impl InstallOutcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Done => "done",
+            Self::AlreadyInstalled => "already_installed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// RomM keeps at most 500 characters of why an install ended.
+fn install_reason(reason: Option<&str>) -> Option<String> {
+    reason.map(|r| r.chars().take(500).collect())
+}
+
 #[derive(Clone)]
 pub struct Client {
     base: Url,
@@ -117,6 +140,10 @@ impl Client {
 
     pub fn base(&self) -> &Url {
         &self.base
+    }
+
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
     }
 
     pub fn url(&self, path: &str) -> Url {
@@ -588,6 +615,48 @@ impl Client {
             )
             .await?;
         resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    /// Offers this device in RomM 5.4's "Install on device", or takes it out.
+    pub async fn set_remote_install(&self, device_id: &str, on: bool) -> Result<(), Error> {
+        self.send(
+            self.request(reqwest::Method::PUT, &format!("/api/devices/{device_id}"))
+                .json(&serde_json::json!({"capabilities": {"remote_install": on}})),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    /// Takes every game waiting to be sent here, and returns all this device holds, oldest first.
+    pub async fn claim_installs(&self, device_id: &str) -> Result<Vec<InstallRequest>, Error> {
+        let resp = self
+            .send(self.request(
+                reqwest::Method::POST,
+                &format!("/api/devices/{device_id}/installs/claim"),
+            ))
+            .await?;
+        resp.json().await.map_err(|e| Error::Decode(e.to_string()))
+    }
+
+    pub async fn report_install(
+        &self,
+        device_id: &str,
+        request_id: &str,
+        outcome: InstallOutcome,
+        reason: Option<&str>,
+    ) -> Result<(), Error> {
+        self.send(
+            self.request(
+                reqwest::Method::PUT,
+                &format!("/api/devices/{device_id}/installs/{request_id}"),
+            )
+            .json(&serde_json::json!({
+                "status": outcome.as_str(),
+                "reason": install_reason(reason),
+            })),
+        )
+        .await
+        .map(|_| ())
     }
 
     /// The player's notifications, newest first, or `None` from RomM before 5.4, which has none.
@@ -1527,6 +1596,71 @@ pub(crate) mod tests {
         client.mark_notifications_read(&[3, 4]).await.unwrap();
         client.dismiss_notification(3).await.unwrap();
         client.dismiss_all_notifications().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn installs_are_offered_claimed_and_reported() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/api/devices/dev"))
+            .and(wiremock::matchers::body_json(
+                serde_json::json!({"capabilities": {"remote_install": true}}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/devices/dev/installs/claim"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": "r1", "user_id": 1, "device_id": "dev", "rom_id": 7, "file_ids": [3, 4],
+                 "status": "taken", "reason": null, "created_at": "t", "updated_at": "t"}
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/api/devices/dev/installs/r1"))
+            .and(wiremock::matchers::body_json(
+                serde_json::json!({"status": "failed", "reason": "No space"}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        client.set_remote_install("dev", true).await.unwrap();
+        let claimed = client.claim_installs("dev").await.unwrap();
+        assert_eq!(
+            (
+                claimed[0].id.as_str(),
+                claimed[0].rom_id,
+                claimed[0].file_ids.clone()
+            ),
+            ("r1", 7, vec![3, 4])
+        );
+        client
+            .report_install("dev", "r1", InstallOutcome::Failed, Some("No space"))
+            .await
+            .unwrap();
+    }
+
+    #[test]
+    fn an_install_reason_is_cut_to_what_romm_takes() {
+        let long = "x".repeat(600);
+        assert_eq!(install_reason(Some(&long)).unwrap().chars().count(), 500);
+        assert_eq!(install_reason(None), None);
+    }
+
+    #[test]
+    fn the_heartbeat_says_whether_installs_are_on() {
+        let on: Heartbeat = serde_json::from_value(serde_json::json!({
+            "SYSTEM": {"VERSION": "5.4.0"}, "DEVICE_INSTALL": {"ENABLED": true}
+        }))
+        .unwrap();
+        assert!(on.device_install.is_some_and(|d| d.enabled));
+        let old: Heartbeat =
+            serde_json::from_value(serde_json::json!({"SYSTEM": {"VERSION": "5.3.1"}})).unwrap();
+        assert!(old.device_install.is_none());
     }
 
     #[tokio::test]
