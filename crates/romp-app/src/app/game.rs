@@ -497,6 +497,10 @@ impl Controller {
             .borrow_mut()
             .take()
             .map_or(Origin::Page, |(_, _, origin)| origin);
+        let romm_cancelled = match &origin {
+            Origin::Install(id) => self.installs.borrow().cancelled_by_romm(id),
+            Origin::Page => false,
+        };
         let outcome = match &result {
             Ok(_) => Ok(fetched),
             Err(DownloadError::Cancelled) => Err(None),
@@ -515,6 +519,8 @@ impl Controller {
                     bios::missing_message(&missing)
                 }
             }
+            // Withdrawn in RomM rather than paused here: there's nothing to continue.
+            Err(DownloadError::Cancelled) if romm_cancelled => String::new(),
             Err(DownloadError::Cancelled) => {
                 tr!("Download paused. Choose Download to continue.")
             }

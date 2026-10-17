@@ -594,6 +594,76 @@ component Card inherits Rectangle {
     }
 }
 
+// A game sent from RomM: received, downloading, ready or failed.
+component InstallCard inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <float> progress: -1;
+    in property <bool> done;
+    in property <bool> failed;
+    callback open();
+    callback play();
+    callback cancel();
+    callback dismiss();
+    width: 320px;
+    height: card-layout.preferred-height;
+    border-radius: Theme.radius-large;
+    background: Theme.surface-raised;
+    border-width: 1px;
+    border-color: root.failed ? Theme.danger : Theme.border;
+    drop-shadow-blur: 24px;
+    drop-shadow-color: Theme.shadow;
+    accessible-role: groupbox;
+    accessible-label: root.title;
+    TouchArea { mouse-cursor: pointer; clicked => { root.open(); } }
+    card-layout := VerticalLayout {
+        padding: 12px;
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                horizontal-stretch: 1;
+                horizontal-alignment: Locale.start;
+                vertical-alignment: center;
+                text: root.title;
+                font-weight: 700;
+                color: Theme.text-strong;
+                wrap: word-wrap;
+            }
+            if root.done || root.failed: IconButton {
+                icon: @image-url("icons/close.svg");
+                tooltip: @tr("Dismiss");
+                clicked => { root.dismiss(); }
+            }
+        }
+        if root.detail != "": Text {
+            horizontal-alignment: Locale.start;
+            text: root.detail;
+            color: root.failed ? Theme.danger : Theme.text-secondary;
+            font-size: Theme.font-small;
+            wrap: word-wrap;
+        }
+        if root.progress >= 0: Rectangle {
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.surface-muted;
+            Rectangle {
+                x: Locale.rtl ? parent.width - self.width : 0;
+                width: parent.width * root.progress;
+                height: parent.height;
+                border-radius: 2px;
+                background: Theme.accent;
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            if root.done: Button { text: @tr("Play"); primary: true; clicked => { root.play(); } }
+            if !root.done && !root.failed: Button { text: @tr("Cancel"); clicked => { root.cancel(); } }
+        }
+    }
+}
+
 component Library inherits Rectangle {
     in property <string> user-label;
     in property <string> server-label;
@@ -630,6 +700,16 @@ component Library inherits Rectangle {
     in property <bool> needs-pairing;
     in property <string> pair-prompt;
     callback pair-again();
+    in property <bool> install-card-shown;
+    in property <string> install-card-title;
+    in property <string> install-card-detail;
+    in property <float> install-card-progress: -1;
+    in property <bool> install-card-done;
+    in property <bool> install-card-failed;
+    callback install-card-open();
+    callback install-card-play();
+    callback install-card-cancel();
+    callback install-card-dismiss();
     in property <bool> notifications-shown;
     in property <int> notifications-unread;
     in property <[NotificationRow]> notifications;
@@ -994,6 +1074,19 @@ component Library inherits Rectangle {
             }
             @children
         }
+    }
+    if root.install-card-shown: InstallCard {
+        x: Locale.rtl ? 16px : parent.width - self.width - 16px;
+        y: parent.height - self.height - 16px;
+        title: root.install-card-title;
+        detail: root.install-card-detail;
+        progress: root.install-card-progress;
+        done: root.install-card-done;
+        failed: root.install-card-failed;
+        open => { root.install-card-open(); }
+        play => { root.install-card-play(); }
+        cancel => { root.install-card-cancel(); }
+        dismiss => { root.install-card-dismiss(); }
     }
     // The inbox, opened from the bell, above the sidebar's foot.
     if root.notifications-open: FocusScope {
@@ -2517,6 +2610,16 @@ export component AppWindow inherits Window {
     callback keep-local-save();
     callback keep-server-save();
     in property <bool> needs-pairing;
+    in property <bool> install-card-shown;
+    in property <string> install-card-title;
+    in property <string> install-card-detail;
+    in property <float> install-card-progress: -1;
+    in property <bool> install-card-done;
+    in property <bool> install-card-failed;
+    callback install-card-open();
+    callback install-card-play();
+    callback install-card-cancel();
+    callback install-card-dismiss();
     in property <bool> notifications-shown;
     in property <int> notifications-unread;
     in property <[NotificationRow]> notifications;
@@ -2654,6 +2757,16 @@ export component AppWindow inherits Window {
         needs-pairing: root.needs-pairing;
         pair-prompt: root.pair-prompt;
         pair-again => { root.pair-again(); }
+        install-card-shown: root.install-card-shown;
+        install-card-title: root.install-card-title;
+        install-card-detail: root.install-card-detail;
+        install-card-progress: root.install-card-progress;
+        install-card-done: root.install-card-done;
+        install-card-failed: root.install-card-failed;
+        install-card-open => { root.install-card-open(); }
+        install-card-play => { root.install-card-play(); }
+        install-card-cancel => { root.install-card-cancel(); }
+        install-card-dismiss => { root.install-card-dismiss(); }
         notifications-shown: root.notifications-shown;
         notifications-unread: root.notifications-unread;
         notifications: root.notifications;

@@ -1,12 +1,17 @@
 //! Games sent from RomM's "Install on device": heard over the device socket, claimed, and
 //! downloaded one at a time through the same path as the game page's Download.
 use super::game::Origin;
-use super::{on_ui, Controller};
-use crate::installs::Cancelled;
+use super::{on_ui, with_controller, Controller};
+use crate::installs::{card, Cancelled, Stage};
 use crate::romm::client::InstallOutcome;
 use crate::romm::device_socket::{self, DeviceEvent};
 use crate::romm::types::InstallRequest;
+use slint::{Timer, TimerMode};
+use std::time::Duration;
 use tr::tr;
+
+/// How long the card says a game is ready before it goes.
+const READY_FOR: Duration = Duration::from_secs(10);
 
 /// RomP takes games sent from RomM only when all of these hold.
 #[derive(Debug, Clone, Copy)]
@@ -129,6 +134,7 @@ impl Controller {
                 Ok(requests) => on_ui(move |c| {
                     c.installs.borrow_mut().add(requests);
                     c.pump_installs();
+                    c.show_waiting_install();
                 }),
                 Err(e) => tracing::warn!("claiming installs: {e}"),
             }
@@ -163,7 +169,7 @@ impl Controller {
         };
         self.install_awaiting_sync.borrow_mut().take();
         // Files already here aren't fetched again; nothing fetched reports as already installed.
-        self.show_install_status(&detail.title, 0);
+        self.show_install_card(&detail.title, request.rom_id, &Stage::Downloading(0.0));
         let only = (!request.file_ids.is_empty()).then(|| request.file_ids.clone());
         self.start_download(detail, Origin::Install(request.id), only);
     }
@@ -171,16 +177,74 @@ impl Controller {
     pub(super) fn install_progress(&self, fraction: f32) {
         let rom_id = self.installs.borrow().running().map(|r| r.rom_id);
         let title = rom_id.and_then(|id| self.shared.store.lock().unwrap().game(id));
-        if let Some(detail) = title {
-            self.show_install_status(&detail.title, (fraction * 100.0).round() as u32);
+        if let (Some(detail), Some(rom_id)) = (title, rom_id) {
+            self.show_install_card(&detail.title, rom_id, &Stage::Downloading(fraction));
         }
     }
 
-    fn show_install_status(&self, title: &str, percent: u32) {
+    /// While a game runs or a page download goes on, the next install says it's waiting.
+    fn show_waiting_install(&self) {
+        if self.install_downloading().is_some() {
+            return;
+        }
+        let next = {
+            let queue = self.installs.borrow();
+            queue.running().or(queue.first_waiting()).cloned()
+        };
+        let Some(next) = next else { return };
+        let title = self.install_title(next.rom_id);
+        self.show_install_card(&title, next.rom_id, &Stage::Waiting);
+    }
+
+    fn install_title(&self, rom_id: i64) -> String {
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .game(rom_id)
+            .map_or_else(|| tr!("A game"), |g| g.title)
+    }
+
+    fn show_install_card(&self, title: &str, rom_id: i64, stage: &Stage) {
+        let Some(ui) = self.ui() else { return };
+        let playing = self.running.borrow().is_some();
+        let shown = card(title, stage, playing, self.installs.borrow().waiting());
+        ui.set_install_card_title(shown.title.into());
+        ui.set_install_card_detail(shown.detail.into());
+        ui.set_install_card_progress(shown.progress);
+        ui.set_install_card_done(shown.done);
+        ui.set_install_card_failed(shown.failed);
+        ui.set_install_card_shown(true);
+        self.install_card_rom.set(Some(rom_id));
+        let timer = shown.done.then(|| {
+            let timer = Timer::default();
+            timer.start(TimerMode::SingleShot, READY_FOR, || {
+                with_controller(|c| c.hide_install_card());
+            });
+            timer
+        });
+        *self.install_card_timer.borrow_mut() = timer;
+    }
+
+    pub(super) fn hide_install_card(&self) {
+        self.install_card_timer.borrow_mut().take();
+        self.install_card_rom.set(None);
         if let Some(ui) = self.ui() {
-            ui.set_sync_status(
-                tr!("Downloading {0}, sent from RomM · {1}%", title, percent).into(),
-            );
+            ui.set_install_card_shown(false);
+        }
+    }
+
+    pub(super) fn install_card_open(&self) {
+        if let Some(rom_id) = self.install_card_rom.get() {
+            self.open_game(rom_id);
+        }
+    }
+
+    pub(super) fn install_card_play(&self) {
+        if let Some(rom_id) = self.install_card_rom.get() {
+            self.hide_install_card();
+            self.open_game(rom_id);
+            self.play_game();
         }
     }
 
@@ -198,7 +262,10 @@ impl Controller {
             .cloned();
         let romm_cancelled = self.installs.borrow().cancelled_by_romm(&request_id);
         self.installs.borrow_mut().finish();
-        let status = match (&outcome, &request) {
+        let title = request
+            .as_ref()
+            .map(|r| (self.install_title(r.rom_id), r.rom_id));
+        match (&outcome, &request) {
             (Ok(fetched), Some(request)) => {
                 let outcome = if *fetched {
                     InstallOutcome::Done
@@ -206,26 +273,28 @@ impl Controller {
                     InstallOutcome::AlreadyInstalled
                 };
                 self.report_install(request, outcome, None);
-                String::new()
+                if let Some((title, rom_id)) = &title {
+                    self.show_install_card(title, *rom_id, &Stage::Done);
+                }
             }
             (Err(Some(reason)), Some(request)) => {
                 self.report_install(request, InstallOutcome::Failed, Some(reason));
-                tr!("A game sent from RomM didn't download: {0}", reason)
+                if let Some((title, rom_id)) = &title {
+                    self.show_install_card(title, *rom_id, &Stage::Failed(reason.clone()));
+                }
             }
             // Paused here rather than withdrawn in RomM: RomM would otherwise keep it as taken
             // and send it again on the next connection.
             (Err(None), Some(request)) if !romm_cancelled => {
                 let reason = tr!("Paused on this device");
                 self.report_install(request, InstallOutcome::Failed, Some(&reason));
-                String::new()
+                self.hide_install_card();
             }
-            _ => String::new(),
-        };
-        if let Some(ui) = self.ui() {
-            ui.set_sync_status(status.into());
+            _ => self.hide_install_card(),
         }
         self.reload_games();
         self.pump_installs();
+        self.show_waiting_install();
     }
 
     fn report_install(

@@ -152,7 +152,7 @@ msgstr ""
 msgid "Connect to your server to download this game."
 msgstr ""
 
-#: crates/romp-app/src/app/game.rs
+#: crates/romp-app/src/app/game.rs crates/romp-app/src/installs.rs
 msgid "Downloading…"
 msgstr ""
 
@@ -214,6 +214,32 @@ msgstr ""
 
 #: crates/romp-app/src/app/game.rs
 msgid "Close the running game first."
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{n} more waiting"
+msgid_plural "{n} more waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} sent from RomM"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "Waits until you stop playing"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "Downloading · {0}%"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} is ready to play"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} couldn't download"
 msgstr ""
 
 #: crates/romp-app/src/notifications.rs
@@ -589,11 +615,11 @@ msgid "This game isn't in RomP's library."
 msgstr ""
 
 #: crates/romp-app/src/app/installs.rs
-msgid "Downloading {0}, sent from RomM · {1}%"
+msgid "A game"
 msgstr ""
 
 #: crates/romp-app/src/app/installs.rs
-msgid "A game sent from RomM didn't download: {0}"
+msgid "Paused on this device"
 msgstr ""
 
 #: crates/romp-app/src/app/navigation.rs

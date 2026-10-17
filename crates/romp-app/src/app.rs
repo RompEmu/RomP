@@ -108,6 +108,8 @@ struct Controller {
     device_socket: RefCell<Option<crate::romm::device_socket::DeviceSocket>>,
     installs: RefCell<crate::installs::Queue>,
     install_awaiting_sync: RefCell<Option<String>>,
+    install_card_rom: Cell<Option<i64>>,
+    install_card_timer: RefCell<Option<Timer>>,
     preparing: Cell<bool>,
     download_fraction: Cell<f32>,
     pending_launch: RefCell<Option<save_sync::PendingLaunch>>,
@@ -210,6 +212,8 @@ pub fn run() -> anyhow::Result<()> {
         device_socket: RefCell::new(None),
         installs: RefCell::default(),
         install_awaiting_sync: RefCell::new(None),
+        install_card_rom: Cell::new(None),
+        install_card_timer: RefCell::new(None),
         preparing: Cell::new(false),
         download_fraction: Cell::new(0.0),
         pending_launch: RefCell::new(None),
@@ -396,6 +400,10 @@ impl Controller {
             with_controller(|c| c.dismiss_notification(i64::from(id)));
         });
         ui.on_dismiss_all_notifications(|| with_controller(|c| c.dismiss_all_notifications()));
+        ui.on_install_card_open(|| with_controller(|c| c.install_card_open()));
+        ui.on_install_card_play(|| with_controller(|c| c.install_card_play()));
+        ui.on_install_card_cancel(|| with_controller(|c| c.cancel_download()));
+        ui.on_install_card_dismiss(|| with_controller(|c| c.hide_install_card()));
     }
 
     fn start(&self) {

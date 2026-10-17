@@ -137,6 +137,20 @@ msgid "On server"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Dismiss"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+msgid "Play"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+msgid "Cancel"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Offline"
 msgstr ""
@@ -235,18 +249,6 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "No notifications"
-msgstr ""
-
-#: crates/romp-app/ui/app.slint
-msgid "Dismiss"
-msgstr ""
-
-#: crates/romp-app/ui/app.slint
-msgid "Cancel"
-msgstr ""
-
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-msgid "Play"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
