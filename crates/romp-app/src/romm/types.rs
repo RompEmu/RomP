@@ -88,6 +88,11 @@ pub struct Platform {
     pub rom_count: i64,
     #[serde(default)]
     pub category: Option<String>,
+    /// From RomM 5.4: a short name such as "MD", and others the console goes by.
+    #[serde(default)]
+    pub abbreviation: String,
+    #[serde(default)]
+    pub alternative_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

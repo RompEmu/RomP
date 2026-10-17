@@ -1154,7 +1154,9 @@ pub(crate) mod tests {
         Mock::given(method("GET"))
             .and(path("/api/platforms"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
-                {"id": 47, "slug": "zxs", "display_name": "ZX Spectrum", "rom_count": 3, "name": "ZX Spectrum"}
+                {"id": 47, "slug": "zxs", "display_name": "ZX Spectrum", "rom_count": 3, "name": "ZX Spectrum"},
+                {"id": 3, "slug": "genesis", "display_name": "Sega Genesis", "rom_count": 9,
+                 "abbreviation": "MD", "alternative_names": ["Mega Drive"]}
             ])))
             .mount(&server)
             .await;
@@ -1164,10 +1166,13 @@ pub(crate) mod tests {
             .mount(&server)
             .await;
         let client = authed(&server);
-        assert_eq!(
-            client.platforms().await.unwrap()[0].display_name,
-            "ZX Spectrum"
-        );
+        let platforms = client.platforms().await.unwrap();
+        assert_eq!(platforms[0].display_name, "ZX Spectrum");
+        // RomM before 5.4 sends neither, and 5.4 sends both.
+        assert_eq!(platforms[0].abbreviation, "");
+        assert!(platforms[0].alternative_names.is_empty());
+        assert_eq!(platforms[1].abbreviation, "MD");
+        assert_eq!(platforms[1].alternative_names, ["Mega Drive"]);
         assert_eq!(client.rom_ids().await.unwrap(), vec![1, 2, 3]);
     }
 

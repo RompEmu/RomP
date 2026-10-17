@@ -12,6 +12,8 @@ pub struct PlatformItem {
     pub slug: String,
     pub name: String,
     pub count: i64,
+    /// RomM's short name for the console and the others it goes by.
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -245,6 +247,14 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 11 {
+            conn.execute_batch(
+                "BEGIN;
+                 ALTER TABLE platforms ADD COLUMN aliases TEXT;
+                 PRAGMA user_version = 11;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -271,13 +281,20 @@ impl Store {
     }
 
     pub fn replace_platforms(&mut self, platforms: &[Platform]) {
+        fn aliases_json(p: &Platform) -> String {
+            let aliases: Vec<&String> = std::iter::once(&p.abbreviation)
+                .filter(|a| !a.is_empty())
+                .chain(&p.alternative_names)
+                .collect();
+            serde_json::to_string(&aliases).expect("aliases serialize")
+        }
         let tx = self.conn.transaction().expect("tx");
         tx.execute("DELETE FROM platforms", [])
             .expect("clear platforms");
         for p in platforms {
             tx.execute(
-                "INSERT INTO platforms (id, slug, name, category) VALUES (?1, ?2, ?3, ?4)",
-                params![p.id, p.slug, p.display_name, p.category],
+                "INSERT INTO platforms (id, slug, name, category, aliases) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![p.id, p.slug, p.display_name, p.category, aliases_json(p)],
             )
             .expect("insert platform");
         }
@@ -348,7 +365,7 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT p.id, p.slug, p.name, COUNT(g.id) FROM platforms p
+                "SELECT p.id, p.slug, p.name, COUNT(g.id), p.aliases FROM platforms p
                  JOIN games g ON g.platform_id = p.id
                  WHERE ?1 = 0 OR g.local_path IS NOT NULL
                  GROUP BY p.id ORDER BY p.name COLLATE NOCASE",
@@ -360,6 +377,7 @@ impl Store {
                 slug: r.get(1)?,
                 name: r.get(2)?,
                 count: r.get(3)?,
+                aliases: json_column(r.get(4)?),
             })
         })
         .expect("query")
@@ -800,6 +818,8 @@ mod tests {
             display_name: name.into(),
             rom_count: 0,
             category: None,
+            abbreviation: String::new(),
+            alternative_names: Vec::new(),
         }
     }
 
@@ -997,13 +1017,15 @@ mod tests {
                     id: 2,
                     slug: "game boy".into(),
                     name: "Game Boy".into(),
-                    count: 1
+                    count: 1,
+                    aliases: Vec::new(),
                 },
                 PlatformItem {
                     id: 1,
                     slug: "snes".into(),
                     name: "SNES".into(),
-                    count: 2
+                    count: 2,
+                    aliases: Vec::new(),
                 }
             ]
         );
@@ -1145,7 +1167,8 @@ mod tests {
                 id: 1,
                 slug: "snes".into(),
                 name: "SNES".into(),
-                count: 1
+                count: 1,
+                aliases: Vec::new(),
             }]
         );
     }
@@ -1270,6 +1293,21 @@ mod tests {
     }
 
     #[test]
+    fn platforms_keep_romms_short_and_other_names() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.replace_platforms(&[Platform {
+            abbreviation: "MD".into(),
+            alternative_names: vec!["Mega Drive".into(), "Genesis".into()],
+            ..platform(1, "Sega Genesis")
+        }]);
+        s.upsert_games(&[rom(5, 1, "Comix Zone", "t")]);
+        assert_eq!(
+            s.platforms(false)[0].aliases,
+            ["MD", "Mega Drive", "Genesis"]
+        );
+    }
+
+    #[test]
     fn game_detail_carries_metadata_screenshots_and_category() {
         let mut s = Store::open_in_memory().unwrap();
         s.replace_platforms(&[Platform {
@@ -1307,7 +1345,8 @@ mod tests {
                 .execute_batch(
                     "ALTER TABLE games DROP COLUMN meta; ALTER TABLE games DROP COLUMN screenshots;
                      ALTER TABLE games DROP COLUMN added_at; ALTER TABLE games DROP COLUMN last_played;
-                     ALTER TABLE platforms DROP COLUMN category; PRAGMA user_version = 2;",
+                     ALTER TABLE platforms DROP COLUMN category;
+                     ALTER TABLE platforms DROP COLUMN aliases; PRAGMA user_version = 2;",
                 )
                 .unwrap();
         }

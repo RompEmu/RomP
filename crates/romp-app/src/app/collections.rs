@@ -69,7 +69,7 @@ fn fold(text: &str) -> String {
         .collect()
 }
 
-/// The consoles whose name or RomM slug holds the filter.
+/// The consoles whose name, RomM slug or another name RomM knows holds the filter.
 pub(super) fn filter_platforms<'a>(
     platforms: &'a [PlatformItem],
     filter: &str,
@@ -78,7 +78,11 @@ pub(super) fn filter_platforms<'a>(
     platforms
         .iter()
         .filter(|p| {
-            filter.is_empty() || fold(&p.name).contains(&filter) || fold(&p.slug).contains(&filter)
+            filter.is_empty()
+                || std::iter::once(&p.name)
+                    .chain([&p.slug])
+                    .chain(&p.aliases)
+                    .any(|name| fold(name).contains(&filter))
         })
         .collect()
 }
@@ -721,6 +725,7 @@ mod tests {
             slug: slug.into(),
             name: name.into(),
             count: 1,
+            aliases: Vec::new(),
         }
     }
 
@@ -746,6 +751,25 @@ mod tests {
         assert_eq!(names("POKÉ"), [2]);
         assert_eq!(names(" mega "), [3]);
         assert!(names("xbox").is_empty());
+    }
+
+    #[test]
+    fn consoles_also_match_romms_short_and_other_names() {
+        let consoles = [
+            PlatformItem {
+                aliases: vec!["MD".into(), "Mega Drive".into()],
+                ..console(1, "genesis", "Sega Genesis")
+            },
+            console(2, "snes", "Super Nintendo Entertainment System"),
+        ];
+        let names = |filter: &str| -> Vec<i64> {
+            filter_platforms(&consoles, filter)
+                .iter()
+                .map(|p| p.id)
+                .collect()
+        };
+        assert_eq!(names("mega drive"), [1]);
+        assert_eq!(names("md"), [1]);
     }
 
     #[test]
