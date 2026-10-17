@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-11 10:04\n"
+"PO-Revision-Date: 2026-10-17 17:44\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -160,7 +160,7 @@ msgstr "تحميل آخر قيد التقدم."
 msgid "Connect to your server to download this game."
 msgstr "اتصل بالخادم الخاص بك لتحميل هذه اللعبة."
 
-#: crates/romp-app/src/app/game.rs
+#: crates/romp-app/src/app/game.rs crates/romp-app/src/installs.rs
 msgid "Downloading…"
 msgstr "جاري تحميل…"
 
@@ -223,6 +223,76 @@ msgstr "تعذر بدء اللعبة: {e}"
 #: crates/romp-app/src/app/game.rs
 msgid "Close the running game first."
 msgstr "أغلق اللعبة قيد التشغيل أولاً."
+
+#: crates/romp-app/src/installs.rs
+msgid "{n} more waiting"
+msgid_plural "{n} more waiting"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+msgstr[3] ""
+msgstr[4] ""
+msgstr[5] ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} sent from RomM"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "Waits until you stop playing"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "Downloading · {0}%"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} is ready to play"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} couldn't download"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Library scan finished"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Library scan failed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A task finished"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A task failed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Your stream ended"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Your role changed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A notification channel was turned off"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A game was installed on a device"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A game couldn't be installed on a device"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Notification"
+msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "unknown"
@@ -467,6 +537,14 @@ msgid "Genres"
 msgstr "Genres"
 
 #: crates/romp-app/src/app/collections.rs
+msgid "a collection with that name already exists"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
+msgid "that name is too long"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
 msgid "All games"
 msgstr "جميع الألعاب"
 
@@ -503,6 +581,10 @@ msgstr[5] "مباريات {0}"
 #: crates/romp-app/src/app/collections.rs
 msgid "Platforms"
 msgstr "المنصات"
+
+#: crates/romp-app/src/app/collections.rs
+msgid "No consoles match"
+msgstr ""
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Collections"
@@ -555,6 +637,18 @@ msgstr "تعذر إعادة تسمية \"{0}\": {1}."
 #: crates/romp-app/src/app/collections.rs
 msgid "Couldn't delete \"{0}\": {1}."
 msgstr "تعذر حذف \"{0}\": {1}."
+
+#: crates/romp-app/src/app/installs.rs
+msgid "This game isn't in RomP's library."
+msgstr ""
+
+#: crates/romp-app/src/app/installs.rs
+msgid "A game"
+msgstr ""
+
+#: crates/romp-app/src/app/installs.rs
+msgid "Paused on this device"
+msgstr ""
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "D-pad"
@@ -819,6 +913,10 @@ msgstr "تم إلغاء التحميل"
 #: crates/romp-app/src/download.rs
 msgid "The server sent an invalid file path"
 msgstr "الخادم أرسل مسار ملف غير صالح"
+
+#: crates/romp-app/src/download.rs
+msgid "This copy is in {0}'s own format ({1}), which RomP can't play. A {2} copy of the game would play."
+msgstr ""
 
 #: crates/romp-app/src/external.rs
 msgid "Could not reach GitHub to download {name}"

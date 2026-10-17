@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-11 17:55\n"
+"PO-Revision-Date: 2026-10-17 17:44\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -18,6 +18,14 @@ msgstr ""
 #: crates/romp-app/ui/app.slint
 msgid "Play your RomM library, each game in its own sandboxed emulator."
 msgstr "العب مكتبة ألعابك من RomM، كل لعبة في محاكي معزول خاص بها."
+
+#: crates/romp-app/ui/app.slint
+msgid "Notifications ({0} unread)"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Notifications"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Welcome to {}"
@@ -135,6 +143,24 @@ msgid "On server"
 msgstr "على الخادم"
 
 #: crates/romp-app/ui/app.slint
+msgid "Dismiss"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+msgid "Play"
+msgstr "العب"
+
+#: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+msgid "Cancel"
+msgstr "إلغاء"
+
+#: crates/romp-app/ui/app.slint
+msgid "All games"
+msgstr "جميع الألعاب"
+
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Offline"
 msgstr "غير متصل"
@@ -142,6 +168,14 @@ msgstr "غير متصل"
 #: crates/romp-app/ui/app.slint
 msgid "Syncing…"
 msgstr "مزامنة…"
+
+#: crates/romp-app/ui/app.slint
+msgid "Filter consoles"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Clear filter"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Rename…"
@@ -166,8 +200,16 @@ msgid "Settings"
 msgstr "الإعدادات"
 
 #: crates/romp-app/ui/app.slint
+msgid "Clear filters"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Search games"
 msgstr "البحث في الألعاب"
+
+#: crates/romp-app/ui/app.slint
+msgid "Clear search"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Name"
@@ -214,16 +256,26 @@ msgid "Loading your library…"
 msgstr "جاري تحميل مكتبتك…"
 
 #: crates/romp-app/ui/app.slint
+msgid "No games match."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "No games found."
 msgstr "لم يتم العثور على ألعاب."
 
 #: crates/romp-app/ui/app.slint
-msgid "Cancel"
-msgstr "إلغاء"
+msgid "Dismiss all"
+msgstr ""
 
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-msgid "Play"
-msgstr "العب"
+#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
+msgid "Close"
+msgstr "أغلق"
+
+#: crates/romp-app/ui/app.slint
+msgid "No notifications"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Delete download"
@@ -300,11 +352,6 @@ msgstr "إظهار جميع {} أكثر"
 #: crates/romp-app/ui/app.slint
 msgid "Similar in your library"
 msgstr "مشابهة في مكتبتك"
-
-#: crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
-msgid "Close"
-msgstr "أغلق"
 
 #: crates/romp-app/ui/app.slint
 msgid "General"
@@ -417,6 +464,14 @@ msgstr "الموافقة على هذا الجهاز مرة أخرى، على س�
 #: crates/romp-app/ui/app.slint
 msgid "Pair again"
 msgstr "أعِد الاقتران"
+
+#: crates/romp-app/ui/app.slint
+msgid "Accept games sent from RomM"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Choose this device under Install on device in RomM, and it downloads the game straight away."
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
@@ -614,10 +669,6 @@ msgstr "الترخيص"
 #: crates/romp-app/ui/app.slint
 msgid "GitHub"
 msgstr "GitHub"
-
-#: crates/romp-app/ui/app.slint
-msgid "All games"
-msgstr "جميع الألعاب"
 
 #: crates/romp-app/ui/app.slint
 msgid "Library"
