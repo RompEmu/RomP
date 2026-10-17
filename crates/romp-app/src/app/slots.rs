@@ -98,11 +98,19 @@ impl Controller {
             Some(InGameSaveStatus::FromOtherEmulator(other)) => Some((detail.id, other.clone())),
             _ => None,
         };
+        // An emulator whose states don't bring a game back gets no state slots, only its save.
+        let states = crate::cores::core_for_platform(&detail.platform_slug)
+            .is_none_or(|core| crate::cores::saves_states(core.id));
+        let state_slots = if states {
+            slots::read(&dir, slots::AUTO..=crate::input::SLOTS)
+        } else {
+            Vec::new()
+        };
         let cards: Vec<SlotCard> = in_game
             .map(|status| slots::in_game_card(&status, now))
             .into_iter()
             .chain(
-                slots::read(&dir, slots::AUTO..=crate::input::SLOTS)
+                state_slots
                     .iter()
                     .filter(|info| !info.is_empty())
                     .map(|info| slots::card(info, now, None)),

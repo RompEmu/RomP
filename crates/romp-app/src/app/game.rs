@@ -998,11 +998,14 @@ impl Controller {
         self.preparing.set(false);
         let save_dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
         let prefs = self.prefs.get();
-        let reliable = core_for_platform(&detail.platform_slug)
-            .is_some_and(|core| crate::cores::resumes_reliably(core.id));
+        let states = core_for_platform(&detail.platform_slug)
+            .is_none_or(|core| crate::cores::saves_states(core.id));
+        let reliable = states
+            && core_for_platform(&detail.platform_slug)
+                .is_some_and(|core| crate::cores::resumes_reliably(core.id));
         let achievements = self.achievements_launch(&detail);
         let hardcore = achievements.as_ref().is_some_and(|a| a.hardcore);
-        let requested = self.requested_slot.take().filter(|_| !hardcore);
+        let requested = self.requested_slot.take().filter(|_| !hardcore && states);
         let load_slot = requested.or_else(|| {
             (reliable
                 && prefs.resume
@@ -1033,6 +1036,7 @@ impl Controller {
             prefs,
             load_slot,
             auto_state: reliable,
+            states,
             mappings: self.mappings.clone(),
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
             mouse: core_for_platform(&detail.platform_slug)

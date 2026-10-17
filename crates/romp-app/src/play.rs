@@ -49,6 +49,8 @@ pub struct GameOptions {
     pub prefs: Preferences,
     pub load_slot: Option<u8>,
     pub auto_state: bool,
+    /// Whether the emulator's save states bring a game back; without them there are no slots.
+    pub states: bool,
     pub mappings: Rc<RefCell<Mappings>>,
     pub nintendo: bool,
     pub mouse: bool,
@@ -103,9 +105,18 @@ pub fn run(
     vulkan: bool,
     smoke: Option<PathBuf>,
 ) -> anyhow::Result<()> {
+    let states = core
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_suffix("_libretro"))
+        .is_none_or(crate::cores::saves_states);
     let (smoke, outcome) = match smoke {
         Some(dir) => {
-            let (smoke, outcome) = crate::smoke::Smoke::new(dir.clone(), std::time::Instant::now());
+            let (mut smoke, outcome) =
+                crate::smoke::Smoke::new(dir.clone(), std::time::Instant::now());
+            if !states {
+                smoke.skip_states();
+            }
             (Some(smoke), Some((outcome, dir)))
         }
         None => (None, None),
@@ -144,7 +155,8 @@ pub fn run(
             players: Rc::default(),
             prefs: Preferences::default(),
             load_slot: None,
-            auto_state: true,
+            auto_state: states,
+            states,
             mappings: Rc::default(),
             nintendo: false,
             mouse: false,
@@ -227,6 +239,7 @@ struct Game {
     _awake: crate::awake::Awake,
     achievement_list: RefCell<Vec<romp_proto::msg::AchievementInfo>>,
     hardcore: Cell<bool>,
+    states: bool,
     save_dir: PathBuf,
     slots_open: Cell<bool>,
     slots_focus: Cell<u8>,
@@ -635,7 +648,18 @@ impl Game {
         }
     }
 
+    /// Says so when the emulator can't save states, and then does nothing.
+    fn without_states(&self) -> bool {
+        if !self.states {
+            flash(self.primary(), tr!("This emulator can't save states"));
+        }
+        !self.states
+    }
+
     fn open_slots(&self) {
+        if self.without_states() {
+            return;
+        }
         self.slots_open.set(true);
         self.slots_focus.set(self.controls.borrow().slot());
         self.slots_load.set(false);
@@ -678,6 +702,9 @@ impl Game {
 
     /// Saves to `slot`, which becomes the current one, with a picture of the game as it is now.
     fn save_slot(&self, slot: u8) {
+        if self.without_states() {
+            return;
+        }
         self.controls.borrow_mut().set_slot(slot);
         self.thumbnail_wanted.set(Some(slot));
         self.send(&AppMsg::SaveSlot(slot));
@@ -753,6 +780,9 @@ impl Game {
 
     /// Hardcore mode never loads a state; the runner refuses too, this explains why nothing happened.
     fn load_slot(&self, slot: u8) {
+        if self.without_states() {
+            return;
+        }
         if self.hardcore.get() {
             return flash(
                 self.primary(),
@@ -1244,6 +1274,7 @@ pub fn launch(
         auto_state: opts.auto_state,
     };
     let session = Session::start(&cfg)?;
+    let states = opts.states;
 
     let ui = GameWindow::new()?;
     if !crate::i18n::applied() {
@@ -1255,6 +1286,7 @@ pub fn launch(
     ui.set_menu_key(if opts.computer { "F12" } else { "Esc" }.into());
     ui.set_has_achievements(tracks_achievements);
     ui.set_hardcore(hardcore);
+    ui.set_states(states);
     ui.set_achievements_label(tr!("Not started yet").into());
     {
         let mappings = opts.mappings.borrow();
@@ -1352,6 +1384,7 @@ pub fn launch(
             _awake: crate::awake::Awake::begin(),
             achievement_list: RefCell::default(),
             hardcore: Cell::new(hardcore),
+            states,
             save_dir: opts.save_dir.clone(),
             slots_open: Cell::new(false),
             slots_focus: Cell::new(1),

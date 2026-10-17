@@ -6,7 +6,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Added
 
-- PICO-8 carts play, on the FAKE-08 core, with save states. RomP downloads it from RompEmu's own build of FAKE-08 for macOS, Windows and Linux, since libretro doesn't build it.
+- PICO-8 carts play, `.p8` and `.p8.png`, on the FAKE-08 core. RomP downloads it from RompEmu's own build of FAKE-08 for macOS, Windows and Linux, since libretro doesn't build it. Carts keep their own saved progress, but there are no save states yet: FAKE-08's would bring back the screen without the game.
 
 ## [0.17.0] - 2026-10-17
 

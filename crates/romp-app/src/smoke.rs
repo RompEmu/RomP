@@ -28,6 +28,7 @@ pub struct Smoke {
     dir: PathBuf,
     deadline: Instant,
     saving: bool,
+    states: bool,
     outcome: Outcome,
 }
 
@@ -38,9 +39,15 @@ impl Smoke {
             dir,
             deadline: now + TIMEOUT,
             saving: false,
+            states: true,
             outcome: outcome.clone(),
         };
         (smoke, outcome)
+    }
+
+    /// For an emulator that can't save states: frames that aren't blank are the whole test.
+    pub fn skip_states(&mut self) {
+        self.states = false;
     }
 
     fn done(&self) -> bool {
@@ -88,6 +95,9 @@ impl Smoke {
             });
         if let Err(e) = written {
             return self.end(Err(e));
+        }
+        if !self.states {
+            return self.end(Ok(()));
         }
         self.saving = true;
         Step::SaveState
@@ -153,6 +163,17 @@ mod tests {
         );
         std::fs::write(crate::slots::state_path(dir.path(), SLOT), b"state").unwrap();
         assert_eq!(smoke.state_written(SLOT, true, dir.path()), Step::Finish);
+        assert_eq!(*outcome.borrow(), Some(Ok(())));
+    }
+
+    #[test]
+    fn a_core_without_states_passes_on_its_frames() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut smoke, outcome) = Smoke::new(dir.path().join("out"), Instant::now());
+        smoke.skip_states();
+        let blue = frame([30, 60, 200, 255]);
+        assert_eq!(smoke.frame(&blue, 4, 4, FRAMES), Step::Finish);
+        assert!(dir.path().join("out").join(FRAME_FILE).is_file());
         assert_eq!(*outcome.borrow(), Some(Ok(())));
     }
 

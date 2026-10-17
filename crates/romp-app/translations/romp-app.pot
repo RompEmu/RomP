@@ -743,6 +743,10 @@ msgid "Save states"
 msgstr ""
 
 #: crates/romp-app/ui/game.slint
+msgid "Save states  ·  Not with this emulator"
+msgstr ""
+
+#: crates/romp-app/ui/game.slint
 msgid "Look  ·  {}"
 msgstr ""
 

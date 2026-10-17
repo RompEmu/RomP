@@ -233,6 +233,7 @@ component GameMenu inherits Rectangle {
     callback take-screenshot();
     callback open-controllers();
     callback quit();
+    in property <bool> states: true;
     in property <bool> has-achievements;
     in property <string> achievements-label;
     in property <bool> hardcore;
@@ -342,9 +343,9 @@ component GameMenu inherits Rectangle {
                 }
             }
             MenuRow {
-                text: @tr("Save states");
+                text: root.states ? @tr("Save states") : @tr("Save states  ·  Not with this emulator");
                 icon: @image-url("icons/save.svg");
-                shortcut: root.keyboard ? root.save-key + " / " + root.load-key : "";
+                shortcut: root.keyboard && root.states ? root.save-key + " / " + root.load-key : "";
                 focused: root.focused-item == 3;
                 clicked => { root.open-slots(); }
             }
@@ -547,6 +548,7 @@ export component GameWindow inherits Window {
     in property <string> progress-detail;
     in property <image> progress-badge;
     in property <bool> has-progress-badge;
+    in property <bool> states: true;
     in property <bool> has-achievements;
     in property <string> achievements-label;
     in property <bool> achievements-open;

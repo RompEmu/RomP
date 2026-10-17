@@ -315,6 +315,12 @@ const NINTENDO: [&str; 11] = [
     "virtualboy",
 ];
 
+/// FAKE-08 offers save states, but upstream turned off saving the cart's Lua state, so one
+/// brings back only the screen and memory while the game carries on where it was.
+pub fn saves_states(core_id: &str) -> bool {
+    core_id != FAKE08.id
+}
+
 pub fn resumes_reliably(core_id: &str) -> bool {
     core_id != "play"
 }
@@ -909,6 +915,8 @@ mod tests {
     #[test]
     fn play_does_not_resume_from_automatic_saves() {
         assert!(!resumes_reliably("play"));
+        assert!(!saves_states("fake08"));
+        assert!(saves_states("snes9x") && saves_states("play"));
         assert!(resumes_reliably("snes9x"));
     }
 

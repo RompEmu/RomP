@@ -1179,6 +1179,10 @@ msgid "Couldn't save the screenshot: {e}"
 msgstr ""
 
 #: crates/romp-app/src/play.rs
+msgid "This emulator can't save states"
+msgstr ""
+
+#: crates/romp-app/src/play.rs
 msgid "Loading states is off in hardcore mode"
 msgstr ""
 
