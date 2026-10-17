@@ -447,6 +447,14 @@ msgid "Genres"
 msgstr ""
 
 #: crates/romp-app/src/app/collections.rs
+msgid "a collection with that name already exists"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
+msgid "that name is too long"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
 msgid "All games"
 msgstr ""
 

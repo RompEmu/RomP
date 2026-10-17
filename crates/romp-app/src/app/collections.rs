@@ -35,6 +35,15 @@ pub(super) enum DialogAction {
     Delete(String),
 }
 
+/// RomM 5.4 answers a name that's taken with 409 and one over 400 characters with 422.
+fn collection_error(e: &Error) -> String {
+    match e {
+        Error::Conflict => tr!("a collection with that name already exists"),
+        Error::Status(422) => tr!("that name is too long"),
+        e => e.to_string(),
+    }
+}
+
 fn initial_of(name: &str) -> String {
     name.chars()
         .find(|c| c.is_alphanumeric())
@@ -512,7 +521,10 @@ impl Controller {
     ) {
         let created = match result {
             Ok(created) => created,
-            Err(e) => return self.report(tr!("Couldn't create the collection: {e}.", e)),
+            Err(e) => {
+                let e = collection_error(&e);
+                return self.report(tr!("Couldn't create the collection: {e}.", e));
+            }
         };
         let kind = if favorite {
             CollectionKind::Favorites
@@ -644,7 +656,11 @@ impl Controller {
                         .unwrap()
                         .rename_collection(&key, &item.name);
                     c.collections_changed(&key);
-                    c.report(tr!("Couldn't rename \"{0}\": {1}.", item.name, e));
+                    c.report(tr!(
+                        "Couldn't rename \"{0}\": {1}.",
+                        item.name,
+                        collection_error(&e)
+                    ));
                 }
             });
         });
@@ -736,6 +752,22 @@ mod tests {
     fn the_heading_names_a_console_the_sidebar_is_not_showing() {
         let names = vec![("p:3".to_string(), "Super Nintendo".to_string())];
         assert_eq!(heading_for("p:3", &names), "Super Nintendo");
+    }
+
+    #[test]
+    fn collection_name_errors_say_what_was_wrong() {
+        assert_eq!(
+            collection_error(&Error::Conflict),
+            "a collection with that name already exists"
+        );
+        assert_eq!(
+            collection_error(&Error::Status(422)),
+            "that name is too long"
+        );
+        assert_eq!(
+            collection_error(&Error::Unreachable),
+            Error::Unreachable.to_string()
+        );
     }
 
     #[test]
