@@ -97,13 +97,14 @@ RomP downloads the emulator for each system the first time you play one of its g
 | Sony PlayStation 2 | PCSX2 on Windows and Linux, [ARMSX2](https://github.com/RompEmu/ARMSX2) on macOS |
 | Sony PlayStation 3 | RPCS3 |
 | Sony PSP | PPSSPP |
+| PICO-8 | [FAKE-08](https://github.com/RompEmu/fake-08) |
 | TIC-80 | TIC-80 |
 | Vectrex | Vecx |
 | Watara Supervision | Potator |
 | Microsoft Xbox | xemu |
 | ZX Spectrum | Fuse |
 
-All emulators except xemu and RPCS3 are [libretro](https://www.libretro.com) cores. Dolphin, PPSSPP, Flycast, Beetle PSX HW, Mupen64Plus-Next and the PS2 emulators draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. On macOS, Vulkan comes from the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which RomP takes from your RomM server's firmware. PS3 games need the PS3 system software (`PS3UPDAT.PUP`) in RomM's PS3 firmware, and play from a game folder or an ISO, or a zip or 7z of one.
+All emulators except xemu and RPCS3 are [libretro](https://www.libretro.com) cores. ARMSX2 and FAKE-08 aren't built by libretro, so RomP downloads them from RompEmu's own forks, which build them for each platform. Dolphin, PPSSPP, Flycast, Beetle PSX HW, Mupen64Plus-Next and the PS2 emulators draw through Vulkan when the computer has a working Vulkan driver, and through OpenGL otherwise. On macOS, Vulkan comes from the bundled [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Some systems need BIOS files, which RomP takes from your RomM server's firmware. PS3 games need the PS3 system software (`PS3UPDAT.PUP`) in RomM's PS3 firmware, and play from a game folder or an ISO, or a zip or 7z of one.
 
 ## Running
 
