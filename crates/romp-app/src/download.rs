@@ -86,6 +86,11 @@ fn is_archive(path: &Path) -> bool {
         || head.get(257..262) == Some(b"ustar")
 }
 
+/// Whether a download would find the file already in place and fetch nothing.
+pub async fn already_there(path: &Path, sha1: Option<&str>, size: Option<u64>) -> bool {
+    tokio::fs::metadata(path).await.is_ok() && matches(path, sha1, size).await
+}
+
 async fn matches(path: &Path, sha1: Option<&str>, size: Option<u64>) -> bool {
     let owned = path.to_path_buf();
     let archive = tokio::task::spawn_blocking(move || is_archive(&owned))

@@ -4,7 +4,7 @@ use crate::bios;
 use crate::cores::core_for_platform;
 use crate::details;
 use crate::download::DownloadError;
-use crate::fetch::download_game;
+use crate::fetch::download_files;
 use crate::paths;
 use crate::play::{self, CoreIdentity, GameOptions};
 use crate::restore::{game_window_key, Placement};
@@ -427,8 +427,10 @@ impl Controller {
                 }
             };
             let roms = paths::server_roms_dir(client.base().as_str());
-            let mut result =
-                download_game(&client, id, &roms, only.as_deref(), &progress, &cancel).await;
+            let downloaded =
+                download_files(&client, id, &roms, only.as_deref(), &progress, &cancel).await;
+            let fetched = downloaded.as_ref().is_ok_and(|d| d.fetched);
+            let mut result = downloaded.map(|d| d.launch);
             if let Ok(path) = &result {
                 if detail.platform_slug == rpcs3::PLATFORM && rpcs3::is_archive(path) {
                     on_ui(move |c| c.game_status(id, tr!("Unpacking…")));
@@ -464,7 +466,7 @@ impl Controller {
                     }
                 };
             }
-            on_ui(move |c| c.download_finished(id, result, missing));
+            on_ui(move |c| c.download_finished(id, result, missing, fetched));
         });
     }
 
@@ -488,6 +490,7 @@ impl Controller {
         id: i64,
         result: Result<PathBuf, DownloadError>,
         missing: Vec<String>,
+        fetched: bool,
     ) {
         let origin = self
             .downloading
@@ -495,7 +498,7 @@ impl Controller {
             .take()
             .map_or(Origin::Page, |(_, _, origin)| origin);
         let outcome = match &result {
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(fetched),
             Err(DownloadError::Cancelled) => Err(None),
             Err(e) => Err(Some(e.to_string())),
         };

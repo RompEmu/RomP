@@ -1,6 +1,6 @@
 //! Games sent from RomM's "Install on device": heard over the device socket, claimed, and
 //! downloaded one at a time through the same path as the game page's Download.
-use super::game::{downloaded_path, Origin};
+use super::game::Origin;
 use super::{on_ui, Controller};
 use crate::installs::Cancelled;
 use crate::romm::client::InstallOutcome;
@@ -162,11 +162,7 @@ impl Controller {
             return self.install_finished(request.id, Err(Some(reason)));
         };
         self.install_awaiting_sync.borrow_mut().take();
-        if downloaded_path(&detail).is_some() {
-            self.report_install(&request, InstallOutcome::AlreadyInstalled, None);
-            self.installs.borrow_mut().finish();
-            return self.pump_installs();
-        }
+        // Files already here aren't fetched again; nothing fetched reports as already installed.
         self.show_install_status(&detail.title, 0);
         let only = (!request.file_ids.is_empty()).then(|| request.file_ids.clone());
         self.start_download(detail, Origin::Install(request.id), only);
@@ -188,8 +184,12 @@ impl Controller {
         }
     }
 
-    /// `Err(None)` is a cancelled download, which RomM already ended.
-    pub(super) fn install_finished(&self, request_id: String, outcome: Result<(), Option<String>>) {
+    /// `Ok(fetched)`: whether anything had to be downloaded. `Err(None)`: the download stopped.
+    pub(super) fn install_finished(
+        &self,
+        request_id: String,
+        outcome: Result<bool, Option<String>>,
+    ) {
         let request = self
             .installs
             .borrow()
@@ -199,8 +199,13 @@ impl Controller {
         let romm_cancelled = self.installs.borrow().cancelled_by_romm(&request_id);
         self.installs.borrow_mut().finish();
         let status = match (&outcome, &request) {
-            (Ok(()), Some(request)) => {
-                self.report_install(request, InstallOutcome::Done, None);
+            (Ok(fetched), Some(request)) => {
+                let outcome = if *fetched {
+                    InstallOutcome::Done
+                } else {
+                    InstallOutcome::AlreadyInstalled
+                };
+                self.report_install(request, outcome, None);
                 String::new()
             }
             (Err(Some(reason)), Some(request)) => {
