@@ -151,6 +151,10 @@ msgid "Cancel"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "All games"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Offline"
 msgstr ""
@@ -684,10 +688,6 @@ msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "GitHub"
-msgstr ""
-
-#: crates/romp-app/ui/app.slint
-msgid "All games"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint

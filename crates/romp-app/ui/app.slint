@@ -770,46 +770,53 @@ component Library inherits Rectangle {
                 padding-left: root.compact ? 8px : 12px;
                 padding-right: root.compact ? 8px : 12px;
                 spacing: 6px;
-                HorizontalLayout {
-                    padding-left: Locale.rtl || root.compact ? 0 : 4px;
-                    padding-right: Locale.rtl && !root.compact ? 4px : 0;
-                    padding-bottom: 10px;
-                    spacing: 10px;
-                    alignment: root.compact ? center : stretch;
-                    if !Locale.rtl || root.compact: AppTile {
-                        icon: root.app-icon;
-                        has-icon: root.has-app-icon;
-                        if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
-                    }
-                    if !root.compact: VerticalLayout {
-                        horizontal-stretch: 1;
-                        alignment: center;
-                        spacing: 2px;
-                        Text { horizontal-alignment: Locale.start; text: Brand.name; font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
-                        Row {
-                            spacing: 6px;
-                            VerticalLayout {
-                                alignment: center;
-                                Rectangle {
-                                    width: 7px;
-                                    height: 7px;
-                                    border-radius: 3.5px;
-                                    background: root.offline ? Theme.warning : root.syncing ? Theme.accent : Theme.success;
+                // The title leads home: All games, with every filter cleared.
+                Rectangle {
+                    accessible-role: button;
+                    accessible-label: @tr("All games");
+                    accessible-action-default => { root.clear-filters(); }
+                    TouchArea { mouse-cursor: pointer; clicked => { root.clear-filters(); } }
+                    HorizontalLayout {
+                        padding-left: Locale.rtl || root.compact ? 0 : 4px;
+                        padding-right: Locale.rtl && !root.compact ? 4px : 0;
+                        padding-bottom: 10px;
+                        spacing: 10px;
+                        alignment: root.compact ? center : stretch;
+                        if !Locale.rtl || root.compact: AppTile {
+                            icon: root.app-icon;
+                            has-icon: root.has-app-icon;
+                            if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
+                        }
+                        if !root.compact: VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+                            Text { horizontal-alignment: Locale.start; text: Brand.name; font-size: Theme.font-subtitle; font-weight: 700; color: Theme.text-strong; }
+                            Row {
+                                spacing: 6px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 7px;
+                                        height: 7px;
+                                        border-radius: 3.5px;
+                                        background: root.offline ? Theme.warning : root.syncing ? Theme.accent : Theme.success;
+                                    }
+                                }
+                                Text { horizontal-alignment: Locale.start;
+                                    text: root.offline ? @tr("Offline") : root.syncing ? @tr("Syncing…") : root.server-label;
+                                    font-size: Theme.font-caption;
+                                    color: Theme.text-muted;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
                                 }
                             }
-                            Text { horizontal-alignment: Locale.start;
-                                text: root.offline ? @tr("Offline") : root.syncing ? @tr("Syncing…") : root.server-label;
-                                font-size: Theme.font-caption;
-                                color: Theme.text-muted;
-                                overflow: elide;
-                                horizontal-stretch: 1;
-                            }
                         }
-                    }
-                    if Locale.rtl && !root.compact: AppTile {
-                        icon: root.app-icon;
-                        has-icon: root.has-app-icon;
-                        if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
+                        if Locale.rtl && !root.compact: AppTile {
+                            icon: root.app-icon;
+                            has-icon: root.has-app-icon;
+                            if root.compact: Tooltip { text: @markdown("\{Brand.name} · \{root.offline ? @tr("Offline") : root.server-label}"); }
+                        }
                     }
                 }
                 // Spaced from the rows below as the title is from it, and inset like them.
