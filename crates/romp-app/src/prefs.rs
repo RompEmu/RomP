@@ -18,6 +18,8 @@ pub struct Preferences {
     /// 0 follows the system, then English, then `i18n::LANGUAGES` in order.
     pub language: u8,
     pub check_updates: bool,
+    /// Whether RomP offers itself under RomM's "Install on device", and downloads what comes.
+    pub accept_installs: bool,
 }
 
 impl Default for Preferences {
@@ -32,6 +34,7 @@ impl Default for Preferences {
             achievement_corner: 0,
             language: 0,
             check_updates: true,
+            accept_installs: true,
         }
     }
 }
@@ -74,6 +77,13 @@ mod tests {
         assert!(!p.fullscreen);
         assert_eq!(p.volume, 100);
         assert!(p.check_updates);
+    }
+
+    #[test]
+    fn games_sent_from_romm_are_accepted_unless_turned_off() {
+        assert!(Preferences::default().accept_installs);
+        assert!(Preferences::from_json(Some("{}")).accept_installs);
+        assert!(!Preferences::from_json(Some(r#"{"accept_installs":false}"#)).accept_installs);
     }
 
     #[test]

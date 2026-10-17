@@ -443,6 +443,16 @@ msgid "Pair again"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Accept games sent from RomM"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid ""
+"Choose this device under Install on device in RomM, and it downloads the "
+"game straight away."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Sign out"
 msgstr ""

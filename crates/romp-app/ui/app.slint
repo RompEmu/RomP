@@ -1710,6 +1710,7 @@ component SettingsPage inherits FocusScope {
     in-out property <bool> resume;
     in-out property <bool> fullscreen;
     in-out property <bool> check-updates;
+    in-out property <bool> accept-installs;
     in-out property <float> volume;
     in-out property <int> ui-scale;
     in property <[string]> languages;
@@ -1858,6 +1859,12 @@ component SettingsPage inherits FocusScope {
                                 label: @tr("Device access");
                                 detail: @tr("Approve this device again, for example after an update that needs new permissions.");
                                 Button { text: @tr("Pair again"); enabled: !root.offline; clicked => { root.pair-again(); } }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: @tr("Accept games sent from RomM");
+                                detail: @tr("Choose this device under Install on device in RomM, and it downloads the game straight away.");
+                                Switch { checked <=> root.accept-installs; toggled => { root.prefs-changed(); } }
                             }
                             SettingRow {
                                 divider: true;
@@ -2426,6 +2433,7 @@ export component AppWindow inherits Window {
     in-out property <bool> pref-resume;
     in-out property <bool> pref-fullscreen;
     in-out property <bool> pref-check-updates;
+    in-out property <bool> pref-accept-installs;
     in-out property <float> pref-volume;
     in-out property <int> pref-achievement-popups;
     in-out property <int> pref-achievement-corner;
@@ -2761,6 +2769,7 @@ export component AppWindow inherits Window {
             resume <=> root.pref-resume;
             fullscreen <=> root.pref-fullscreen;
             check-updates <=> root.pref-check-updates;
+            accept-installs <=> root.pref-accept-installs;
             volume <=> root.pref-volume;
             ui-scale <=> root.pref-ui-scale;
             languages: root.pref-languages;

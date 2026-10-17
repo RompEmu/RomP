@@ -48,6 +48,7 @@ impl Controller {
         ui.set_pref_resume(prefs.resume);
         ui.set_pref_fullscreen(prefs.fullscreen);
         ui.set_pref_check_updates(prefs.check_updates);
+        ui.set_pref_accept_installs(prefs.accept_installs);
         ui.set_pref_volume(f32::from(prefs.volume));
         let names = |list: &[&str]| {
             ModelRc::new(VecModel::from(
@@ -103,6 +104,7 @@ impl Controller {
             achievement_corner: index_within(ui.get_pref_achievement_corner(), &popups::CORNERS),
             language: u8::try_from(ui.get_pref_language()).unwrap_or(0),
             check_updates: ui.get_pref_check_updates(),
+            accept_installs: ui.get_pref_accept_installs(),
         };
         let before = self.prefs.get();
         if prefs == before {
