@@ -5178,6 +5178,7 @@ dependencies = [
  "clap",
  "dirs",
  "dunce",
+ "futures-util",
  "getrandom 0.4.3",
  "glow 0.17.0",
  "httpdate",
@@ -5196,6 +5197,8 @@ dependencies = [
  "romp-proto",
  "rspolib",
  "rusqlite",
+ "rustls",
+ "rustls-platform-verifier",
  "sdl3",
  "sdl3-sys",
  "serde",
@@ -5209,6 +5212,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-tungstenite",
  "toml",
  "tr",
  "tracing",
@@ -6354,7 +6358,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
  "windows-sys 0.61.2",
@@ -6544,6 +6548,22 @@ checksum = "b0c85f2c3ef0b1cd58b36682f4b17aaa995f0e5db534d85692b4903abce21f67"
 dependencies = [
  "rustls",
  "tokio",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
+dependencies = [
+ "futures-util",
+ "log",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
+ "tokio",
+ "tokio-rustls",
+ "tungstenite",
 ]
 
 [[package]]
@@ -6750,6 +6770,24 @@ name = "ttf-parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
+
+[[package]]
+name = "tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e48ac77174b19c110a50ab2128b24215ac9cb40e0e12e093fb602d175c569d22"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand",
+ "rustls",
+ "rustls-pki-types",
+ "sha1",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "typed-index-collections"
