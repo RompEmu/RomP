@@ -825,7 +825,7 @@ mod tests {
             "blank text doesn't count"
         );
         assert!(filters_active("zelda", "", "all"));
-        assert!(filters_active("", "nin", "all"));
+        assert!(filters_active("", "nintendo", "all"));
         assert!(filters_active("", "", "p:3"));
         assert!(filters_active("", "", RECENT_KEY));
     }
