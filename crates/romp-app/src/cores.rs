@@ -5,6 +5,13 @@ use std::path::PathBuf;
 pub const BUILDBOT: &str = "https://buildbot.libretro.com/nightly";
 pub const ARMSX2_RELEASE: &str = "https://github.com/RompEmu/ARMSX2/releases/latest/download";
 const ARMSX2_ASSET: &str = "armsx2_libretro-macos-arm64.zip";
+pub const FAKE08_RELEASE: &str = "https://github.com/RompEmu/fake-08/releases/latest/download";
+#[cfg(target_os = "macos")]
+const FAKE08_ASSET: &str = "fake08_libretro-macos-arm64.zip";
+#[cfg(windows)]
+const FAKE08_ASSET: &str = "fake08_libretro-windows-x86_64.zip";
+#[cfg(not(any(target_os = "macos", windows)))]
+const FAKE08_ASSET: &str = "fake08_libretro-linux-x86_64.zip";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CoreInfo {
@@ -19,6 +26,21 @@ const fn core(id: &'static str, name: &'static str, lib: &'static str, jit: bool
 }
 
 const ARMSX2: CoreInfo = core("armsx2", "ARMSX2", "armsx2_libretro", true);
+const FAKE08: CoreInfo = core("fake08", "FAKE-08", "fake08_libretro", false);
+
+/// Cores the libretro buildbot doesn't build, published from RompEmu's own forks:
+/// (core, where its releases are, this computer's file).
+const RELEASED: [(&CoreInfo, &str, &str); 2] = [
+    (&ARMSX2, ARMSX2_RELEASE, ARMSX2_ASSET),
+    (&FAKE08, FAKE08_RELEASE, FAKE08_ASSET),
+];
+
+fn released(core: &CoreInfo) -> Option<(&'static str, &'static str)> {
+    RELEASED
+        .iter()
+        .find(|(c, _, _)| c.id == core.id)
+        .map(|(_, base, asset)| (*base, *asset))
+}
 
 #[cfg(target_os = "macos")]
 const PS2: CoreInfo = ARMSX2;
@@ -191,6 +213,7 @@ static CORES: &[(&[&str], CoreInfo)] = &[
         &["tic-80"],
         core("tic80", "TIC-80", "tic80_libretro", false),
     ),
+    (&["pico"], FAKE08),
     (
         &["c64"],
         core("vice_x64sc", "VICE x64sc", "vice_x64sc_libretro", false),
@@ -347,18 +370,13 @@ pub fn uses_vulkan(core_id: &str) -> bool {
 }
 
 pub fn download_base(core: &CoreInfo) -> &'static str {
-    if core.id == ARMSX2.id {
-        ARMSX2_RELEASE
-    } else {
-        BUILDBOT
-    }
+    released(core).map_or(BUILDBOT, |(base, _)| base)
 }
 
 fn core_url(base: &str, core: &CoreInfo) -> String {
-    if core.id == ARMSX2.id {
-        format!("{base}/{ARMSX2_ASSET}")
-    } else {
-        buildbot_url(base, core)
+    match released(core) {
+        Some((_, asset)) => format!("{base}/{asset}"),
+        None => buildbot_url(base, core),
     }
 }
 
@@ -594,7 +612,7 @@ impl Cores {
         base: &str,
         core: &CoreInfo,
     ) -> bool {
-        if core.id != ARMSX2.id {
+        if released(core).is_none() {
             return false;
         }
         let Some(manifest) = std::fs::read(self.dir.join(core.id).join("manifest.json"))
@@ -642,7 +660,7 @@ impl Cores {
             .unwrap_or("nightly")
             .to_string();
         let zip_bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-        if core.id == ARMSX2.id {
+        if released(core).is_some() {
             version = published_checksum(http, &url).await?;
             if !version.eq_ignore_ascii_case(&sha256_hex(&zip_bytes)) {
                 return Err(tr::tr!("The core download did not match its checksum"));
@@ -803,6 +821,25 @@ mod tests {
         if cfg!(target_os = "macos") {
             assert_eq!(core_for_platform("ps2").unwrap().id, "armsx2");
         }
+    }
+
+    #[test]
+    fn pico8_plays_on_fake08_from_romps_own_release() {
+        let fake08 = core_for_platform("pico").unwrap();
+        assert_eq!((fake08.id, fake08.lib), ("fake08", "fake08_libretro"));
+        assert_eq!(download_base(fake08), FAKE08_RELEASE);
+        let asset = if cfg!(target_os = "macos") {
+            "fake08_libretro-macos-arm64.zip"
+        } else if cfg!(windows) {
+            "fake08_libretro-windows-x86_64.zip"
+        } else {
+            "fake08_libretro-linux-x86_64.zip"
+        };
+        assert_eq!(core_url("https://x", fake08), format!("https://x/{asset}"));
+        assert_eq!(
+            core_url("https://x", core_for_platform("snes").unwrap()),
+            buildbot_url("https://x", core_for_platform("snes").unwrap())
+        );
     }
 
     async fn armsx2_release(zip: Vec<u8>, checksum: String) -> MockServer {
