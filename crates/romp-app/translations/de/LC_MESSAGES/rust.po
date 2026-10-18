@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-11 10:04\n"
+"PO-Revision-Date: 2026-10-18 13:10\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
 "Language: de_DE\n"
@@ -152,7 +152,7 @@ msgstr "Ein weiterer Download ist im Gange."
 msgid "Connect to your server to download this game."
 msgstr "Verbinde dich mit deinem Server, um dieses Spiel herunterzuladen."
 
-#: crates/romp-app/src/app/game.rs
+#: crates/romp-app/src/app/game.rs crates/romp-app/src/installs.rs
 msgid "Downloading…"
 msgstr "Herunterladen…"
 
@@ -215,6 +215,72 @@ msgstr "Das Spiel konnte nicht gestartet werden: {e}"
 #: crates/romp-app/src/app/game.rs
 msgid "Close the running game first."
 msgstr "Schließe zuerst das laufende Spiel."
+
+#: crates/romp-app/src/installs.rs
+msgid "{n} more waiting"
+msgid_plural "{n} more waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} sent from RomM"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "Waits until you stop playing"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "Downloading · {0}%"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} is ready to play"
+msgstr ""
+
+#: crates/romp-app/src/installs.rs
+msgid "{0} couldn't download"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Library scan finished"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Library scan failed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A task finished"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A task failed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Your stream ended"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Your role changed"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A notification channel was turned off"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A game was installed on a device"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "A game couldn't be installed on a device"
+msgstr ""
+
+#: crates/romp-app/src/notifications.rs
+msgid "Notification"
+msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs
 msgid "unknown"
@@ -447,6 +513,14 @@ msgid "Genres"
 msgstr "Genres"
 
 #: crates/romp-app/src/app/collections.rs
+msgid "a collection with that name already exists"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
+msgid "that name is too long"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
 msgid "All games"
 msgstr "Alle Spiele"
 
@@ -479,6 +553,10 @@ msgstr[1] "{0} Spiele"
 #: crates/romp-app/src/app/collections.rs
 msgid "Platforms"
 msgstr "Plattformen"
+
+#: crates/romp-app/src/app/collections.rs
+msgid "No consoles match"
+msgstr ""
 
 #: crates/romp-app/src/app/collections.rs
 msgid "Collections"
@@ -531,6 +609,18 @@ msgstr "Konnte \"{0}nicht umbenennen \": {1}."
 #: crates/romp-app/src/app/collections.rs
 msgid "Couldn't delete \"{0}\": {1}."
 msgstr "Konnte \"{0}nicht löschen: {1}."
+
+#: crates/romp-app/src/app/installs.rs
+msgid "This game isn't in RomP's library."
+msgstr ""
+
+#: crates/romp-app/src/app/installs.rs
+msgid "A game"
+msgstr ""
+
+#: crates/romp-app/src/app/installs.rs
+msgid "Paused on this device"
+msgstr ""
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "D-pad"
@@ -795,6 +885,10 @@ msgstr "Download abgebrochen"
 #: crates/romp-app/src/download.rs
 msgid "The server sent an invalid file path"
 msgstr "Der Server hat einen ungültigen Dateipfad gesendet"
+
+#: crates/romp-app/src/download.rs
+msgid "This copy is in {0}'s own format ({1}), which RomP can't play. A {2} copy of the game would play."
+msgstr ""
 
 #: crates/romp-app/src/external.rs
 msgid "Could not reach GitHub to download {name}"
@@ -1083,6 +1177,10 @@ msgstr "Screenshot gespeichert"
 #: crates/romp-app/src/play.rs
 msgid "Couldn't save the screenshot: {e}"
 msgstr "Screenshot konnte nicht gespeichert werden: {e}"
+
+#: crates/romp-app/src/play.rs
+msgid "This emulator can't save states"
+msgstr ""
 
 #: crates/romp-app/src/play.rs
 msgid "Loading states is off in hardcore mode"
