@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-18
+
 ### Added
 
 - PICO-8 carts play, `.p8` and `.p8.png`, on the FAKE-08 core. RomP downloads it from RompEmu's own build of FAKE-08 for macOS, Windows and Linux, since libretro doesn't build it. Carts keep their own saved progress, but there are no save states yet: FAKE-08's would bring back the screen without the game.
@@ -287,7 +289,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/RompEmu/RomP/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/RompEmu/RomP/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/RompEmu/RomP/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/RompEmu/RomP/compare/v0.14.0...v0.15.0
