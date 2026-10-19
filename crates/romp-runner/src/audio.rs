@@ -11,16 +11,25 @@ pub type AudioProducer = Prod<Arc<HeapRb<i16>>>;
 type AudioConsumer = Cons<Arc<HeapRb<i16>>>;
 
 pub struct AudioOutput {
+    pub rate: u32,
     _stream: cubeb::Stream<StereoFrame<i16>>,
     _ctx: Context,
 }
 
-pub fn open(
-    sample_rate: u32,
-    capacity_samples: usize,
-) -> anyhow::Result<(AudioOutput, AudioProducer)> {
+/// Opens the device at its own rate, so RomP does any conversion rather than the system: Windows
+/// warbles when handed a rate such as mGBA's 131072 Hz.
+pub fn open(core_rate: u32, buffer_ms: usize) -> anyhow::Result<(AudioOutput, AudioProducer)> {
     let context_name = CString::new("RomP")?;
     let ctx = Context::init(Some(context_name.as_c_str()), None)?;
+    let sample_rate = match ctx.preferred_sample_rate() {
+        Ok(rate) if rate > 0 => rate,
+        Ok(_) => core_rate,
+        Err(e) => {
+            warn!("preferred_sample_rate failed: {e}; using the core's {core_rate} Hz");
+            core_rate
+        }
+    };
+    let capacity_samples = sample_rate as usize * 2 * buffer_ms / 1000;
     let params = StreamParamsBuilder::new()
         .format(SampleFormat::S16NE)
         .rate(sample_rate)
@@ -72,11 +81,13 @@ pub fn open(
     stream.start()?;
     info!(
         rate = sample_rate,
+        core_rate,
         latency = min_latency,
         "cubeb stream started"
     );
     Ok((
         AudioOutput {
+            rate: sample_rate,
             _stream: stream,
             _ctx: ctx,
         },

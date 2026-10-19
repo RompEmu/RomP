@@ -1,5 +1,5 @@
 use crate::audio::AudioProducer;
-use crate::resample::{apply_volume, RateControl, Resampler};
+use crate::resample::{apply_volume, LowPass, RateControl, Resampler};
 use parking_lot::Mutex;
 use ringbuf::traits::{Observer, Producer};
 use std::sync::Arc;
@@ -10,6 +10,9 @@ const PUSH_TIMEOUT: Duration = Duration::from_millis(500);
 pub struct AudioPipe {
     producer: Option<AudioProducer>,
     resampler: Resampler,
+    low_pass: LowPass,
+    /// Device frames per core frame, before the rate control nudges it.
+    conversion: f64,
     rate: RateControl,
     volume: u8,
     frames: u64,
@@ -20,6 +23,8 @@ impl Default for AudioPipe {
         Self {
             producer: None,
             resampler: Resampler::default(),
+            low_pass: LowPass::new(1.0, 1.0),
+            conversion: 1.0,
             rate: RateControl::default(),
             volume: 100,
             frames: 0,
@@ -32,6 +37,11 @@ pub type SharedAudio = Arc<Mutex<AudioPipe>>;
 impl AudioPipe {
     pub fn set_producer(&mut self, producer: AudioProducer) {
         self.producer = Some(producer);
+    }
+
+    pub fn set_rates(&mut self, core: u32, device: u32) {
+        self.conversion = f64::from(device) / f64::from(core);
+        self.low_pass = LowPass::new(f64::from(core), f64::from(device));
     }
 
     pub fn set_volume(&mut self, volume: u8) {
@@ -65,13 +75,18 @@ pub fn push(audio: &SharedAudio, samples: &[i16]) -> usize {
         }
         let ratio = {
             let fill = pipe.fill();
-            pipe.rate.ratio(fill)
+            pipe.rate.ratio(fill) * pipe.conversion
         };
         let AudioPipe {
-            resampler, volume, ..
+            resampler,
+            low_pass,
+            volume,
+            ..
         } = &mut *pipe;
-        let mut out = Vec::with_capacity(samples.len() + samples.len() / 8 + 4);
-        resampler.process(samples, ratio, &mut out);
+        let mut smooth = Vec::with_capacity(samples.len());
+        low_pass.process(samples, &mut smooth);
+        let mut out = Vec::with_capacity((samples.len() as f64 * ratio) as usize + 8);
+        resampler.process(&smooth, ratio, &mut out);
         apply_volume(&mut out, *volume);
         out
     };
@@ -136,6 +151,20 @@ mod tests {
         assert_eq!(frames, 1);
         assert!(fill > 0.0);
         assert_eq!(audio.lock().take_stats().0, 0);
+    }
+
+    #[test]
+    fn a_core_rate_the_device_lacks_is_converted() {
+        let (producer, mut consumer) = ring(1 << 18);
+        let audio: SharedAudio = Arc::default();
+        audio.lock().set_producer(producer);
+        audio.lock().set_rates(131_072, 48_000);
+        for _ in 0..60 {
+            push(&audio, &[100; 2 * 131_072 / 60]);
+        }
+        let mut out = vec![0i16; 1 << 18];
+        let frames = consumer.pop_slice(&mut out) / 2;
+        assert!((47_000..53_000).contains(&frames), "{frames}");
     }
 
     #[test]
