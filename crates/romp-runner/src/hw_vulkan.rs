@@ -94,6 +94,31 @@ struct Readback {
     memory: vk::DeviceMemory,
     size: u64,
     mapped: *const u8,
+    coherent: bool,
+}
+
+/// Picks the memory type for reading frames back, and whether it's coherent. Cached system RAM comes
+/// first: memory the CPU can't cache, such as VRAM behind Resizable BAR, takes ages to read.
+fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u32, bool)> {
+    use vk::MemoryPropertyFlags as F;
+    let visible = F::HOST_VISIBLE;
+    let cached = F::HOST_VISIBLE | F::HOST_CACHED;
+    let wanted = [
+        (cached | F::HOST_COHERENT, false),
+        (cached, false),
+        (visible | F::HOST_COHERENT, false),
+        (visible | F::HOST_COHERENT, true),
+    ];
+    wanted.iter().find_map(|&(needs, vram_ok)| {
+        (0..types.len() as u32)
+            .find(|&i| {
+                let flags = types[i as usize];
+                allowed & (1 << i) != 0
+                    && flags.contains(needs)
+                    && (vram_ok || !flags.contains(F::DEVICE_LOCAL))
+            })
+            .map(|i| (i, types[i as usize].contains(F::HOST_COHERENT)))
+    })
 }
 
 struct DeviceState {
@@ -338,14 +363,11 @@ impl HwVulkanContext {
             self.instance
                 .get_physical_device_memory_properties(state.gpu)
         };
-        let wanted = vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
-        let type_index = (0..memory_types.memory_type_count)
-            .find(|&i| {
-                needs.memory_type_bits & (1 << i) != 0
-                    && memory_types.memory_types[i as usize]
-                        .property_flags
-                        .contains(wanted)
-            })
+        let flags: Vec<_> = memory_types.memory_types[..memory_types.memory_type_count as usize]
+            .iter()
+            .map(|t| t.property_flags)
+            .collect();
+        let (type_index, coherent) = readback_memory(&flags, needs.memory_type_bits)
             .ok_or_else(|| anyhow::anyhow!("no host-visible Vulkan memory"))?;
         let memory = unsafe {
             device.allocate_memory(
@@ -357,12 +379,14 @@ impl HwVulkanContext {
         }?;
         unsafe { device.bind_buffer_memory(buffer, memory, 0) }?;
         let mapped =
-            unsafe { device.map_memory(memory, 0, size, vk::MemoryMapFlags::empty()) }?.cast();
+            unsafe { device.map_memory(memory, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty()) }?
+                .cast();
         state.readback = Some(Readback {
             buffer,
             memory,
             size,
             mapped,
+            coherent,
         });
         Ok(mapped)
     }
@@ -471,6 +495,13 @@ impl HwVulkanContext {
         unsafe {
             device.wait_for_fences(&[state.fence], true, u64::MAX)?;
             device.reset_fences(&[state.fence])?;
+        }
+        let readback = state.readback.as_ref().expect("readback buffer");
+        if !readback.coherent {
+            let range = vk::MappedMemoryRange::default()
+                .memory(readback.memory)
+                .size(vk::WHOLE_SIZE);
+            unsafe { device.invalidate_mapped_memory_ranges(&[range]) }?;
         }
         // SAFETY: the mapping holds at least `size` bytes and the fence says the copy finished.
         let raw = unsafe { std::slice::from_raw_parts(mapped, size as usize) };
@@ -740,6 +771,34 @@ impl HwContextProvider for HwVulkanContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // As an AMD card with Resizable BAR lists them: VRAM, VRAM the CPU can see, then system RAM.
+    const AMD_REBAR: [vk::MemoryPropertyFlags; 4] = [
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        vk::MemoryPropertyFlags::from_raw(0b0111),
+        vk::MemoryPropertyFlags::from_raw(0b0110),
+        vk::MemoryPropertyFlags::from_raw(0b1110),
+    ];
+
+    #[test]
+    fn readback_avoids_vram_the_cpu_reads_slowly() {
+        assert_eq!(readback_memory(&AMD_REBAR, !0), Some((3, true)));
+    }
+
+    #[test]
+    fn readback_takes_cached_memory_that_needs_invalidating() {
+        let types = [
+            vk::MemoryPropertyFlags::from_raw(0b0110),
+            vk::MemoryPropertyFlags::from_raw(0b1010),
+        ];
+        assert_eq!(readback_memory(&types, !0), Some((1, false)));
+    }
+
+    #[test]
+    fn readback_falls_back_to_any_coherent_memory() {
+        assert_eq!(readback_memory(&AMD_REBAR, 0b0110), Some((2, true)));
+        assert_eq!(readback_memory(&AMD_REBAR, 0b0001), None);
+    }
 
     fn one(format: vk::Format, raw: &[u8]) -> [u8; 4] {
         let out = to_bgra(format, raw).expect("supported format");
