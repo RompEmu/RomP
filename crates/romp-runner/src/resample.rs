@@ -91,6 +91,65 @@ impl Resampler {
     }
 }
 
+/// Cuts what a lower device rate can't carry before resampling down, so it doesn't fold back as noise.
+pub struct LowPass {
+    taps: Vec<f32>,
+    history: Vec<[f32; 2]>,
+    next: usize,
+}
+
+impl LowPass {
+    const TAPS: usize = 63;
+
+    pub fn new(from: f64, to: f64) -> Self {
+        if to >= from {
+            return Self {
+                taps: vec![1.0],
+                history: vec![[0.0; 2]],
+                next: 0,
+            };
+        }
+        // Below the device's Nyquist, leaving room for the filter's roll-off.
+        let cutoff = 0.42 * to / from;
+        let middle = (Self::TAPS - 1) as f64 / 2.0;
+        let mut taps: Vec<f64> = (0..Self::TAPS)
+            .map(|n| {
+                let x = n as f64 - middle;
+                let sinc = if x == 0.0 {
+                    1.0
+                } else {
+                    let a = std::f64::consts::TAU * cutoff * x;
+                    a.sin() / a
+                };
+                let w = std::f64::consts::TAU * n as f64 / (Self::TAPS - 1) as f64;
+                sinc * (0.42 - 0.5 * w.cos() + 0.08 * (2.0 * w).cos())
+            })
+            .collect();
+        let sum: f64 = taps.iter().sum();
+        taps.iter_mut().for_each(|t| *t /= sum);
+        Self {
+            taps: taps.into_iter().map(|t| t as f32).collect(),
+            history: vec![[0.0; 2]; Self::TAPS],
+            next: 0,
+        }
+    }
+
+    pub fn process(&mut self, input: &[i16], out: &mut Vec<i16>) {
+        let len = self.taps.len();
+        for frame in input.as_chunks::<2>().0 {
+            self.history[self.next] = [f32::from(frame[0]), f32::from(frame[1])];
+            self.next = (self.next + 1) % len;
+            let mut acc = [0.0f32; 2];
+            for (k, tap) in self.taps.iter().enumerate() {
+                let h = self.history[(self.next + k) % len];
+                acc[0] += h[0] * tap;
+                acc[1] += h[1] * tap;
+            }
+            out.extend(acc.map(|v| v.round().clamp(-32768.0, 32767.0) as i16));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,6 +228,54 @@ mod tests {
             control.ratio(TARGET_FILL);
         }
         assert!((control.ratio(TARGET_FILL) - 1.0).abs() < 1e-9);
+    }
+
+    fn tone(hz: f64, rate: f64, frames: usize) -> Vec<i16> {
+        (0..frames)
+            .flat_map(|i| {
+                let s = (8000.0 * (std::f64::consts::TAU * hz * i as f64 / rate).sin()) as i16;
+                [s, s]
+            })
+            .collect()
+    }
+
+    fn rms(samples: &[i16]) -> f64 {
+        (samples.iter().map(|&s| f64::from(s).powi(2)).sum::<f64>() / samples.len() as f64).sqrt()
+    }
+
+    fn filtered(input: &[i16], from: f64, to: f64) -> Vec<i16> {
+        let mut out = Vec::new();
+        LowPass::new(from, to).process(input, &mut out);
+        out
+    }
+
+    #[test]
+    fn low_pass_keeps_what_the_device_can_play() {
+        let input = tone(1000.0, 131_072.0, 8192);
+        let out = filtered(&input, 131_072.0, 48_000.0);
+        assert_eq!(out.len(), input.len());
+        let ratio = rms(&out[1024..]) / rms(&input[1024..]);
+        assert!((0.97..1.03).contains(&ratio), "{ratio}");
+    }
+
+    #[test]
+    fn low_pass_removes_what_would_fold_back_as_noise() {
+        let input = tone(40_000.0, 131_072.0, 8192);
+        let out = filtered(&input, 131_072.0, 48_000.0);
+        let ratio = rms(&out[1024..]) / rms(&input[1024..]);
+        assert!(ratio < 0.02, "{ratio}");
+    }
+
+    #[test]
+    fn low_pass_is_continuous_across_batches() {
+        let input = tone(5000.0, 131_072.0, 1000);
+        let whole = filtered(&input, 131_072.0, 48_000.0);
+        let mut lp = LowPass::new(131_072.0, 48_000.0);
+        let mut split = Vec::new();
+        for chunk in input.chunks(2 * 37) {
+            lp.process(chunk, &mut split);
+        }
+        assert_eq!(split, whole);
     }
 
     #[test]
