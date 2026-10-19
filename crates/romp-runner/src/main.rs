@@ -204,10 +204,11 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let sample_rate = av.timing.sample_rate.round() as u32;
     let buffer_ms: usize = if cfg!(target_os = "macos") { 250 } else { 500 };
     // Without a sound device the game still plays, silently, at the same pace.
-    let _audio = match audio::open(sample_rate, sample_rate as usize * 2 * buffer_ms / 1000) {
+    let _audio = match audio::open(sample_rate, buffer_ms) {
         Ok((output, producer)) => {
             let mut pipe = frontend.audio.lock();
             pipe.set_producer(producer);
+            pipe.set_rates(sample_rate, output.rate);
             pipe.set_volume(args.volume);
             Some(output)
         }
