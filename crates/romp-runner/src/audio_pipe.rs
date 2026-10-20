@@ -1,5 +1,5 @@
 use crate::audio::AudioProducer;
-use crate::resample::{apply_volume, LowPass, RateControl, Resampler};
+use crate::resample::{apply_volume, LowPass, RateControl, Resampler, TARGET_FILL};
 use parking_lot::Mutex;
 use ringbuf::traits::{Observer, Producer};
 use std::sync::Arc;
@@ -42,6 +42,18 @@ impl AudioPipe {
     pub fn set_rates(&mut self, core: u32, device: u32) {
         self.conversion = f64::from(device) / f64::from(core);
         self.low_pass = LowPass::new(f64::from(core), f64::from(device));
+    }
+
+    /// Tops the buffer up with silence, at the start and after a pause has let it run dry, so the
+    /// sound doesn't have to be stretched to catch up.
+    pub fn refill(&mut self) {
+        let Some(producer) = self.producer.as_mut() else {
+            return;
+        };
+        let target = (producer.capacity().get() as f32 * TARGET_FILL) as usize & !1;
+        let missing = target.saturating_sub(producer.occupied_len());
+        producer.push_slice(&vec![0; missing]);
+        self.rate.refilled();
     }
 
     pub fn set_volume(&mut self, volume: u8) {
@@ -165,6 +177,20 @@ mod tests {
         let mut out = vec![0i16; 1 << 18];
         let frames = consumer.pop_slice(&mut out) / 2;
         assert!((47_000..53_000).contains(&frames), "{frames}");
+    }
+
+    #[test]
+    fn refilling_tops_the_buffer_up_to_its_target_with_silence() {
+        let (producer, mut consumer) = ring(1000);
+        let audio: SharedAudio = Arc::default();
+        audio.lock().set_producer(producer);
+        audio.lock().refill();
+        assert!((audio.lock().fill() - TARGET_FILL).abs() < 0.01);
+        audio.lock().refill();
+        let mut out = vec![1i16; 1000];
+        let got = consumer.pop_slice(&mut out);
+        assert_eq!(got, 500);
+        assert!(out[..got].iter().all(|s| *s == 0));
     }
 
     #[test]

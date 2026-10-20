@@ -209,6 +209,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             let mut pipe = frontend.audio.lock();
             pipe.set_producer(producer);
             pipe.set_rates(sample_rate, output.rate);
+            pipe.refill();
             pipe.set_volume(args.volume);
             Some(output)
         }
@@ -245,7 +246,12 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         }
         for msg in link.drain() {
             match msg {
-                AppMsg::Pause(p) => paused = p,
+                AppMsg::Pause(p) => {
+                    if paused && !p {
+                        frontend.audio.lock().refill();
+                    }
+                    paused = p;
+                }
                 AppMsg::Volume(v) => frontend.audio.lock().set_volume(v),
                 AppMsg::Key {
                     code,

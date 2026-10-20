@@ -1,7 +1,7 @@
 use cubeb::{
     ChannelLayout, Context, SampleFormat, StereoFrame, StreamBuilder, StreamParamsBuilder,
 };
-use ringbuf::traits::{Consumer, Producer};
+use ringbuf::traits::Consumer;
 use ringbuf::{Cons, HeapRb, Prod};
 use std::ffi::CString;
 use std::sync::Arc;
@@ -45,16 +45,8 @@ pub fn open(core_rate: u32, buffer_ms: usize) -> anyhow::Result<(AudioOutput, Au
     };
 
     let rb = Arc::new(HeapRb::<i16>::new(capacity_samples));
-    let mut prod: AudioProducer = Prod::new(rb.clone());
+    let prod: AudioProducer = Prod::new(rb.clone());
     let mut cons: AudioConsumer = Cons::new(rb);
-
-    let prefill_frames = (sample_rate as usize / 10).max(2048);
-    let silence = vec![0i16; prefill_frames * 2];
-    let pushed = prod.push_slice(&silence);
-    info!(
-        prefill_samples = pushed,
-        "audio ring prefilled with silence"
-    );
 
     let mut builder = StreamBuilder::<StereoFrame<i16>>::new();
     builder
