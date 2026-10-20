@@ -4,6 +4,14 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-20
+
+### Fixed
+
+- The sound no longer speeds up and slows down for the first minute of a game, or after pausing it or switching away from its window. RomP now starts the sound buffer full enough and tops it up again on resume, and keeps its corrections too small to hear.
+- Games no longer sound warbly on Windows when the emulator's sound rate isn't one the sound card uses, such as mGBA's 131072 Hz: RomP converts it to the card's own rate itself.
+- PlayStation and Nintendo 64 games run at full speed on graphics cards that let the processor see their memory, such as AMD cards with Smart Access Memory, instead of a couple of frames a second.
+
 ## [0.18.0] - 2026-10-18
 
 ### Added
@@ -289,7 +297,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/RompEmu/RomP/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/RompEmu/RomP/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/RompEmu/RomP/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/RompEmu/RomP/compare/v0.15.0...v0.16.0
