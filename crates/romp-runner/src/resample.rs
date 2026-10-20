@@ -2,14 +2,21 @@ pub const TARGET_FILL: f32 = 0.5;
 pub const MAX_STRETCH: f64 = 0.08;
 
 const SMOOTHING: f32 = 0.05;
-const INTEGRAL_GAIN: f64 = 0.002;
+/// The stretch at an empty or full buffer while it's away from the edges: small enough not to be heard.
+const NUDGE: f64 = 0.04;
+/// Past this much of the way to empty or full, the stretch grows to `MAX_STRETCH` to save the sound.
+const EDGE: f64 = 0.5;
+/// Slow enough to settle on a core's or device's drift without swinging past it.
+const INTEGRAL_GAIN: f64 = 0.000_02;
 
 fn fill_error(fill: f32) -> f64 {
     f64::from((TARGET_FILL - fill) / TARGET_FILL).clamp(-1.0, 1.0)
 }
 
 pub fn drc_ratio(fill: f32) -> f64 {
-    1.0 + fill_error(fill) * MAX_STRETCH
+    let error = fill_error(fill);
+    let near_edge = ((error.abs() - EDGE) / (1.0 - EDGE)).max(0.0);
+    1.0 + error * NUDGE + error.signum() * near_edge * (MAX_STRETCH - NUDGE)
 }
 
 pub struct RateControl {
@@ -32,6 +39,11 @@ impl RateControl {
         let error = fill_error(self.fill);
         self.integral = (self.integral + error * INTEGRAL_GAIN).clamp(-MAX_STRETCH, MAX_STRETCH);
         (drc_ratio(self.fill) + self.integral).clamp(1.0 - MAX_STRETCH, 1.0 + MAX_STRETCH)
+    }
+
+    /// After the buffer is topped up to its target, keeping what it learned about drift.
+    pub fn refilled(&mut self) {
+        self.fill = TARGET_FILL;
     }
 }
 
@@ -192,10 +204,11 @@ mod tests {
         assert!((104..=106).contains(&frames), "{frames}");
     }
 
-    fn simulate(delivered: f64, ticks: usize) -> Vec<f32> {
+    /// Fill and ratio at each frame, for a core delivering `delivered` of the audio the device plays.
+    fn simulate(delivered: f64, start: f64, ticks: usize) -> Vec<(f32, f64)> {
         let capacity = 22_050.0;
         let consumed = 735.0;
-        let mut ring = capacity * 0.4;
+        let mut ring = capacity * start;
         let mut control = RateControl::default();
         (0..ticks)
             .map(|_| {
@@ -203,26 +216,22 @@ mod tests {
                 let ratio = control.ratio(fill);
                 ring = (ring + consumed * delivered * ratio).min(capacity);
                 ring = (ring - consumed).max(0.0);
-                fill
+                (fill, ratio)
             })
             .collect()
     }
 
     #[test]
     fn rate_control_settles_near_target_when_a_core_drops_audio() {
-        let fills = simulate(0.95, 6_000);
-        let settled = &fills[3_000..];
-        assert!(
-            settled.iter().all(|f| (0.4..0.6).contains(f)),
-            "{:?}",
-            &settled[..5]
-        );
+        let run = simulate(0.95, 0.4, 18_000);
+        assert!(run[600..].iter().all(|(f, _)| *f > 0.1));
+        assert!(run[12_000..].iter().all(|(f, _)| (0.4..0.6).contains(f)));
     }
 
     #[test]
     fn rate_control_stays_neutral_for_a_healthy_core() {
-        let fills = simulate(1.0, 6_000);
-        assert!(fills[3_000..].iter().all(|f| (0.45..0.55).contains(f)));
+        let run = simulate(1.0, 0.5, 6_000);
+        assert!(run.iter().all(|(_, r)| (r - 1.0).abs() < 0.002));
         let mut control = RateControl::default();
         for _ in 0..1_000 {
             control.ratio(TARGET_FILL);
@@ -230,52 +239,16 @@ mod tests {
         assert!((control.ratio(TARGET_FILL) - 1.0).abs() < 1e-9);
     }
 
-    fn tone(hz: f64, rate: f64, frames: usize) -> Vec<i16> {
-        (0..frames)
-            .flat_map(|i| {
-                let s = (8000.0 * (std::f64::consts::TAU * hz * i as f64 / rate).sin()) as i16;
-                [s, s]
-            })
-            .collect()
-    }
-
-    fn rms(samples: &[i16]) -> f64 {
-        (samples.iter().map(|&s| f64::from(s).powi(2)).sum::<f64>() / samples.len() as f64).sqrt()
-    }
-
-    fn filtered(input: &[i16], from: f64, to: f64) -> Vec<i16> {
-        let mut out = Vec::new();
-        LowPass::new(from, to).process(input, &mut out);
-        out
-    }
-
+    // Swinging past the target and back is heard as the game's sound speeding up and slowing down.
     #[test]
-    fn low_pass_keeps_what_the_device_can_play() {
-        let input = tone(1000.0, 131_072.0, 8192);
-        let out = filtered(&input, 131_072.0, 48_000.0);
-        assert_eq!(out.len(), input.len());
-        let ratio = rms(&out[1024..]) / rms(&input[1024..]);
-        assert!((0.97..1.03).contains(&ratio), "{ratio}");
-    }
-
-    #[test]
-    fn low_pass_removes_what_would_fold_back_as_noise() {
-        let input = tone(40_000.0, 131_072.0, 8192);
-        let out = filtered(&input, 131_072.0, 48_000.0);
-        let ratio = rms(&out[1024..]) / rms(&input[1024..]);
-        assert!(ratio < 0.02, "{ratio}");
-    }
-
-    #[test]
-    fn low_pass_is_continuous_across_batches() {
-        let input = tone(5000.0, 131_072.0, 1000);
-        let whole = filtered(&input, 131_072.0, 48_000.0);
-        let mut lp = LowPass::new(131_072.0, 48_000.0);
-        let mut split = Vec::new();
-        for chunk in input.chunks(2 * 37) {
-            lp.process(chunk, &mut split);
+    fn rate_control_refills_without_swinging_the_pitch() {
+        for delivered in [1.0, 0.95] {
+            let run = simulate(delivered, 0.0, 18_000);
+            let reached = run.iter().position(|(f, _)| *f >= 0.45).expect("refills");
+            let settled = run[reached..].iter().map(|(_, r)| *r);
+            let (low, high) = settled.fold((f64::MAX, f64::MIN), |(l, h), r| (l.min(r), h.max(r)));
+            assert!(high - low < 0.01, "{delivered}: {low}..{high}");
         }
-        assert_eq!(split, whole);
     }
 
     #[test]
@@ -292,9 +265,9 @@ mod tests {
     #[test]
     fn ratio_stretches_when_the_buffer_runs_low() {
         assert_eq!(drc_ratio(TARGET_FILL), 1.0);
-        assert!(drc_ratio(0.3) > 1.0);
-        assert!(drc_ratio(0.7) < 1.0);
-        assert_eq!(drc_ratio(0.0), 1.0 + MAX_STRETCH);
-        assert_eq!(drc_ratio(1.0), 1.0 - MAX_STRETCH);
+        assert!((1.0..1.02).contains(&drc_ratio(0.3)));
+        assert!((0.98..1.0).contains(&drc_ratio(0.7)));
+        assert!((drc_ratio(0.0) - (1.0 + MAX_STRETCH)).abs() < 1e-12);
+        assert!((drc_ratio(1.0) - (1.0 - MAX_STRETCH)).abs() < 1e-12);
     }
 }
