@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Fixed
+
+- DOS games' in-game saves sync with RomM, so they carry over to and from Argosy. DOSBox Pure keeps them in a `.pure.zip` of its own rather than in save memory, which RomP didn't pick up.
+
 ## [0.18.1] - 2026-10-20
 
 ### Fixed
