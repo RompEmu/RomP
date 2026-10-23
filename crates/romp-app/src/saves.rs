@@ -312,6 +312,10 @@ impl GameSaves {
     }
 
     fn remote_sram_name(&self) -> String {
+        // Argosy tells its DOS save apart from others by the game file's name.
+        if let Some(stem) = self.save_file.strip_suffix(DOS_SAVE) {
+            return format!("{stem}.zip");
+        }
         let clean: String = self
             .title
             .chars()
@@ -1202,6 +1206,19 @@ mod tests {
             in_game_save("dosbox_pure", dir.path(), Some(rom)).0,
             "Strike Commander (CD).pure.zip"
         );
+    }
+
+    #[test]
+    fn a_dos_save_goes_up_named_after_the_game_file_as_argosy_names_it() {
+        let game = GameSaves {
+            rom_id: 3,
+            dir: PathBuf::from("/saves/3"),
+            title: "Strike Commander: CD".into(),
+            emulator: "dosbox_pure".into(),
+            save_file: "Strike Commander (1993).pure.zip".into(),
+            save_emulator: "dosbox_pure".into(),
+        };
+        assert_eq!(game.remote_sram_name(), "Strike Commander (1993).zip");
     }
 
     #[test]
