@@ -13,6 +13,33 @@ pub fn md5_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// A save's hash as RomM records it: a zip hashes by its entries' names and contents, so it
+/// matches RomM's however the zip was packed.
+pub fn content_hash(bytes: &[u8]) -> String {
+    zip_hash(bytes).unwrap_or_else(|| md5_hex(bytes))
+}
+
+fn zip_hash(bytes: &[u8]) -> Option<String> {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(io::Cursor::new(bytes)).ok()?;
+    let mut lines = Vec::new();
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).ok()?;
+        if entry.is_dir() {
+            continue;
+        }
+        let mut contents = Vec::new();
+        entry.read_to_end(&mut contents).ok()?;
+        lines.push((entry.name().ok()?.to_string(), md5_hex(&contents)));
+    }
+    lines.sort();
+    let lines: Vec<String> = lines
+        .into_iter()
+        .map(|(name, hash)| format!("{name}:{hash}"))
+        .collect();
+    Some(md5_hex(lines.join("\n").as_bytes()))
+}
+
 pub fn file_iso_mtime(path: &Path) -> Option<String> {
     let modified = std::fs::metadata(path).ok()?.modified().ok()?;
     Some(crate::sync::iso_utc(modified))
@@ -440,7 +467,9 @@ pub fn matching_server_save(
 }
 
 pub fn local_md5(game: &GameSaves) -> Option<String> {
-    std::fs::read(game.sram_path()).ok().map(|b| md5_hex(&b))
+    std::fs::read(game.sram_path())
+        .ok()
+        .map(|b| content_hash(&b))
 }
 
 /// Remembers the in-game save as it is now as the one that matches RomM's.
@@ -490,7 +519,7 @@ async fn download_into(
     let bytes = client.download_save(save_id, device_id, None).await?;
     let outcome = install_download(game, &bytes)?;
     if let Err(e) = client
-        .confirm_save_download(save_id, device_id, &md5_hex(&bytes))
+        .confirm_save_download(save_id, device_id, &content_hash(&bytes))
         .await
     {
         tracing::debug!("RomM didn't take the download confirmation: {e}");
@@ -541,7 +570,7 @@ pub async fn sync_sram(
     last_synced: Option<&InGameSaveRecord>,
 ) -> Result<SramOutcome, Error> {
     let local = std::fs::read(game.sram_path()).ok();
-    let local_md5 = local.as_deref().map(md5_hex);
+    let local_md5 = local.as_deref().map(content_hash);
     let listed = client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?;
     let server = newest(for_emulator(listed, &game.save_emulator));
     let action = sram_action(
@@ -980,6 +1009,44 @@ mod tests {
         assert_eq!(md5_hex(b"abc"), "900150983cd24fb0d6963f7d28e17f72");
     }
 
+    fn zipped(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for (name, bytes) in entries {
+            if name.ends_with('/') {
+                zip.add_directory(*name, zip::write::SimpleFileOptions::default())
+                    .unwrap();
+            } else {
+                zip.start_file(*name, zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                zip.write_all(bytes).unwrap();
+            }
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn a_plain_save_hashes_as_its_bytes() {
+        assert_eq!(content_hash(b"abc"), md5_hex(b"abc"));
+    }
+
+    #[test]
+    fn a_zipped_save_hashes_by_what_is_inside_as_romm_does() {
+        let bytes = zipped(&[
+            ("SAVE/", b""),
+            ("SAVE/GAME1.SAV", b"one"),
+            ("SAVE/GAME1", b"two"),
+            ("FILEMODS.DBP", b"mods"),
+        ]);
+        let lines = format!(
+            "FILEMODS.DBP:{}\nSAVE/GAME1:{}\nSAVE/GAME1.SAV:{}",
+            md5_hex(b"mods"),
+            md5_hex(b"two"),
+            md5_hex(b"one")
+        );
+        assert_eq!(content_hash(&bytes), md5_hex(lines.as_bytes()));
+    }
+
     #[test]
     fn mtime_is_iso_utc() {
         let dir = tempfile::tempdir().unwrap();
@@ -1220,6 +1287,30 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let outcome = sync_sram(&client(&server), "dev", &game(dir.path()), None).await;
             assert_eq!(outcome.unwrap(), SramOutcome::InSync);
+        }
+
+        #[tokio::test]
+        async fn a_zipped_save_matching_romms_is_in_sync() {
+            let server = MockServer::start().await;
+            let bytes = super::zipped(&[("SAVE.DAT", b"progress")]);
+            listed(
+                &server,
+                json!([remote(
+                    4,
+                    &content_hash(&bytes),
+                    "2026-10-08T09:00:00+00:00"
+                )]),
+            )
+            .await;
+            uploads(&server, 200, 0).await;
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(SRAM_FILE), &bytes).unwrap();
+            let outcome = sync_sram(&client(&server), "dev", &game(dir.path()), None).await;
+            assert_eq!(outcome.unwrap(), SramOutcome::InSync);
+            assert_eq!(
+                local_md5(&game(dir.path())).as_deref(),
+                Some(content_hash(&bytes).as_str())
+            );
         }
 
         #[tokio::test]

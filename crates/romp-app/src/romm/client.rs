@@ -599,7 +599,7 @@ impl Client {
             ("device_id", upload.device_id.to_string()),
             ("overwrite", upload.overwrite.to_string()),
             // RomM 5.4 records it as the version this device holds; older RomM ignores it.
-            ("content_hash", crate::saves::md5_hex(&upload.bytes)),
+            ("content_hash", crate::saves::content_hash(&upload.bytes)),
         ];
         if let Some(session) = upload.session_id {
             query.push(("session_id", session.to_string()));
