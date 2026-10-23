@@ -76,6 +76,7 @@ body:
       description: |
         Play the game until the problem happens and quit. Then in RomP open **About RomP**, choose **Copy the last game's log** and paste it here. It's the part of the log from `── Playing` to `── Stopped playing` for that game, with what its emulator reported.
         Or choose **Show log** and drag the whole `romp.log` here.
+        **Xbox and PS3 games** run in xemu and RPCS3, separately from RomP, so Copy the last game's log skips them. For those, choose **Show log** and drag the whole `romp.log` here. It has what RomP did, though not what xemu or RPCS3 reported themselves.
         The log can include your server's address, game names and folder paths. Look it over first if that matters to you. It never includes your passwords or sign-in tokens.
   - type: textarea
     id: more
