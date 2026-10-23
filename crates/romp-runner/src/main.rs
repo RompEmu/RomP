@@ -57,8 +57,11 @@ fn parse_option(s: &str) -> Result<(String, String), String> {
 }
 
 fn main() -> anyhow::Result<()> {
+    // The app writes these lines into its own log, which adds the time.
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
+        .with_ansi(false)
+        .without_time()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )

@@ -222,7 +222,7 @@ fn spawn_log_reader(stderr: ChildStderr, tail: Arc<Mutex<VecDeque<String>>>) -> 
         while matches!(reader.read_until(b'\n', &mut raw), Ok(n) if n > 0) {
             let line = String::from_utf8_lossy(&raw).trim_end().to_string();
             raw.clear();
-            eprintln!("[runner] {line}");
+            tracing::info!(target: "runner", "{line}");
             let mut tail = tail.lock().unwrap();
             if tail.len() == LOG_TAIL {
                 tail.pop_front();
