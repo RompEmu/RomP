@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in RomP doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. If a particular game won't start or plays badly, the **A game doesn't play right** form asks for what helps with that.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Signing in or connecting to RomM
+        - Library, search or game pages
+        - Downloads
+        - Save sync
+        - Controllers, keyboard or mouse
+        - RetroAchievements
+        - Settings
+        - Updates
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what RomP did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen
+      placeholder: |
+        1. Open …
+        2. Choose …
+        3. …
+  - type: input
+    id: version
+    attributes:
+      label: RomP version
+      description: "Shown in About RomP: Help → About RomP, or the ⓘ button."
+      placeholder: "0.18.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed RomP
+      options:
+        - Download from the releases page
+        - Homebrew
+        - AppImage
+        - .deb
+        - .rpm
+        - tar.gz
+        - Nightly build
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: "macOS 15.5, Windows 11 24H2, Fedora 42 …"
+    validations:
+      required: true
+  - type: input
+    id: romm
+    attributes:
+      label: RomM version
+      placeholder: "5.4.0"
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        In RomP, open **About RomP → Show log**, and drag `romp.log` here. If RomP has been restarted since the problem, the earlier launches are `romp.1.log`, `romp.2.log` and so on.
+        The log can include your server's address, game names and folder paths. Look it over first if that matters to you. It never includes your passwords or sign-in tokens.
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, or anything you've already tried.

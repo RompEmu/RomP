@@ -1,0 +1,22 @@
+name: Idea or request
+description: Something RomP could do, or a system or emulator it could support.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like RomP to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What it would let you do, and how you manage without it now.
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: For a new system, which emulator plays it well, if you know. Screenshots or examples from other apps are welcome too.

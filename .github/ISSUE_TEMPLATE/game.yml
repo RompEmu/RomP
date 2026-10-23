@@ -1,0 +1,83 @@
+name: A game doesn't play right
+description: A game won't start, runs slowly, or has problems with its picture, sound, controls or saves.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. RomP doesn't include any games, so please don't attach game files or BIOS files, or link to them.
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: "Nintendo 64, PlayStation 2, DOS …"
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name, and its file type on RomM.
+      placeholder: "Super Mario 64 (USA), .z64"
+    validations:
+      required: true
+  - type: dropdown
+    id: problem
+    attributes:
+      label: What goes wrong
+      multiple: true
+      options:
+        - It won't start
+        - It runs slowly or the speed jumps around
+        - Picture
+        - Sound
+        - Controls
+        - In-game saves or save states
+        - RomP or the game closes
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see or hear, when it starts, and what you expected. If RomP showed an error, copy it here.
+    validations:
+      required: true
+  - type: dropdown
+    id: elsewhere
+    attributes:
+      label: Does the game play right elsewhere?
+      description: For example in RetroArch with the same emulator, or in RomM's web player.
+      options:
+        - "Yes"
+        - "No, it has the same problem"
+        - I haven't tried
+  - type: input
+    id: version
+    attributes:
+      label: RomP version
+      description: "Shown in About RomP: Help → About RomP, or the ⓘ button."
+      placeholder: "0.18.1"
+    validations:
+      required: true
+  - type: input
+    id: computer
+    attributes:
+      label: Your computer
+      description: Operating system and version, processor and graphics card. Speed and picture problems often depend on the graphics card.
+      placeholder: "Windows 11, Ryzen 7 9800X3D, Radeon RX 9070 XT"
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        Play the game until the problem happens and quit, then in RomP open **About RomP → Show log** and drag `romp.log` here. It includes what the game's emulator reported.
+        The log can include your server's address, game names and folder paths. Look it over first if that matters to you. It never includes your passwords or sign-in tokens.
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, or settings you changed for this game, such as its look or emulator options.
