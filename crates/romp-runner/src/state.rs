@@ -14,6 +14,25 @@ pub fn slot_file_name(slot: u8) -> String {
     }
 }
 
+/// DOSBox Pure names its save after the file it is given, which for a game unpacked from a 7z
+/// or a CD-only zip is the file inside, while RomP brings the save down under the archive's name.
+pub fn hand_dos_save_over(save_dir: &Path, rom: &Path, effective: &Path) {
+    let save = |path: &Path| {
+        path.file_stem()
+            .map(|stem| save_dir.join(format!("{}.pure.zip", stem.to_string_lossy())))
+    };
+    let (Some(from), Some(to)) = (save(rom), save(effective)) else {
+        return;
+    };
+    if from == to || !from.exists() || to.exists() {
+        return;
+    }
+    match std::fs::rename(&from, &to) {
+        Ok(()) => info!(from = %from.display(), to = %to.display(), "DOS save moved"),
+        Err(e) => warn!("move DOS save: {e}"),
+    }
+}
+
 pub fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, data)?;
@@ -170,6 +189,54 @@ mod tests {
         assert_eq!(padded(stored.to_vec(), state.len()), state);
         assert_eq!(padded(state.to_vec(), 4), state);
         assert_eq!(trimmed(&[0, 0]), [0]);
+    }
+
+    #[test]
+    fn a_dos_save_follows_the_file_unpacked_from_its_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Stonekeep.pure.zip"), b"from romm").unwrap();
+        hand_dos_save_over(
+            dir.path(),
+            Path::new("/roms/Stonekeep.zip"),
+            Path::new("/tmp/1/STONEKEEP (CD).cue"),
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("STONEKEEP (CD).pure.zip")).unwrap(),
+            b"from romm"
+        );
+        assert!(!dir.path().join("Stonekeep.pure.zip").exists());
+    }
+
+    #[test]
+    fn a_dos_save_already_under_the_unpacked_name_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Stonekeep.pure.zip"), b"old").unwrap();
+        std::fs::write(dir.path().join("SK.pure.zip"), b"played").unwrap();
+        hand_dos_save_over(
+            dir.path(),
+            Path::new("/r/Stonekeep.7z"),
+            Path::new("/t/SK.zip"),
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("SK.pure.zip")).unwrap(),
+            b"played"
+        );
+        assert!(dir.path().join("Stonekeep.pure.zip").exists());
+    }
+
+    #[test]
+    fn a_dos_game_started_from_its_own_file_needs_no_move() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Doom.pure.zip"), b"save").unwrap();
+        hand_dos_save_over(
+            dir.path(),
+            Path::new("/r/Doom.zip"),
+            Path::new("/r/Doom.zip"),
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("Doom.pure.zip")).unwrap(),
+            b"save"
+        );
     }
 
     #[test]

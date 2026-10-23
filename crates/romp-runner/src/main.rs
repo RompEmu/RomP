@@ -160,6 +160,10 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
         );
     }
 
+    if args.core.file_stem().and_then(|s| s.to_str()) == Some("dosbox_pure_libretro") {
+        state::hand_dos_save_over(&args.save_dir, &args.rom, &rom.effective_path);
+    }
+
     core.init(frontend);
     core.load_game(
         lr::GameInfo {
