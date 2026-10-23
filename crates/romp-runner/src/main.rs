@@ -56,6 +56,19 @@ fn parse_option(s: &str) -> Result<(String, String), String> {
         .ok_or_else(|| format!("expected KEY=VALUE, got `{s}`"))
 }
 
+/// The lowest libretro log level written: emulators' debug messages only when asked for.
+fn core_log_min(rust_log: Option<&str>) -> u32 {
+    let asked = rust_log.is_some_and(|filter| {
+        let filter = filter.to_ascii_lowercase();
+        filter.contains("debug") || filter.contains("trace")
+    });
+    if asked {
+        0
+    } else {
+        1
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     // The app writes these lines into its own log, which adds the time.
     tracing_subscriber::fmt()
@@ -70,6 +83,7 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(if hw_vulkan::probe() { 0 } else { 1 });
     }
     let args = Args::parse();
+    lr::set_core_log_min(core_log_min(std::env::var("RUST_LOG").ok().as_deref()));
     #[cfg(windows)]
     unsafe {
         windows_sys::Win32::System::Com::CoInitializeEx(
@@ -473,6 +487,15 @@ fn apply_sandbox(args: &Args, vulkan_library: Option<&std::path::Path>) -> anyho
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn emulator_debug_messages_are_left_out_unless_asked_for() {
+        assert_eq!(core_log_min(None), 1);
+        assert_eq!(core_log_min(Some("info")), 1);
+        assert_eq!(core_log_min(Some("romp=warn")), 1);
+        assert_eq!(core_log_min(Some("debug")), 0);
+        assert_eq!(core_log_min(Some("info,romp_runner=TRACE")), 0);
+    }
 
     #[test]
     fn cores_get_a_home_inside_the_game_save_folder() {

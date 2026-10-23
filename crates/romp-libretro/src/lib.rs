@@ -1224,6 +1224,13 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
 
 extern "C" {
     fn romp_core_log(level: c_uint, fmt: *const c_char, ...);
+    static mut romp_core_log_min: u32;
+}
+
+/// The lowest libretro log level a core's messages are written at. Set before loading a core.
+pub fn set_core_log_min(level: u32) {
+    // SAFETY: written once at startup, before any core runs and reads it.
+    unsafe { romp_core_log_min = level };
 }
 
 fn with_provider<R>(f: impl FnOnce(&dyn HwContextProvider) -> R) -> Option<R> {
