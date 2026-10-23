@@ -98,6 +98,12 @@ fn main() -> anyhow::Result<()> {
                 .with_writer(std::sync::Mutex::new(file))
         }))
         .init();
+    tracing::info!(
+        "RomP {} on {} {}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
     if let Some(e) = log_error {
         tracing::warn!("opening the log file: {e}");
     }

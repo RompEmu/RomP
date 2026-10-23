@@ -1261,6 +1261,7 @@ pub fn launch(
     let hardcore = opts.achievements.as_ref().is_some_and(|a| a.hardcore);
     let tracks_achievements = opts.achievements.is_some();
     let cfg = SessionConfig {
+        title: opts.title.clone(),
         runner: paths::runner_exe()?,
         core: opts.core,
         rom: opts.rom,

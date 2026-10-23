@@ -20,6 +20,8 @@ const STOP_GRACE: Duration = Duration::from_secs(3);
 const WRITE_TIMEOUT: Duration = Duration::from_millis(50);
 
 pub struct SessionConfig {
+    /// The game's name, for the lines that mark where it starts and ends in the log.
+    pub title: String,
     pub runner: PathBuf,
     pub core: PathBuf,
     pub rom: PathBuf,
@@ -90,6 +92,11 @@ pub fn runner_args(cfg: &SessionConfig, socket: &Path, frames: &str) -> Vec<OsSt
 
 impl Session {
     pub fn start(cfg: &SessionConfig) -> Result<Self> {
+        let core = cfg
+            .core
+            .file_stem()
+            .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+        tracing::info!("{}", crate::logs::game_started(&cfg.title, &core));
         let id = unique_id();
         let frames_name = format!("/romp-{id}");
         let frames = FrameReader::create(&frames_name).context("create frame buffer")?;
@@ -141,6 +148,7 @@ impl Session {
         let (tx, events) = mpsc::channel();
         let mut reader = stream.try_clone()?;
         let wait_child = child.clone();
+        let title = cfg.title.clone();
         std::thread::spawn(move || {
             while let Ok(msg) = wire::read_msg::<_, RunnerMsg>(&mut reader) {
                 if tx.send(SessionEvent::Runner(msg)).is_err() {
@@ -156,6 +164,7 @@ impl Session {
                 std::thread::sleep(Duration::from_millis(20));
             };
             let _ = log_thread.join();
+            tracing::info!("{}", crate::logs::game_ended(&title, code));
             let log_tail = tail.lock().unwrap().iter().cloned().collect();
             let _ = tx.send(SessionEvent::Ended { code, log_tail });
         });
@@ -259,6 +268,7 @@ mod tests {
 
     fn config(runner: PathBuf) -> SessionConfig {
         SessionConfig {
+            title: "Pokémon Blue".into(),
             runner,
             core: "/cores/snes9x_libretro.dylib".into(),
             rom: "/roms/Pokémon \"Blue\" (USA).gb".into(),
