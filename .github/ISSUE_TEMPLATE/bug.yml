@@ -77,7 +77,7 @@ body:
     attributes:
       label: Log
       description: |
-        In RomP, open **About RomP → Show log**, and drag `romp.log` here. If RomP has been restarted since the problem, the earlier launches are `romp.1.log`, `romp.2.log` and so on.
+        In RomP, open **About RomP → Show log**, and drag the whole `romp.log` here. If RomP has been restarted since the problem, the earlier launches are `romp.1.log`, `romp.2.log` and so on.
         The log can include your server's address, game names and folder paths. Look it over first if that matters to you. It never includes your passwords or sign-in tokens.
   - type: textarea
     id: more

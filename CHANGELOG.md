@@ -6,7 +6,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Added
 
-- RomP keeps a log of each of its last five launches, including what each game's emulator reported, in a `logs` folder beside your saves. About RomP → Show log opens it, so a bug report can include it. The log stays on your computer.
+- RomP keeps a log of each of its last five launches, including what each game's emulator reported, in a `logs` folder beside your saves. Each game's part starts at a "Playing" line and ends at a "Stopped playing" line saying how it ended. About RomP → Show log opens the folder, and Copy the last game's log copies just that game's part, to paste into a bug report. The log stays on your computer. Emulators' debug messages are left out unless RomP is started with `RUST_LOG=debug`.
 
 ### Fixed
 
