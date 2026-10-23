@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-18 13:10\n"
+"PO-Revision-Date: 2026-10-23 20:33\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
@@ -653,6 +653,14 @@ msgstr "Emulación por núcleos libretro y xemu."
 #: crates/romp-app/ui/app.slint
 msgid "Free software under the GNU GPL, version 3 or later."
 msgstr "Software libre bajo la GNU GPL, versión 3 o posterior."
+
+#: crates/romp-app/ui/app.slint
+msgid "Show log"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Copy the last game’s log"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "RomP and the emulators it downloads are each covered by their own license."

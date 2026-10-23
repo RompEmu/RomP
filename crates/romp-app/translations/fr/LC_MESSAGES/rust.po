@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-18 13:10\n"
+"PO-Revision-Date: 2026-10-23 20:33\n"
 "Last-Translator: \n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
@@ -385,6 +385,18 @@ msgstr "Esc ouvre toujours le menu de jeu. Choisissez une autre clé."
 #: crates/romp-app/src/app/settings.rs
 msgid "{0} now uses {1}."
 msgstr "{0} utilise désormais {1}."
+
+#: crates/romp-app/src/app/settings.rs
+msgid "No game was played in RomP’s last five launches."
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "Copied. Paste it into your bug report."
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "The log couldn’t be copied. Use Show log and attach romp.log instead."
+msgstr ""
 
 #: crates/romp-app/src/slots.rs
 msgid "Where you left off"
