@@ -678,6 +678,10 @@ msgid "Free software under the GNU GPL, version 3 or later."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Show log"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid ""
 "RomP and the emulators it downloads are each covered by their own license."
 msgstr ""

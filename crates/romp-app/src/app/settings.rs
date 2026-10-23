@@ -664,6 +664,10 @@ impl Controller {
     pub(super) fn show_folder(&self) {
         let _ = open::that_detached(paths::data_dir());
     }
+
+    pub(super) fn show_log(&self) {
+        let _ = open::that_detached(paths::logs_dir());
+    }
 }
 
 /// A picked index, kept within `list`.

@@ -2411,6 +2411,7 @@ component AboutDialog inherits Rectangle {
     callback close();
     callback open-website();
     callback open-link(string);
+    callback show-log();
     background: Theme.scrim;
     TouchArea { clicked => { root.close(); } }
     FocusScope {
@@ -2488,6 +2489,11 @@ component AboutDialog inherits Rectangle {
                     AboutFact { text: @tr("Games and saves come from your RomM server."); }
                     AboutFact { text: @tr("Emulation by libretro cores and xemu."); }
                     AboutFact { text: @tr("Free software under the GNU GPL, version 3 or later."); }
+                }
+                Rectangle { height: 14px; }
+                Row {
+                    alignment: center;
+                    LinkButton { text: @tr("Show log"); clicked => { root.show-log(); } }
                 }
             }
             if root.tab == 1: VerticalLayout {
@@ -2617,6 +2623,7 @@ export component AppWindow inherits Window {
     callback assign-player(string, int);
     callback clear-images();
     callback show-folder();
+    callback show-log();
     callback settings-section-changed(int);
     in-out property <bool> pref-pause-unfocused;
     in-out property <bool> pref-resume;
@@ -3048,6 +3055,7 @@ export component AppWindow inherits Window {
         close => { root.about-open = false; }
         open-website => { root.open-url(Brand.website); }
         open-link(url) => { root.open-url(url); }
+        show-log => { root.show-log(); }
     }
     if root.dialog-open: Dialog {
         title: root.dialog-title;
