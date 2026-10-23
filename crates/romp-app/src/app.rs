@@ -349,6 +349,7 @@ impl Controller {
         ui.on_remap_close(|| with_controller(|c| c.remap_close()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));
         ui.on_show_log(|| with_controller(|c| c.show_log()));
+        ui.on_copy_log(|| with_controller(|c| c.copy_log()));
         ui.on_select(|key| {
             with_controller(|c| {
                 c.select(key.to_string());

@@ -386,6 +386,18 @@ msgstr ""
 msgid "{0} now uses {1}."
 msgstr ""
 
+#: crates/romp-app/src/app/settings.rs
+msgid "No game was played in RomP’s last five launches."
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "Copied. Paste it into your bug report."
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "The log couldn’t be copied. Use Show log and attach romp.log instead."
+msgstr ""
+
 #: crates/romp-app/src/slots.rs
 msgid "Where you left off"
 msgstr ""

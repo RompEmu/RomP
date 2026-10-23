@@ -2412,6 +2412,8 @@ component AboutDialog inherits Rectangle {
     callback open-website();
     callback open-link(string);
     callback show-log();
+    callback copy-log();
+    in property <string> log-note;
     background: Theme.scrim;
     TouchArea { clicked => { root.close(); } }
     FocusScope {
@@ -2493,7 +2495,16 @@ component AboutDialog inherits Rectangle {
                 Rectangle { height: 14px; }
                 Row {
                     alignment: center;
+                    spacing: 16px;
                     LinkButton { text: @tr("Show log"); clicked => { root.show-log(); } }
+                    LinkButton { text: @tr("Copy the last game’s log"); clicked => { root.copy-log(); } }
+                }
+                if root.log-note != "": Text {
+                    text: root.log-note;
+                    font-size: Theme.font-small;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
                 }
             }
             if root.tab == 1: VerticalLayout {
@@ -2624,6 +2635,8 @@ export component AppWindow inherits Window {
     callback clear-images();
     callback show-folder();
     callback show-log();
+    callback copy-log();
+    in-out property <string> about-log-note;
     callback settings-section-changed(int);
     in-out property <bool> pref-pause-unfocused;
     in-out property <bool> pref-resume;
@@ -2798,7 +2811,10 @@ export component AppWindow inherits Window {
             title: @tr("Help");
             MenuItem {
                 title: @tr("About {}", Brand.name);
-                activated => { root.about-open = true; }
+                activated => {
+                    root.about-log-note = "";
+                    root.about-open = true;
+                }
             }
             MenuItem {
                 title: @tr("{} on GitHub", Brand.name);
@@ -2905,7 +2921,10 @@ export component AppWindow inherits Window {
         heading-detail: root.heading-detail;
         app-icon: root.app-icon;
         has-app-icon: root.has-app-icon;
-        open-about => { root.about-open = true; }
+        open-about => {
+            root.about-log-note = "";
+            root.about-open = true;
+        }
         if root.screen == 3: GamePage {
             back-label: root.heading;
             title: root.game-title;
@@ -3056,6 +3075,8 @@ export component AppWindow inherits Window {
         open-website => { root.open-url(Brand.website); }
         open-link(url) => { root.open-url(url); }
         show-log => { root.show-log(); }
+        copy-log => { root.copy-log(); }
+        log-note: root.about-log-note;
     }
     if root.dialog-open: Dialog {
         title: root.dialog-title;

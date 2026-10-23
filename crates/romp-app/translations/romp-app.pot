@@ -682,6 +682,10 @@ msgid "Show log"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Copy the last game’s log"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid ""
 "RomP and the emulators it downloads are each covered by their own license."
 msgstr ""

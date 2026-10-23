@@ -668,6 +668,21 @@ impl Controller {
     pub(super) fn show_log(&self) {
         let _ = open::that_detached(paths::logs_dir());
     }
+
+    pub(super) fn copy_log(&self) {
+        let Some(ui) = self.ui() else { return };
+        let note = match crate::logs::last_game_in(&paths::logs_dir()) {
+            None => tr!("No game was played in RomP’s last five launches."),
+            Some(log) => match arboard::Clipboard::new().and_then(|mut c| c.set_text(log)) {
+                Ok(()) => tr!("Copied. Paste it into your bug report."),
+                Err(e) => {
+                    tracing::warn!("copying the log: {e}");
+                    tr!("The log couldn’t be copied. Use Show log and attach romp.log instead.")
+                }
+            },
+        };
+        ui.set_about_log_note(note.into());
+    }
 }
 
 /// A picked index, kept within `list`.
