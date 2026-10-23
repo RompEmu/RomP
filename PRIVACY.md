@@ -20,6 +20,7 @@ Emulators run in a sandbox. On macOS it also stops them reaching the internet. O
 ## What RomP keeps on your computer
 
 - **Sign-in tokens** for your RomM server and RetroAchievements, in your system's keychain or credential store. RomP never stores your passwords.
+- **A log of what RomP did**, for the last five launches, in the `logs` folder inside the folder below. It can include your server's address, game names and folder paths, never your sign-in tokens or passwords, and RomP never sends it anywhere. About RomP → Show log opens it, so you can attach it to a bug report if you choose to.
 - **Your library list, downloaded games, saves, save states, screenshots and settings**, in `~/Library/Application Support/Romp` on macOS, `%LOCALAPPDATA%\Romp` on Windows and `~/.local/share/Romp` on Linux.
 
 They stay until you remove them. Signing out of RomM in Settings removes its token and the library list. Signing out of RetroAchievements removes its token. Deleting the folder above removes everything else.

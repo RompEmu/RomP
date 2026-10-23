@@ -154,7 +154,7 @@ Default keyboard layout:
 
 Every key except Esc can be changed in Settings → Players, and shortcuts can be combinations such as Ctrl+S.
 
-Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS, `%LOCALAPPDATA%\Romp` on Windows and `~/.local/share/Romp` on Linux.
+Your games, saves and library cache are stored in `~/Library/Application Support/Romp` on macOS, `%LOCALAPPDATA%\Romp` on Windows and `~/.local/share/Romp` on Linux. Its `logs` folder holds a log of each of the last five launches; About RomP → Show log opens it.
 
 ## Free, with no catches
 

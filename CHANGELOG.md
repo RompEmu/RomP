@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- RomP keeps a log of each of its last five launches, including what each game's emulator reported, in a `logs` folder beside your saves. About RomP → Show log opens it, so a bug report can include it. The log stays on your computer.
+
 ### Fixed
 
 - DOS games' in-game saves sync with RomM, so they carry over to and from Argosy. DOSBox Pure keeps them in a `.pure.zip` of its own rather than in save memory, which RomP didn't pick up.
