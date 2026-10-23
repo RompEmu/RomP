@@ -24,6 +24,7 @@ mod installs;
 mod keyboard;
 mod layout;
 mod licenses;
+mod logs;
 mod looks;
 mod mapping;
 mod mouse;
@@ -57,6 +58,8 @@ mod xemu;
 
 use clap::Parser;
 use std::path::PathBuf;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 slint::include_modules!();
@@ -79,13 +82,27 @@ struct Args {
 }
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
+    // The old data folder only moves into a data folder that isn't there yet, so the log
+    // folder inside it comes after.
+    let adopted = paths::adopt_legacy_data(&paths::data_dir());
+    let (log, log_error) = match logs::open(&paths::logs_dir()) {
+        Ok(file) => (Some(file), None),
+        Err(e) => (None, Some(e)),
+    };
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(log.map(|file| {
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(std::sync::Mutex::new(file))
+        }))
         .init();
+    if let Some(e) = log_error {
+        tracing::warn!("opening the log file: {e}");
+    }
     let args = Args::parse();
-    if let Err(e) = paths::adopt_legacy_data(&paths::data_dir()) {
+    if let Err(e) = adopted {
         tracing::warn!("moving the old data folder: {e}");
     }
     slint::BackendSelector::new()

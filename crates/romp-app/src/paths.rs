@@ -35,6 +35,10 @@ pub fn adopt_legacy_data(data: &std::path::Path) -> std::io::Result<Option<PathB
     Ok(moved.then_some(legacy))
 }
 
+pub fn logs_dir() -> PathBuf {
+    data_dir().join("logs")
+}
+
 pub fn cores_dir() -> PathBuf {
     data_dir().join("cores")
 }
