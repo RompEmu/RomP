@@ -214,6 +214,7 @@ pub fn state_remote_name(slot: &str, core_id: &str, core_version: &str) -> Strin
 pub const SRAM_FILE: &str = "game.srm";
 pub const SRAM_SLOT: &str = "autosave";
 const ARMSX2_CARD: &str = "pcsx2/memcards/Mcd001.ps2";
+const DOS_SAVE: &str = ".pure.zip";
 // Both PS2 emulators write the same memory card format, so a card follows the game between them.
 const PS2_CARD_EMULATOR: &str = "pcsx2";
 
@@ -245,12 +246,31 @@ pub fn in_game_save(core_id: &str, dir: &Path, rom: Option<&Path>) -> (String, S
                 .unwrap_or_else(|| "game.ps2".into());
             (card, PS2_CARD_EMULATOR.into())
         }
+        // DOSBox Pure has no save RAM: it zips what the game changed on its C: drive and names
+        // the zip after the file it was started with, as Argosy expects too.
+        "dosbox_pure" => {
+            let save = newest_ending(dir, DOS_SAVE)
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| {
+                    let stem = rom
+                        .and_then(Path::file_stem)
+                        .map_or("DOSBox-pure".into(), |s| s.to_string_lossy());
+                    format!("{stem}{DOS_SAVE}")
+                });
+            (save, core_id.into())
+        }
         _ => (SRAM_FILE.into(), core_id.into()),
     }
 }
 
 /// PS2 memory cards at the top of a save folder, newest first.
 fn memory_cards(dir: &Path) -> Vec<String> {
+    newest_ending(dir, ".ps2")
+}
+
+/// Files at the top of a save folder whose names end with `ending`, newest first.
+fn newest_ending(dir: &Path, ending: &str) -> Vec<String> {
     let mut cards: Vec<(std::time::SystemTime, String)> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
@@ -258,7 +278,7 @@ fn memory_cards(dir: &Path) -> Vec<String> {
         .filter_map(|e| {
             let name = e.file_name().to_str()?.to_string();
             let modified = e.metadata().ok()?.modified().ok()?;
-            name.ends_with(".ps2").then_some((modified, name))
+            name.ends_with(ending).then_some((modified, name))
         })
         .collect();
     cards.sort_by(|a, b| b.cmp(a));
@@ -641,6 +661,7 @@ pub fn games_with_saves(server_saves: &Path) -> Vec<i64> {
         dir.join(SRAM_FILE).exists()
             || dir.join(ARMSX2_CARD).exists()
             || !memory_cards(dir).is_empty()
+            || !newest_ending(dir, DOS_SAVE).is_empty()
             || STATE_SLOTS
                 .iter()
                 .any(|slot| dir.join(format!("{slot}.state")).exists())
@@ -1162,6 +1183,33 @@ mod tests {
             in_game_save("pcsx2", dir.path(), Some(rom)).0,
             "Ico (USA) (Disc 1).ps2"
         );
+    }
+
+    #[test]
+    fn dosbox_pure_saves_in_a_zip_named_after_the_game() {
+        let dir = tempfile::tempdir().unwrap();
+        let rom = Path::new("/roms/dos/Strike Commander.zip");
+        assert_eq!(
+            in_game_save("dosbox_pure", dir.path(), Some(rom)),
+            ("Strike Commander.pure.zip".into(), "dosbox_pure".into())
+        );
+        assert_eq!(
+            in_game_save("dosbox_pure", dir.path(), None).0,
+            "DOSBox-pure.pure.zip"
+        );
+        std::fs::write(dir.path().join("Strike Commander (CD).pure.zip"), b"zip").unwrap();
+        assert_eq!(
+            in_game_save("dosbox_pure", dir.path(), Some(rom)).0,
+            "Strike Commander (CD).pure.zip"
+        );
+    }
+
+    #[test]
+    fn games_with_only_a_dos_save_count_as_having_saves() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("3")).unwrap();
+        std::fs::write(root.path().join("3/Stonekeep.pure.zip"), b"zip").unwrap();
+        assert_eq!(games_with_saves(root.path()), [3]);
     }
 
     #[test]
