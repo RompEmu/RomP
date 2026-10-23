@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions
+    url: https://rompemu.github.io/faq/
+    about: Short answers about what RomP needs, what it plays, save sync and more.
+  - name: Translations
+    url: https://crowdin.com/project/romp
+    about: Help translate RomP on Crowdin. To ask for a new language, open an idea or request.
+  - name: A problem with the RomM server itself
+    url: https://github.com/rommapp/romm/issues
+    about: Problems that also happen in RomM's own web pages belong with RomM.
+  - name: Security problem
+    url: https://github.com/RompEmu/RomP/security/advisories/new
+    about: Report it privately, so it can be fixed before it's public.
