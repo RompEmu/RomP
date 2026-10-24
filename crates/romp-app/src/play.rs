@@ -391,12 +391,7 @@ impl Game {
         }
         crate::mouse::capture(self.primary().window(), on);
         self.primary().set_mouse_captured(on);
-        self.mouse_buttons.set(0);
-        self.send(&AppMsg::Mouse {
-            dx: 0,
-            dy: 0,
-            buttons: 0,
-        });
+        self.release_mouse_buttons();
         if on {
             let key = if self.computer { "F12" } else { "Esc" };
             flash(
@@ -404,6 +399,15 @@ impl Game {
                 tr!("Mouse captured. Press {key} to release it.", key),
             );
         }
+    }
+
+    fn release_mouse_buttons(&self) {
+        self.mouse_buttons.set(0);
+        self.send(&AppMsg::Mouse {
+            dx: 0,
+            dy: 0,
+            buttons: 0,
+        });
     }
 
     fn pointer(&self, u: f32, v: f32, pressed: bool, bottom_half: bool) {
@@ -479,6 +483,9 @@ impl Game {
     }
 
     fn set_menu(&self, open: bool) {
+        // The menu covers the game, so a button let go over it never reaches the game. Held through
+        // a restart, the left button stops an Amiga booting from its disk.
+        self.release_mouse_buttons();
         self.menu_open.set(open);
         self.set_menu_focus(-1);
         self.primary().set_menu_open(open);
