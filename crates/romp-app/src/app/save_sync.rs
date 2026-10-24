@@ -37,7 +37,7 @@ pub(super) fn conflict_text(conflict: &SramConflict) -> String {
     )
 }
 
-fn version_key(rom_id: i64) -> String {
+pub(super) fn version_key(rom_id: i64) -> String {
     format!("core_version:{rom_id}")
 }
 

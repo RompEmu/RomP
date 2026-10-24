@@ -212,7 +212,7 @@ msgstr ""
 msgid "Could not start the game: {e}"
 msgstr ""
 
-#: crates/romp-app/src/app/game.rs
+#: crates/romp-app/src/app/game.rs crates/romp-app/src/app/slots.rs
 msgid "Close the running game first."
 msgstr ""
 
@@ -615,6 +615,10 @@ msgid "Delete"
 msgstr ""
 
 #: crates/romp-app/src/app/collections.rs
+msgid "The save state is removed from this computer and from your RomM server. A backup stays in the game's save folder."
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
 msgid "Couldn't rename \"{0}\": {1}."
 msgstr ""
 
@@ -684,6 +688,10 @@ msgstr ""
 
 #: crates/romp-app/src/app/slots.rs
 msgid "Couldn't use the save: {e}."
+msgstr ""
+
+#: crates/romp-app/src/app/slots.rs
+msgid "Couldn't delete the save state: {}."
 msgstr ""
 
 #: crates/romp-app/src/bios.rs

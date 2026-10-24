@@ -171,6 +171,45 @@ impl Controller {
         });
     }
 
+    pub(super) fn delete_slot(&self, slot: i32) {
+        if let Ok(slot) = u8::try_from(slot) {
+            self.open_dialog(super::collections::DialogAction::DeleteState(slot));
+        }
+    }
+
+    pub(super) fn delete_state(&self, slot: u8) {
+        let Some(detail) = self.current_game() else {
+            return;
+        };
+        // Where you left off is saved again when the game closes, which would bring it back.
+        if self.running.borrow().is_some() || self.preparing.get() {
+            return self.game_status(detail.id, tr!("Close the running game first."));
+        }
+        let Some(game) = self.game_saves(&detail) else {
+            return;
+        };
+        let store = self.shared.store.clone();
+        if let Err(e) = saves::delete_state(&store, detail.id, &game.dir, &slots::stem(slot)) {
+            return self.game_status(detail.id, tr!("Couldn't delete the save state: {}.", e));
+        }
+        self.show_save_slots(&detail);
+        let version = store
+            .lock()
+            .unwrap()
+            .get(&super::save_sync::version_key(detail.id));
+        let (Some(client), Some(version)) = (self.client.borrow().clone(), version) else {
+            return;
+        };
+        if self.offline.get() {
+            return;
+        }
+        self.shared.rt.spawn(async move {
+            if let Err(e) = saves::sync_states(&client, &store, &game, &version).await {
+                tracing::warn!("deleting {}'s save state on RomM: {e}", game.title);
+            }
+        });
+    }
+
     pub(super) fn play_slot(&self, slot: i32) {
         let Ok(slot) = u8::try_from(slot) else {
             return;

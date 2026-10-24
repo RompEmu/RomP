@@ -6,7 +6,16 @@ use tr::tr;
 pub const AUTO: u8 = 0;
 pub const THUMBNAIL_WIDTH: u32 = 256;
 
-fn stem(slot: u8) -> String {
+pub fn label(slot: u8) -> String {
+    if slot == AUTO {
+        tr!("Where you left off")
+    } else {
+        tr!("Slot {}", slot)
+    }
+}
+
+/// The slot's file name without its extension, which is also what its sync is recorded under.
+pub fn stem(slot: u8) -> String {
     if slot == AUTO {
         "auto".into()
     } else {
@@ -35,11 +44,7 @@ impl SlotInfo {
     }
 
     pub fn label(&self) -> String {
-        if self.slot == AUTO {
-            tr!("Where you left off")
-        } else {
-            tr!("Slot {}", self.slot)
-        }
+        label(self.slot)
     }
 }
 

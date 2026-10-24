@@ -1363,6 +1363,7 @@ component GamePage inherits FocusScope {
     in property <[SlotCard]> save-slots;
     in property <bool> slots-hardcore;
     callback play-slot(int);
+    callback delete-slot(int);
     callback use-other-save();
     in property <[AchievementRow]> achievements;
     in property <string> achievements-summary;
@@ -1678,6 +1679,11 @@ component GamePage inherits FocusScope {
                                         text: @tr("Play from here");
                                         enabled: root.downloaded && !root.busy && !root.slots-hardcore;
                                         clicked => { root.play-slot(card.slot); }
+                                    }
+                                    Button {
+                                        text: @tr("Delete");
+                                        enabled: !root.busy;
+                                        clicked => { root.delete-slot(card.slot); }
                                     }
                                 }
                             }
@@ -2697,6 +2703,7 @@ export component AppWindow inherits Window {
     in property <[SlotCard]> game-save-slots;
     in property <bool> game-slots-hardcore;
     callback play-slot(int);
+    callback delete-slot(int);
     callback use-other-save();
     in property <[AchievementRow]> game-achievements;
     in property <string> game-achievements-summary;
@@ -2937,6 +2944,7 @@ export component AppWindow inherits Window {
             save-slots: root.game-save-slots;
             slots-hardcore: root.game-slots-hardcore;
             play-slot(slot) => { root.play-slot(slot); }
+            delete-slot(slot) => { root.delete-slot(slot); }
             use-other-save => { root.use-other-save(); }
             achievements: root.game-achievements;
             achievements-summary: root.game-achievements-summary;

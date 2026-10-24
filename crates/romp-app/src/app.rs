@@ -395,6 +395,7 @@ impl Controller {
         ui.on_ra_hardcore_changed(|| with_controller(|c| c.ra_hardcore_changed()));
         ui.on_show_all_achievements(|| with_controller(|c| c.show_all_achievements()));
         ui.on_play_slot(|slot| with_controller(|c| c.play_slot(slot)));
+        ui.on_delete_slot(|slot| with_controller(|c| c.delete_slot(slot)));
         ui.on_use_other_save(|| with_controller(|c| c.use_other_save()));
         ui.on_downloaded_only_toggled(|on| with_controller(|c| c.set_downloaded_only(on)));
         ui.on_open_notifications(|| with_controller(|c| c.open_notifications()));

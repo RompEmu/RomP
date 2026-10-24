@@ -335,6 +335,10 @@ msgstr ""
 msgid "Play from here"
 msgstr ""
 
+#: crates/romp-app/ui/app.slint
+msgid "Delete"
+msgstr ""
+
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Achievements"
 msgstr ""

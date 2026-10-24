@@ -33,6 +33,7 @@ pub(super) enum DialogAction {
     Create { add_game: Option<i64> },
     Rename(String),
     Delete(String),
+    DeleteState(u8),
 }
 
 /// RomM 5.4 answers a name that's taken with 409 and one over 400 characters with 422.
@@ -577,7 +578,7 @@ impl Controller {
         }
     }
 
-    fn open_dialog(&self, action: DialogAction) {
+    pub(super) fn open_dialog(&self, action: DialogAction) {
         let Some(ui) = self.ui() else { return };
         let name_of = |key: &str| {
             self.shared
@@ -608,6 +609,14 @@ impl Controller {
             DialogAction::Delete(key) => (
                 tr!("Delete \"{}\"?", name_of(key)),
                 tr!("The collection is removed from your RomM server. Its games stay in your library."),
+                false,
+                String::new(),
+                tr!("Delete"),
+                true,
+            ),
+            DialogAction::DeleteState(slot) => (
+                tr!("Delete \"{}\"?", crate::slots::label(*slot)),
+                tr!("The save state is removed from this computer and from your RomM server. A backup stays in the game's save folder."),
                 false,
                 String::new(),
                 tr!("Delete"),
@@ -657,6 +666,7 @@ impl Controller {
             }
             DialogAction::Rename(key) if !name.is_empty() => self.rename(key, name),
             DialogAction::Delete(key) => self.delete(key),
+            DialogAction::DeleteState(slot) => self.delete_state(slot),
             _ => {}
         }
     }
