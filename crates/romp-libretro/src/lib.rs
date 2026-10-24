@@ -340,6 +340,17 @@ impl Core {
         unsafe { (self.syms.reset)() };
     }
 
+    /// How many discs the game has and which is in, for cores that can change discs.
+    pub fn discs<F: Frontend>(&mut self, frontend: &mut F) -> Option<Discs> {
+        let _g = FrontendGuard::install(frontend);
+        disc_info()
+    }
+
+    pub fn change_disc<F: Frontend>(&mut self, frontend: &mut F, index: u32) -> bool {
+        let _g = FrontendGuard::install(frontend);
+        swap_disc(index)
+    }
+
     pub fn unload_game<F: Frontend>(&mut self, frontend: &mut F) {
         if !self.game_loaded {
             return;
@@ -653,9 +664,35 @@ unsafe impl Send for DiskControlVTable {}
 
 static DISK_CONTROL: std::sync::Mutex<Option<DiskControlVTable>> = std::sync::Mutex::new(None);
 
-// Programmatic swaps crash some cores (PUAE); disabled until gated per system.
-pub fn disk_control_swap(_index: u32) -> bool {
-    false
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Discs {
+    pub count: u32,
+    pub current: u32,
+}
+
+fn disc_info() -> Option<Discs> {
+    let vt = (*DISK_CONTROL.lock().unwrap())?;
+    let count = unsafe { vt.get_num_images?() };
+    let current = unsafe { vt.get_image_index?() };
+    Some(Discs { count, current })
+}
+
+/// Opens the tray, puts the disc in and closes it again, as a player would.
+fn swap_disc(index: u32) -> bool {
+    let Some(vt) = *DISK_CONTROL.lock().unwrap() else {
+        return false;
+    };
+    let (Some(eject), Some(set_index)) = (vt.set_eject_state, vt.set_image_index) else {
+        return false;
+    };
+    if disc_info().is_none_or(|d| index >= d.count) {
+        return false;
+    }
+    unsafe {
+        let opened = eject(true);
+        let swapped = set_index(index);
+        eject(false) && opened && swapped
+    }
 }
 
 /// # Safety
@@ -1493,5 +1530,61 @@ mod tests {
         };
         assert!(handled);
         assert_eq!(recorder.geometry.unwrap().aspect_ratio, 4.0 / 3.0);
+    }
+
+    static TRAY: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    static DISC: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+    unsafe extern "C" fn fake_eject(ejected: bool) -> bool {
+        TRAY.lock()
+            .unwrap()
+            .push(if ejected { "open" } else { "close" }.into());
+        true
+    }
+    unsafe extern "C" fn fake_index() -> c_uint {
+        DISC.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    unsafe extern "C" fn fake_set_index(index: c_uint) -> bool {
+        TRAY.lock().unwrap().push(format!("disc {index}"));
+        DISC.store(index, std::sync::atomic::Ordering::SeqCst);
+        true
+    }
+    unsafe extern "C" fn fake_count() -> c_uint {
+        3
+    }
+
+    #[test]
+    fn a_disc_is_changed_by_opening_the_tray_swapping_and_closing_it() {
+        *DISK_CONTROL.lock().unwrap() = None;
+        assert_eq!(disc_info(), None);
+        assert!(!swap_disc(1));
+
+        *DISK_CONTROL.lock().unwrap() = Some(DiskControlVTable {
+            set_eject_state: Some(fake_eject),
+            get_image_index: Some(fake_index),
+            set_image_index: Some(fake_set_index),
+            get_num_images: Some(fake_count),
+            ..Default::default()
+        });
+        assert_eq!(
+            disc_info(),
+            Some(Discs {
+                count: 3,
+                current: 0
+            })
+        );
+        assert!(swap_disc(2));
+        assert_eq!(*TRAY.lock().unwrap(), ["open", "disc 2", "close"]);
+        assert_eq!(
+            disc_info(),
+            Some(Discs {
+                count: 3,
+                current: 2
+            })
+        );
+
+        TRAY.lock().unwrap().clear();
+        assert!(!swap_disc(3));
+        assert!(TRAY.lock().unwrap().is_empty());
     }
 }
