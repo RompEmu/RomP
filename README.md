@@ -39,7 +39,7 @@ Download the [latest release](https://github.com/RompEmu/RomP/releases/latest) o
 - **Many systems:** from the Atari 2600 to the PS3 and original Xbox, plus arcade and home computers. See [supported systems](#supported-systems).
 - **Controllers and multiplayer:** gamepads join as the next player, any key or button can be remapped, and the whole app works with a controller.
 - **Light guns, mice and keyboards:** for the systems that use them.
-- **In-game menu:** pause, restart, save slots, volume and full screen, from the Guide button or Esc.
+- **In-game menu:** pause, restart, save slots, changing discs, volume and full screen, from the Guide button or Esc.
 - **Two-screen Nintendo DS:** a window per screen, with the mouse as the touch pen.
 - **Picks up where you left off:** the last console, game and scroll position, and the size and position of every window.
 - **Interface sizes:** 1x, 1.5x or 2x.

@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- Games on more than one disc can change disc from the game menu, when the game asks for the next one. RomP opens the tray, swaps the disc and closes it, as you would on the console. Discs are ordered by the number in their names, as RomM orders them, so Disc 10 comes after Disc 2.
+
 ### Fixed
 
 - After the computer's clock was set back, the backup RomP makes of a save before replacing it could be removed straight away instead of kept with the newest ten.
