@@ -693,6 +693,15 @@ impl Store {
             .expect("write state record");
     }
 
+    pub fn delete_state_record(&mut self, rom_id: i64, file: &str) {
+        self.conn
+            .execute(
+                "DELETE FROM state_sync WHERE rom_id = ?1 AND file = ?2",
+                params![rom_id, file],
+            )
+            .expect("delete state record");
+    }
+
     pub fn in_game_save_record(&self, rom_id: i64) -> Option<InGameSaveRecord> {
         self.conn
             .query_row(

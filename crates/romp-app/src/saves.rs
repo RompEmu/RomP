@@ -689,6 +689,39 @@ pub fn games_with_saves(server_saves: &Path) -> Vec<i64> {
         .collect()
 }
 
+/// Stands in for a state's checksum once it's deleted here, until RomM's copy is deleted too.
+pub const DELETED: &str = "deleted";
+
+/// Deletes a save state and its picture, keeping a backup, and marks it for deleting on RomM.
+pub fn delete_state(
+    store: &std::sync::Mutex<crate::store::Store>,
+    rom_id: i64,
+    dir: &Path,
+    slot: &str,
+) -> io::Result<()> {
+    let file = format!("{slot}.state");
+    backup(dir, &file)?;
+    for path in [dir.join(&file), dir.join(format!("{slot}.png"))] {
+        match std::fs::remove_file(path) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    }
+    let mut store = store.lock().unwrap();
+    match store.state_record(rom_id, slot) {
+        Some(record) if record.remote_id.is_some() => store.set_state_record(
+            rom_id,
+            slot,
+            &crate::store::StateRecord {
+                local_md5: DELETED.into(),
+                ..record
+            },
+        ),
+        _ => store.delete_state_record(rom_id, slot),
+    }
+    Ok(())
+}
+
 pub const STATE_SLOTS: [&str; 6] = ["auto", "slot-1", "slot-2", "slot-3", "slot-4", "slot-5"];
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -713,6 +746,26 @@ pub async fn sync_states(
         let server = remote.iter().find(|r| r.file_name == name);
         let local = std::fs::read(&path).ok();
         let record = store.lock().unwrap().state_record(game.rom_id, slot);
+        if let Some(deleted) = record
+            .as_ref()
+            .filter(|r| r.local_md5 == DELETED && local.is_none())
+        {
+            let forget = match server {
+                Some(srv)
+                    if deleted.remote_updated_at.as_deref() == Some(srv.updated_at.as_str()) =>
+                {
+                    client.delete_states(&[srv.id]).await?;
+                    true
+                }
+                // Saved on another device since, so it comes down below rather than being lost.
+                Some(_) => false,
+                None => true,
+            };
+            if forget {
+                store.lock().unwrap().delete_state_record(game.rom_id, slot);
+                continue;
+            }
+        }
         let local_md5 = local.as_deref().map(md5_hex);
         let local_changed =
             local_md5.is_some() && record.as_ref().map(|r| &r.local_md5) != local_md5.as_ref();
@@ -1880,6 +1933,144 @@ mod tests {
                 !dir.path().join("slot-3.png").exists(),
                 "a picture of an older state would show the wrong moment"
             );
+        }
+
+        fn deleted_here(updated: &str) -> StateRecord {
+            StateRecord {
+                local_md5: DELETED.into(),
+                remote_id: Some(3),
+                remote_updated_at: Some(updated.into()),
+            }
+        }
+
+        #[tokio::test]
+        async fn a_state_deleted_here_is_deleted_on_romm() {
+            use wiremock::matchers::body_string_contains;
+            let server = MockServer::start().await;
+            remote(
+                &server,
+                json!([state_json(3, "slot-1.snes9x.1-63.state", "t1")]),
+            )
+            .await;
+            Mock::given(method("POST"))
+                .and(path("/api/states/delete"))
+                .and(body_string_contains("[3]"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([3])))
+                .expect(1)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let store = store();
+            store
+                .lock()
+                .unwrap()
+                .set_state_record(5, "slot-1", &deleted_here("t1"));
+            let report = sync_states(&client(&server), &store, &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert_eq!(report, StateReport::default());
+            assert!(!dir.path().join("slot-1.state").exists());
+            assert!(store.lock().unwrap().state_record(5, "slot-1").is_none());
+        }
+
+        #[tokio::test]
+        async fn a_state_saved_elsewhere_since_deleting_here_comes_down() {
+            let server = MockServer::start().await;
+            remote(
+                &server,
+                json!([state_json(3, "slot-1.snes9x.1-63.state", "t2")]),
+            )
+            .await;
+            Mock::given(method("GET"))
+                .and(path("/api/states/3/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"NEWER".to_vec()))
+                .mount(&server)
+                .await;
+            Mock::given(method("POST"))
+                .and(path("/api/states/delete"))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(0)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let store = store();
+            store
+                .lock()
+                .unwrap()
+                .set_state_record(5, "slot-1", &deleted_here("t1"));
+            let report = sync_states(&client(&server), &store, &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert_eq!(report.downloaded, 1);
+            assert_eq!(
+                std::fs::read(dir.path().join("slot-1.state")).unwrap(),
+                b"NEWER"
+            );
+        }
+
+        #[tokio::test]
+        async fn a_state_deleted_here_and_gone_from_romm_is_forgotten() {
+            let server = MockServer::start().await;
+            remote(&server, json!([])).await;
+            let dir = tempfile::tempdir().unwrap();
+            let store = store();
+            store
+                .lock()
+                .unwrap()
+                .set_state_record(5, "slot-1", &deleted_here("t1"));
+            sync_states(&client(&server), &store, &game(dir.path()), "1.63")
+                .await
+                .unwrap();
+            assert!(store.lock().unwrap().state_record(5, "slot-1").is_none());
+        }
+
+        #[test]
+        fn deleting_a_state_backs_it_up_and_marks_it_for_romm() {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("slot-2.state"), b"S2").unwrap();
+            std::fs::write(dir.path().join("slot-2.png"), b"PNG").unwrap();
+            std::fs::write(dir.path().join("slot-3.state"), b"S3").unwrap();
+            let store = store();
+            store.lock().unwrap().set_state_record(
+                5,
+                "slot-2",
+                &StateRecord {
+                    local_md5: md5_hex(b"S2"),
+                    remote_id: Some(3),
+                    remote_updated_at: Some("t1".into()),
+                },
+            );
+            delete_state(&store, 5, dir.path(), "slot-2").unwrap();
+            assert!(!dir.path().join("slot-2.state").exists());
+            assert!(!dir.path().join("slot-2.png").exists());
+            let backed_up: Vec<_> = walkdir(dir.path().join("backup"));
+            assert!(backed_up.iter().any(|p| p.ends_with("slot-2.state")));
+            assert_eq!(
+                store.lock().unwrap().state_record(5, "slot-2"),
+                Some(deleted_here("t1"))
+            );
+
+            delete_state(&store, 5, dir.path(), "slot-3").unwrap();
+            assert!(!dir.path().join("slot-3.state").exists());
+            assert!(
+                store.lock().unwrap().state_record(5, "slot-3").is_none(),
+                "a state RomM never had needs nothing from it"
+            );
+        }
+
+        fn walkdir(dir: PathBuf) -> Vec<PathBuf> {
+            std::fs::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .flat_map(|e| {
+                    if e.path().is_dir() {
+                        walkdir(e.path())
+                    } else {
+                        vec![e.path()]
+                    }
+                })
+                .collect()
         }
 
         #[tokio::test]

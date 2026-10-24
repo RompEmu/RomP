@@ -774,6 +774,15 @@ impl Client {
             .await
     }
 
+    pub async fn delete_states(&self, ids: &[i64]) -> Result<(), Error> {
+        self.send(
+            self.request(reqwest::Method::POST, "/api/states/delete")
+                .json(&serde_json::json!({ "states": ids })),
+        )
+        .await
+        .map(|_| ())
+    }
+
     pub async fn download_state(&self, id: i64) -> Result<Vec<u8>, Error> {
         self.fetch_bytes(&format!("/api/states/{id}/content")).await
     }
