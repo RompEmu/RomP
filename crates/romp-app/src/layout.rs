@@ -103,7 +103,7 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
             .filter(|p| depth(p) == shallowest)
             .cloned()
             .collect();
-        found.sort();
+        found.sort_by_cached_key(|p| (disc_number(p).unwrap_or(u32::MAX), p.clone()));
         if found.len() == 1 || wanted == "m3u" {
             return Some(Launch::File(found.swap_remove(0)));
         }
@@ -120,6 +120,35 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
         .filter(|(p, _)| !is_extra(p))
         .min_by(|(a, sa), (b, sb)| depth(a).cmp(&depth(b)).then(sb.cmp(sa)).then(a.cmp(b)))
         .map(|(p, _)| Launch::File(p.clone()))
+}
+
+/// The disc a file's name says it is, as RomM reads it: "(Disc 2)", "(CD 2)", "(Disk 1 of 2)",
+/// "(Disc 2A)" or "(Disc B)", where B is 2.
+fn disc_number(p: &Path) -> Option<u32> {
+    let name = p.file_name()?.to_string_lossy().to_ascii_lowercase();
+    name.split('(')
+        .filter_map(|group| group.split_once(')'))
+        .find_map(|(tag, _)| {
+            let rest = ["disque", "disc", "disk", "cd"]
+                .iter()
+                .find_map(|word| tag.strip_prefix(word))?;
+            let mut words: Vec<&str> = rest.split_whitespace().collect();
+            if let [.., of, total] = words[..] {
+                if of == "of" && total.chars().all(|c| c.is_ascii_digit()) {
+                    words.truncate(words.len() - 2);
+                }
+            }
+            let [word] = words[..] else { return None };
+            let digits = word.trim_end_matches(|c: char| c.is_ascii_lowercase());
+            if !digits.is_empty() && word.len() - digits.len() <= 1 {
+                return digits.parse().ok();
+            }
+            let spaced = rest.starts_with(char::is_whitespace);
+            match word.as_bytes() {
+                [letter @ b'a'..=b'z'] if spaced => Some(u32::from(letter - b'a') + 1),
+                _ => None,
+            }
+        })
 }
 
 pub fn m3u(discs: &[PathBuf]) -> String {
@@ -244,6 +273,44 @@ mod tests {
             m3u(&[PathBuf::from("a.chd"), PathBuf::from("b.chd")]),
             "a.chd\nb.chd\n"
         );
+    }
+
+    #[test]
+    fn discs_play_in_the_order_their_names_number_them() {
+        let r = rom(true, vec![]);
+        let files = sized(&[
+            PathBuf::from("Game (Disc 10).chd"),
+            PathBuf::from("Game (Bonus).chd"),
+            PathBuf::from("Game (Disc 2).chd"),
+            PathBuf::from("Game (Disc 1).chd"),
+        ]);
+        match launch_target(&r, &files).unwrap() {
+            Launch::Playlist { discs, .. } => assert_eq!(
+                discs,
+                [
+                    "Game (Disc 1).chd",
+                    "Game (Disc 2).chd",
+                    "Game (Disc 10).chd",
+                    "Game (Bonus).chd"
+                ]
+                .map(PathBuf::from)
+            ),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn disc_numbers_are_read_the_ways_rom_sets_write_them() {
+        let number = |name: &str| disc_number(Path::new(name));
+        assert_eq!(number("Game (Disc 2).cue"), Some(2));
+        assert_eq!(number("Game (CD 3).chd"), Some(3));
+        assert_eq!(number("Game (Disk 1 of 2).adf"), Some(1));
+        assert_eq!(number("Game (disque 2).cue"), Some(2));
+        assert_eq!(number("Game (Disc 2A).cue"), Some(2));
+        assert_eq!(number("Game (Disc B).cue"), Some(2));
+        assert_eq!(number("Game (CDi).chd"), None);
+        assert_eq!(number("Game (Discovery).chd"), None);
+        assert_eq!(number("Game.chd"), None);
     }
 
     #[test]
