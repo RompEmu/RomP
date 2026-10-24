@@ -1063,7 +1063,6 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             if data.is_null() {
                 return false;
             }
-            // Some cores pass this struct misaligned.
             let cb: sys::retro_disk_control_callback = unsafe {
                 std::ptr::read_unaligned(data as *const sys::retro_disk_control_callback)
             };
@@ -1079,6 +1078,13 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
                 get_image_path: None,
                 get_image_label: None,
             });
+            true
+        }
+        sys::RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION => {
+            if data.is_null() {
+                return false;
+            }
+            unsafe { *(data as *mut c_uint) = 1 };
             true
         }
         sys::RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE => {
@@ -1559,13 +1565,27 @@ mod tests {
         assert_eq!(disc_info(), None);
         assert!(!swap_disc(1));
 
-        *DISK_CONTROL.lock().unwrap() = Some(DiskControlVTable {
+        let mut recorder = Recorder::default();
+        let _g = FrontendGuard::install(&mut recorder);
+        // libretro.h's numbers, so a wrong constant can't pass for a right one.
+        let mut version: c_uint = 0;
+        assert!(unsafe { env_trampoline(57, &mut version as *mut _ as *mut c_void) });
+        assert_eq!(version, 1);
+        assert_eq!(disc_info(), None);
+
+        let mut ext = sys::retro_disk_control_ext_callback {
             set_eject_state: Some(fake_eject),
+            get_eject_state: None,
             get_image_index: Some(fake_index),
             set_image_index: Some(fake_set_index),
             get_num_images: Some(fake_count),
-            ..Default::default()
-        });
+            replace_image_index: None,
+            add_image_index: None,
+            set_initial_image: None,
+            get_image_path: None,
+            get_image_label: None,
+        };
+        assert!(unsafe { env_trampoline(58, &mut ext as *mut _ as *mut c_void) });
         assert_eq!(
             disc_info(),
             Some(Discs {
@@ -1586,5 +1606,24 @@ mod tests {
         TRAY.lock().unwrap().clear();
         assert!(!swap_disc(3));
         assert!(TRAY.lock().unwrap().is_empty());
+
+        *DISK_CONTROL.lock().unwrap() = None;
+        let mut basic = sys::retro_disk_control_callback {
+            set_eject_state: Some(fake_eject),
+            get_eject_state: None,
+            get_image_index: Some(fake_index),
+            set_image_index: Some(fake_set_index),
+            get_num_images: Some(fake_count),
+            replace_image_index: None,
+            add_image_index: None,
+        };
+        assert!(unsafe { env_trampoline(13, &mut basic as *mut _ as *mut c_void) });
+        assert_eq!(
+            disc_info(),
+            Some(Discs {
+                count: 3,
+                current: 2
+            })
+        );
     }
 }

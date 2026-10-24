@@ -45,7 +45,6 @@ struct Args {
     options: Vec<(String, String)>,
 }
 
-/// Achievement progress is kept beside the save state it belongs to.
 fn send_discs(link: &Link, core: &mut lr::Core, frontend: &mut Frontend) {
     if let Some(discs) = core.discs(frontend) {
         link.send(&RunnerMsg::Discs {
@@ -55,6 +54,7 @@ fn send_discs(link: &Link, core: &mut lr::Core, frontend: &mut Frontend) {
     }
 }
 
+/// Achievement progress is kept beside the save state it belongs to.
 fn progress_path(save_dir: &std::path::Path, slot: u8) -> PathBuf {
     save_dir.join(format!("{}.achievements", state::slot_file_name(slot)))
 }
