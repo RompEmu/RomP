@@ -424,7 +424,9 @@ pub fn buildbot_url(base: &str, core: &CoreInfo) -> String {
 pub fn default_options(core_id: &str) -> Vec<(String, String)> {
     let options: &[(&str, &str)] = match core_id {
         "puae" => &[
-            ("puae_model", "A600"),
+            // Automatic picks the model a file's name asks for, such as an A1200 for "AGA".
+            ("puae_model", "auto"),
+            ("puae_model_fd", "A600"),
             ("puae_kickstart", "auto"),
             ("puae_chipmem_size", "4"),
             ("puae_fastmem_size", "8"),
@@ -1069,7 +1071,8 @@ mod tests {
     fn amiga_defaults_boot_a_real_kickstart() {
         let options = default_options("puae");
         assert!(options.contains(&("puae_kickstart".into(), "auto".into())));
-        assert!(options.contains(&("puae_model".into(), "A600".into())));
+        assert!(options.contains(&("puae_model".into(), "auto".into())));
+        assert!(options.contains(&("puae_model_fd".into(), "A600".into())));
         assert!(options.contains(&("puae_immediate_blits".into(), "immediate".into())));
         assert!(default_options("mednafen_psx_hw")
             .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
