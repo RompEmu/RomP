@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-24
+
 ### Added
 
 - RomP keeps a log of each of its last five launches, including what each game's emulator reported, in a `logs` folder beside your saves. Each game's part starts at a "Playing" line and ends at a "Stopped playing" line saying how it ended. About RomP → Show log opens the folder, and Copy the last game's log copies just that game's part, to paste into a bug report. The log stays on your computer. Emulators' debug messages are left out unless RomP is started with `RUST_LOG=debug`.
@@ -305,7 +307,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.18.1...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/RompEmu/RomP/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/RompEmu/RomP/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/RompEmu/RomP/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/RompEmu/RomP/compare/v0.16.0...v0.17.0
