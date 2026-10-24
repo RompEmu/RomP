@@ -89,37 +89,56 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
             return Some(Launch::File(eboot.clone()));
         }
     }
-    for wanted in DISC_ORDER {
+    let shallowest_of = |wanted: &str| {
         let matching: Vec<&PathBuf> = files
             .iter()
             .map(|(p, _)| p)
             .filter(|p| ext(p) == wanted)
             .collect();
-        let Some(shallowest) = matching.iter().map(|p| depth(p)).min() else {
-            continue;
-        };
+        let shallowest = matching.iter().map(|p| depth(p)).min()?;
         let mut found: Vec<PathBuf> = matching
             .into_iter()
             .filter(|p| depth(p) == shallowest)
             .cloned()
             .collect();
         found.sort_by_cached_key(|p| (disc_number(p).unwrap_or(u32::MAX), p.clone()));
+        Some(found)
+    };
+    for wanted in DISC_ORDER {
+        let Some(mut found) = shallowest_of(wanted) else {
+            continue;
+        };
         if found.len() == 1 || wanted == "m3u" {
             return Some(Launch::File(found.swap_remove(0)));
         }
-        let name = format!("{}.m3u", rom.fs_name);
-        let name = if safe_component(&name) {
-            name
-        } else {
-            "game.m3u".to_string()
-        };
-        return Some(Launch::Playlist { name, discs: found });
+        return Some(playlist(rom, found));
+    }
+    if let Some(mut zips) = shallowest_of("zip").filter(|z| z.len() > 1) {
+        let disks = crate::cores::core_for_platform(&rom.platform_slug)
+            .is_some_and(|c| crate::cores::reads_zipped_disks(c.id));
+        if disks {
+            return Some(playlist(rom, zips));
+        }
+        // Several zips are also an arcade game and its BIOS, which the fallback below handles.
+        if zips.iter().any(|z| disc_number(z).is_some()) {
+            return Some(Launch::File(zips.swap_remove(0)));
+        }
     }
     files
         .iter()
         .filter(|(p, _)| !is_extra(p))
         .min_by(|(a, sa), (b, sb)| depth(a).cmp(&depth(b)).then(sb.cmp(sa)).then(a.cmp(b)))
         .map(|(p, _)| Launch::File(p.clone()))
+}
+
+fn playlist(rom: &RomDetail, discs: Vec<PathBuf>) -> Launch {
+    let name = format!("{}.m3u", rom.fs_name);
+    let name = if safe_component(&name) {
+        name
+    } else {
+        "game.m3u".to_string()
+    };
+    Launch::Playlist { name, discs }
 }
 
 /// The disc a file's name says it is, as RomM reads it: "(Disc 2)", "(CD 2)", "(Disk 1 of 2)",
@@ -297,6 +316,56 @@ mod tests {
             ),
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn zipped_disks_make_a_playlist_for_an_emulator_that_opens_zips() {
+        let mut r = rom(true, vec![]);
+        r.platform_slug = "amiga".into();
+        let files = vec![
+            (PathBuf::from("Soccer Kid_Disk1.zip"), 767_602),
+            (PathBuf::from("Soccer Kid_Disk2.zip"), 794_874),
+            (PathBuf::from("Soccer Kid_Disk0.zip"), 703_522),
+        ];
+        match launch_target(&r, &files).unwrap() {
+            Launch::Playlist { discs, .. } => assert_eq!(
+                discs,
+                [
+                    "Soccer Kid_Disk0.zip",
+                    "Soccer Kid_Disk1.zip",
+                    "Soccer Kid_Disk2.zip"
+                ]
+                .map(PathBuf::from)
+            ),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn zipped_discs_start_from_the_first_for_other_emulators() {
+        let r = rom(true, vec![]);
+        let files = vec![
+            (PathBuf::from("Game (Disc 2).zip"), 900),
+            (PathBuf::from("Game (Disc 1).zip"), 800),
+        ];
+        assert_eq!(
+            launch_target(&r, &files),
+            Some(Launch::File(PathBuf::from("Game (Disc 1).zip")))
+        );
+    }
+
+    #[test]
+    fn an_arcade_game_beside_its_bios_still_starts_the_game() {
+        let mut r = rom(true, vec![]);
+        r.platform_slug = "arcade".into();
+        let files = vec![
+            (PathBuf::from("neogeo.zip"), 1_000),
+            (PathBuf::from("mslug.zip"), 9_000),
+        ];
+        assert_eq!(
+            launch_target(&r, &files),
+            Some(Launch::File(PathBuf::from("mslug.zip")))
+        );
     }
 
     #[test]

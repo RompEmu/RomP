@@ -386,6 +386,11 @@ fn core_url(base: &str, core: &CoreInfo) -> String {
     }
 }
 
+/// Cores whose disk list can name zipped disks, which they open themselves.
+pub fn reads_zipped_disks(core_id: &str) -> bool {
+    core_id == "puae"
+}
+
 pub fn uses_mouse(core_id: &str) -> bool {
     matches!(core_id, "puae" | "dosbox_pure" | "hatari")
 }
