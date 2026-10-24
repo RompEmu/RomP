@@ -111,13 +111,18 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
         if found.len() == 1 || wanted == "m3u" {
             return Some(Launch::File(found.swap_remove(0)));
         }
-        return Some(playlist(rom, found));
+        return Some(playlist(&rom.fs_name, found));
     }
     if let Some(mut zips) = shallowest_of("zip").filter(|z| z.len() > 1) {
         let disks = crate::cores::core_for_platform(&rom.platform_slug)
             .is_some_and(|c| crate::cores::reads_zipped_disks(c.id));
         if disks {
-            return Some(playlist(rom, zips));
+            // PUAE picks the Amiga model from the name it's given, so the list carries the disks' tags,
+            // such as "(AGA)", which the game's own name may not.
+            let first = zips[0]
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned());
+            return Some(playlist(first.as_deref().unwrap_or(&rom.fs_name), zips));
         }
         // Several zips are also an arcade game and its BIOS, which the fallback below handles.
         if zips.iter().any(|z| disc_number(z).is_some()) {
@@ -131,8 +136,8 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
         .map(|(p, _)| Launch::File(p.clone()))
 }
 
-fn playlist(rom: &RomDetail, discs: Vec<PathBuf>) -> Launch {
-    let name = format!("{}.m3u", rom.fs_name);
+fn playlist(stem: &str, discs: Vec<PathBuf>) -> Launch {
+    let name = format!("{stem}.m3u");
     let name = if safe_component(&name) {
         name
     } else {
@@ -328,15 +333,18 @@ mod tests {
             (PathBuf::from("Soccer Kid_Disk0.zip"), 703_522),
         ];
         match launch_target(&r, &files).unwrap() {
-            Launch::Playlist { discs, .. } => assert_eq!(
-                discs,
-                [
-                    "Soccer Kid_Disk0.zip",
-                    "Soccer Kid_Disk1.zip",
-                    "Soccer Kid_Disk2.zip"
-                ]
-                .map(PathBuf::from)
-            ),
+            Launch::Playlist { name, discs } => {
+                assert_eq!(name, "Soccer Kid_Disk0.m3u");
+                assert_eq!(
+                    discs,
+                    [
+                        "Soccer Kid_Disk0.zip",
+                        "Soccer Kid_Disk1.zip",
+                        "Soccer Kid_Disk2.zip"
+                    ]
+                    .map(PathBuf::from)
+                );
+            }
             other => panic!("{other:?}"),
         }
     }
