@@ -225,6 +225,8 @@ component GameMenu inherits Rectangle {
     in property <string> fullscreen-key: "F11";
     in property <string> screenshot-key: "F12";
     callback cycle-port(int, int);
+    in property <string> disc-label;
+    callback step-disc(int);
     callback resume();
     callback toggle-pause();
     callback restart();
@@ -399,12 +401,18 @@ component GameMenu inherits Rectangle {
                 focused: root.focused-item == 10 + i;
                 step(d) => { root.cycle-port(i, d); }
             }
+            if root.disc-label != "": Stepper {
+                label: @tr("Disc");
+                value: root.disc-label;
+                focused: root.focused-item == 10 + root.ports.length;
+                step(d) => { root.step-disc(d); }
+            }
             MenuDivider { }
             MenuRow {
                 text: @tr("Quit game");
                 icon: @image-url("icons/quit.svg");
                 danger: true;
-                focused: root.focused-item == 10 + root.ports.length;
+                focused: root.focused-item == 10 + root.ports.length + (root.disc-label != "" ? 1 : 0);
                 clicked => { root.quit(); }
             }
             Text {
@@ -512,6 +520,8 @@ export component GameWindow inherits Window {
     in property <string> screenshot-key: "F12";
     in property <[PortRow]> ports;
     callback cycle-port(int, int);
+    in property <string> disc-label;
+    callback step-disc(int);
     callback capture-mouse();
     callback mouse-button(int, bool);
     callback window-active(bool);
@@ -701,6 +711,8 @@ export component GameWindow inherits Window {
             look-label: root.look-label;
             open-look => { root.open-look(); }
             cycle-port(i, step) => { root.cycle-port(i, step); }
+            disc-label: root.disc-label;
+            step-disc(d) => { root.step-disc(d); }
             resume => { root.resume(); }
             toggle-pause => { root.toggle-pause(); }
             restart => { root.restart(); }

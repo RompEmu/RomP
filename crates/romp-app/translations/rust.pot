@@ -1203,6 +1203,10 @@ msgid "Save slot {slot}"
 msgstr ""
 
 #: crates/romp-app/src/play.rs
+msgid "{} of {}"
+msgstr ""
+
+#: crates/romp-app/src/play.rs
 msgid "Port {}"
 msgstr ""
 

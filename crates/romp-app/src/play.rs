@@ -211,6 +211,7 @@ struct Game {
     always_mouse: bool,
     port_options: RefCell<Vec<ports::Options>>,
     port_devices: RefCell<Vec<u32>>,
+    discs: Cell<Option<Discs>>,
     saved_ports: Vec<(u8, u32)>,
     save_ports: SavePorts,
     volume: Cell<u8>,
@@ -265,6 +266,26 @@ const ACHIEVEMENT_ROW: f32 = 52.0;
 const VOLUME_STEP: i32 = 10;
 /// How often, in frames, the small picture kept for the automatic save is refreshed.
 const THUMBNAIL_EVERY: u32 = 120;
+
+/// A game's discs, as its emulator reports them, and the one that's in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Discs {
+    count: u32,
+    current: u32,
+}
+
+impl Discs {
+    fn stepped(self, step: i32) -> u32 {
+        (i64::from(self.current) + i64::from(step)).rem_euclid(i64::from(self.count)) as u32
+    }
+}
+
+/// The menu row that changes discs, after the controller ports, for games with more than one.
+fn disc_row(discs: Option<Discs>, ports: usize) -> Option<i32> {
+    discs
+        .filter(|d| d.count > 1)
+        .map(|_| MENU_PORTS_START + ports as i32)
+}
 
 const MENU_ROW: [i32; 3] = [MENU_RESUME, MENU_PAUSE, MENU_RESTART];
 
@@ -921,7 +942,28 @@ impl Game {
     }
 
     fn menu_items(&self) -> i32 {
-        MENU_PORTS_START + self.pickable_ports().len() as i32 + 1
+        let ports = self.pickable_ports().len();
+        MENU_PORTS_START + ports as i32 + i32::from(self.disc_row().is_some()) + 1
+    }
+
+    fn disc_row(&self) -> Option<i32> {
+        disc_row(self.discs.get(), self.pickable_ports().len())
+    }
+
+    fn set_discs(&self, discs: Discs) {
+        self.discs.set(Some(discs));
+        let label = if discs.count > 1 {
+            tr!("{} of {}", discs.current + 1, discs.count)
+        } else {
+            String::new()
+        };
+        self.primary().set_disc_label(label.into());
+    }
+
+    fn step_disc(&self, step: i32) {
+        if let Some(discs) = self.discs.get().filter(|d| d.count > 1) {
+            self.send(&AppMsg::ChangeDisc(discs.stepped(step)));
+        }
     }
 
     fn pickable_ports(&self) -> Vec<usize> {
@@ -1020,6 +1062,9 @@ impl Game {
         if let Some(port) = self.port_row(item) {
             return self.cycle_port(port, 1);
         }
+        if Some(item) == self.disc_row() {
+            return self.step_disc(1);
+        }
         if item == self.menu_items() - 1 {
             return (self.finish)();
         }
@@ -1110,6 +1155,8 @@ impl Game {
             input::LEFT | input::RIGHT => {
                 if let Some(port) = self.port_row(focus) {
                     self.cycle_port(port, step);
+                } else if Some(focus) == self.disc_row() {
+                    self.step_disc(step);
                 } else if focus == MENU_VOLUME {
                     self.step_volume(step);
                 }
@@ -1357,6 +1404,7 @@ pub fn launch(
             always_mouse: opts.mouse,
             port_options: RefCell::default(),
             port_devices: RefCell::default(),
+            discs: Cell::new(None),
             saved_ports: opts.port_devices.clone(),
             save_ports: opts.save_ports,
             volume: Cell::new(opts.prefs.volume),
@@ -1571,6 +1619,10 @@ pub fn launch(
                 }
                 if let SessionEvent::Runner(RunnerMsg::Controllers { ports }) = event {
                     game.set_ports(ports);
+                    continue;
+                }
+                if let SessionEvent::Runner(RunnerMsg::Discs { count, current }) = event {
+                    game.set_discs(Discs { count, current });
                     continue;
                 }
                 if let SessionEvent::Runner(RunnerMsg::Rotation(turns)) = event {
@@ -1805,6 +1857,10 @@ fn wire(window: &GameWindow, game: &Rc<Game>, bottom_half: bool) {
             });
         }
     });
+    window.on_step_disc({
+        let with = with.clone();
+        move |step| with(&|g| g.step_disc(step))
+    });
     window.on_resume({
         let with = with.clone();
         move || with(&|g| g.set_menu(false))
@@ -1984,6 +2040,38 @@ mod tests {
         );
         assert!(!closes_window("w", mods(true, true, false, false)));
         assert!(!closes_window("s", mods(true, false, false, false)));
+    }
+
+    #[test]
+    fn stepping_through_discs_wraps_around() {
+        let discs = Discs {
+            count: 3,
+            current: 0,
+        };
+        assert_eq!(discs.stepped(1), 1);
+        assert_eq!(discs.stepped(-1), 2);
+        assert_eq!(
+            Discs {
+                current: 2,
+                ..discs
+            }
+            .stepped(1),
+            0
+        );
+    }
+
+    #[test]
+    fn only_a_game_with_several_discs_gets_a_disc_row() {
+        let one = Discs {
+            count: 1,
+            current: 0,
+        };
+        assert_eq!(disc_row(None, 2), None);
+        assert_eq!(disc_row(Some(one), 2), None);
+        assert_eq!(
+            disc_row(Some(Discs { count: 2, ..one }), 2),
+            Some(MENU_PORTS_START + 2)
+        );
     }
 
     #[test]

@@ -791,6 +791,10 @@ msgid "Controllers…"
 msgstr ""
 
 #: crates/romp-app/ui/game.slint
+msgid "Disc"
+msgstr ""
+
+#: crates/romp-app/ui/game.slint
 msgid "Quit game"
 msgstr ""
 
