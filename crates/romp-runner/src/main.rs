@@ -46,6 +46,15 @@ struct Args {
 }
 
 /// Achievement progress is kept beside the save state it belongs to.
+fn send_discs(link: &Link, core: &mut lr::Core, frontend: &mut Frontend) {
+    if let Some(discs) = core.discs(frontend) {
+        link.send(&RunnerMsg::Discs {
+            count: discs.count,
+            current: discs.current,
+        });
+    }
+}
+
 fn progress_path(save_dir: &std::path::Path, slot: u8) -> PathBuf {
     save_dir.join(format!("{}.achievements", state::slot_file_name(slot)))
 }
@@ -253,6 +262,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             .map(|types| types.into_iter().map(|t| (t.name, t.id)).collect())
             .collect(),
     });
+    send_discs(link, &mut core, frontend);
 
     frontend.aspect = av.geometry.aspect_ratio;
     let frame_duration = Duration::from_secs_f64(1.0 / av.timing.fps.max(1.0));
@@ -301,8 +311,15 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                         a.load_progress(&progress_path(&args.save_dir, slot));
                     }
                     link.send(&RunnerMsg::StateLoaded { slot, ok });
+                    send_discs(link, &mut core, frontend);
                 }
                 AppMsg::Shutdown => stop_requested = true,
+                AppMsg::ChangeDisc(index) => {
+                    if !core.change_disc(frontend, index) {
+                        warn!("couldn't change to disc {}", index + 1);
+                    }
+                    send_discs(link, &mut core, frontend);
+                }
                 AppMsg::Reset => {
                     core.reset(frontend);
                     if let Some(a) = &mut achievements {
@@ -349,7 +366,10 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             let run_time = run_started.elapsed();
             if let Some((slot, give_up)) = resume {
                 match saves.try_load_state(slot, &mut core, frontend) {
-                    Ok(()) => resume = None,
+                    Ok(()) => {
+                        resume = None;
+                        send_discs(link, &mut core, frontend);
+                    }
                     Err(e) if Instant::now() > give_up => {
                         warn!("{e}");
                         resume = None;

@@ -38,6 +38,8 @@ pub enum AppMsg {
     LoadSlot(u8),
     Shutdown,
     Reset,
+    /// Puts in the game's disc with this index, counting from 0.
+    ChangeDisc(u32),
     /// Signs in to RetroAchievements and starts tracking the loaded game.
     Achievements {
         username: String,
@@ -138,6 +140,11 @@ pub enum RunnerMsg {
         ports: Vec<Vec<(String, u32)>>,
     },
     Rotation(u8),
+    /// The game's discs, for cores that can change them, and the one that's in.
+    Discs {
+        count: u32,
+        current: u32,
+    },
     SramWritten,
     StateWritten {
         slot: u8,
