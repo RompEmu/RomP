@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Fixed
+
+- After the computer's clock was set back, the backup RomP makes of a save before replacing it could be removed straight away instead of kept with the newest ten.
+
 ## [0.19.0] - 2026-10-24
 
 ### Added
