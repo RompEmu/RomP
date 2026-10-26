@@ -1675,13 +1675,15 @@ component GamePage inherits FocusScope {
                                 }
                                 if !card.in-game: Row {
                                     alignment: start;
+                                    spacing: 4px;
                                     Button {
                                         text: @tr("Play from here");
                                         enabled: root.downloaded && !root.busy && !root.slots-hardcore;
                                         clicked => { root.play-slot(card.slot); }
                                     }
-                                    Button {
-                                        text: @tr("Delete");
+                                    IconButton {
+                                        icon: @image-url("icons/trash.svg");
+                                        tooltip: @tr("Delete");
                                         enabled: !root.busy;
                                         clicked => { root.delete-slot(card.slot); }
                                     }
