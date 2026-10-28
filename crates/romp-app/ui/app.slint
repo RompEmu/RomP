@@ -7,6 +7,7 @@ import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, Scro
 export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool, note: bool }
 export struct NotificationRow { id: int, title: string, body: string, level: string, when: string, unread: bool }
 export struct Membership { key: string, name: string, member: bool }
+export struct StatusOption { label: string, checked: bool }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
 export struct LicenseRow { name: string, license: string, url: string }
@@ -1398,6 +1399,11 @@ component GamePage inherits FocusScope {
     callback toggle-favorite();
     callback toggle-membership(string, bool);
     callback new-collection();
+    in property <bool> show-status;
+    in property <bool> can-edit-status;
+    in property <string> status-label;
+    in property <[StatusOption]> status-options;
+    callback toggle-status(int, bool);
 
     property <int> viewing: -1;
     property <bool> banner-from-shot: root.shots.length > 0 && root.shots[0].loaded;
@@ -1547,6 +1553,46 @@ component GamePage inherits FocusScope {
                                                 clicked => {
                                                     collections-popup.close();
                                                     root.new-collection();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if root.show-status: Rectangle {
+                                width: status-button.preferred-width;
+                                status-button := Button {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: root.status-label;
+                                    enabled: root.can-edit-status;
+                                    clicked => { status-popup.show(); }
+                                }
+                                status-popup := PopupWindow {
+                                    y: parent.height + 4px;
+                                    width: 220px;
+                                    height: status-list.preferred-height;
+                                    close-policy: close-on-click-outside;
+                                    Rectangle {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        background: Theme.surface-raised;
+                                        border-radius: 8px;
+                                        border-width: 1px;
+                                        border-color: Theme.surface-selected;
+                                        drop-shadow-blur: 12px;
+                                        drop-shadow-color: Theme.shadow;
+                                        status-list := VerticalLayout {
+                                            width: parent.width;
+                                            padding: 12px;
+                                            spacing: 6px;
+                                            for option[i] in root.status-options: VerticalLayout {
+                                                spacing: 6px;
+                                                if i == 2: Rectangle { height: 1px; background: Theme.surface-selected; }
+                                                CheckBox {
+                                                    text: option.label;
+                                                    checked: option.checked;
+                                                    toggled => { root.toggle-status(i, self.checked); }
                                                 }
                                             }
                                         }
@@ -2770,6 +2816,11 @@ export component AppWindow inherits Window {
     callback toggle-favorite();
     callback toggle-membership(string, bool);
     callback new-collection-with-game();
+    in property <bool> show-status;
+    in property <bool> can-edit-status;
+    in property <string> game-status-label;
+    in property <[StatusOption]> game-status-options;
+    callback toggle-status(int, bool);
     in property <int> grid-focus-row: -1;
     in-out property <length> grid-scroll <=> library.scroll-y;
     in property <float> grid-focus-top;
@@ -2981,6 +3032,11 @@ export component AppWindow inherits Window {
             toggle-favorite => { root.toggle-favorite(); }
             toggle-membership(key, on) => { root.toggle-membership(key, on); }
             new-collection => { root.new-collection-with-game(); }
+            show-status: root.show-status;
+            can-edit-status: root.can-edit-status;
+            status-label: root.game-status-label;
+            status-options: root.game-status-options;
+            toggle-status(index, on) => { root.toggle-status(index, on); }
         }
         if root.screen == 4: SettingsPage {
             back-label: root.heading;

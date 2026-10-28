@@ -259,11 +259,13 @@ impl Rom {
     }
 
     pub fn play_status(&self) -> PlayStatus {
-        self.rom_user.as_ref().map_or_else(PlayStatus::default, |u| PlayStatus {
-            now_playing: u.now_playing,
-            backlogged: u.backlogged,
-            progress: u.status.as_deref().and_then(Progress::parse),
-        })
+        self.rom_user
+            .as_ref()
+            .map_or_else(PlayStatus::default, |u| PlayStatus {
+                now_playing: u.now_playing,
+                backlogged: u.backlogged,
+                progress: u.status.as_deref().and_then(Progress::parse),
+            })
     }
 
     pub fn title(&self) -> &str {

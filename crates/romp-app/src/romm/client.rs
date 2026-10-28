@@ -1,7 +1,7 @@
 use crate::romm::types::{
-    DeviceAuth, Firmware, Heartbeat, InstallRequest, Platform, PlayStatus, PollOutcome,
-    Progress, RemoteCollection, RemoteNotification, RemoteSave, RemoteState, RomDetail, RomFile,
-    RomPage, User,
+    DeviceAuth, Firmware, Heartbeat, InstallRequest, Platform, PlayStatus, PollOutcome, Progress,
+    RemoteCollection, RemoteNotification, RemoteSave, RemoteState, RomDetail, RomFile, RomPage,
+    User,
 };
 use crate::store::PlaySession;
 use serde::de::DeserializeOwned;

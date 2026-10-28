@@ -5,6 +5,7 @@ mod game;
 mod installs;
 mod navigation;
 mod notifications;
+mod play_status;
 mod save_sync;
 mod screenshots;
 mod settings;
@@ -366,6 +367,11 @@ impl Controller {
         });
         ui.on_new_collection_with_game(|| {
             with_controller(|c| c.new_collection(c.current_game_id()));
+        });
+        ui.on_toggle_status(|index, on| {
+            if let Ok(index) = usize::try_from(index) {
+                with_controller(|c| c.toggle_status(index, on));
+            }
         });
         ui.on_dialog_accepted(|value| with_controller(|c| c.dialog_accepted(value.to_string())));
         ui.on_dialog_cancelled(|| with_controller(|c| c.close_dialog()));
@@ -1146,6 +1152,9 @@ impl Controller {
         }
         self.reload_sidebar();
         self.reload_games();
+        if let Some(id) = self.current_game_id() {
+            self.refresh_status_controls(id);
+        }
     }
 }
 

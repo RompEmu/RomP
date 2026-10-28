@@ -317,6 +317,7 @@ impl Controller {
         }
         ui.set_game_playable(playable);
         self.refresh_collection_controls(detail.id);
+        self.refresh_status_controls(detail.id);
         ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
             ui.set_game_status(tr!("RomP can't play {} games yet.", detail.platform).into());

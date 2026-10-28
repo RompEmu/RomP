@@ -282,6 +282,42 @@ msgstr ""
 msgid "Notification"
 msgstr ""
 
+#: crates/romp-app/src/app/play_status.rs
+msgid "Incomplete"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Finished"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Completed 100%"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Retired"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Never playing"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs crates/romp-app/src/app/collections.rs
+msgid "Now playing"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Backlogged"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Status…"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Couldn't update the game's status: {e}."
+msgstr ""
+
 #: crates/romp-app/src/app/save_sync.rs
 msgid "unknown"
 msgstr ""
@@ -546,6 +582,10 @@ msgstr ""
 
 #: crates/romp-app/src/app/collections.rs
 msgid "For you"
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
+msgid "Backlog"
 msgstr ""
 
 #: crates/romp-app/src/app/collections.rs crates/romp-app/src/storage.rs
