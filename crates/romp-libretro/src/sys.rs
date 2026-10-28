@@ -84,6 +84,9 @@ pub const RETRO_ENVIRONMENT_SET_MEMORY_MAPS: c_uint = 36 | 0x10000;
 pub const RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS: c_uint = 42 | 0x10000;
 pub const RETRO_ENVIRONMENT_SET_HW_RENDER: c_uint = 14;
 pub const RETRO_ENVIRONMENT_GET_LOG_INTERFACE: c_uint = 27;
+pub const RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE: c_uint = 23;
+pub const RETRO_RUMBLE_STRONG: c_uint = 0;
+pub const RETRO_RUMBLE_WEAK: c_uint = 1;
 pub const RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY: c_uint = 31;
 pub const RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO: c_uint = 32;
 pub const RETRO_ENVIRONMENT_SET_GEOMETRY: c_uint = 37;
@@ -311,6 +314,14 @@ pub struct retro_core_options_v2_intl {
 #[repr(C)]
 pub struct retro_log_callback {
     pub log: retro_log_printf_t,
+}
+
+pub type retro_set_rumble_state_t =
+    unsafe extern "C" fn(port: c_uint, effect: c_uint, strength: u16) -> bool;
+
+#[repr(C)]
+pub struct retro_rumble_interface {
+    pub set_rumble_state: Option<retro_set_rumble_state_t>,
 }
 
 pub type retro_environment_t = unsafe extern "C" fn(cmd: c_uint, data: *mut c_void) -> bool;

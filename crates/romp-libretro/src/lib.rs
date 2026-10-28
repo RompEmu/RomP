@@ -168,7 +168,17 @@ pub trait Frontend {
     fn input_state(&mut self, port: u32, device: u32, index: u32, id: u32) -> i16;
     fn set_pixel_format(&mut self, fmt: PixelFormat) -> bool;
     fn set_geometry(&mut self, _geometry: Geometry) {}
+    /// Sets one of a port's two rumble motors, 0 to stop it. Returns whether it can rumble.
+    fn set_rumble(&mut self, _port: u32, _motor: Motor, _strength: u16) -> bool {
+        false
+    }
     fn shutdown(&mut self);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Motor {
+    Strong,
+    Weak,
 }
 
 pub struct GameInfo<'a> {
@@ -1186,6 +1196,14 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
                 None => false,
             })
         }
+        sys::RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE => {
+            if data.is_null() {
+                return false;
+            }
+            let rumble = unsafe { &mut *(data as *mut sys::retro_rumble_interface) };
+            rumble.set_rumble_state = Some(set_rumble_trampoline);
+            true
+        }
         sys::RETRO_ENVIRONMENT_GET_LOG_INTERFACE => {
             if data.is_null() {
                 return false;
@@ -1333,6 +1351,15 @@ unsafe extern "C" fn audio_sample_batch_trampoline(data: *const i16, frames: usi
     try_frontend(|f| f.audio_sample_batch(slice)).unwrap_or_else(|| send_to_sink(slice))
 }
 
+unsafe extern "C" fn set_rumble_trampoline(port: c_uint, effect: c_uint, strength: u16) -> bool {
+    let motor = match effect {
+        sys::RETRO_RUMBLE_STRONG => Motor::Strong,
+        sys::RETRO_RUMBLE_WEAK => Motor::Weak,
+        _ => return false,
+    };
+    try_frontend(|f| f.set_rumble(port, motor, strength)).unwrap_or(false)
+}
+
 unsafe extern "C" fn input_poll_trampoline() {
     let _ = try_frontend(|f| f.input_poll());
 }
@@ -1402,6 +1429,7 @@ mod tests {
     struct Recorder {
         geometry: Option<Geometry>,
         hw_frame: Option<(u32, u32)>,
+        rumble: Vec<(u32, Motor, u16)>,
     }
 
     impl Frontend for Recorder {
@@ -1423,6 +1451,33 @@ mod tests {
         fn set_geometry(&mut self, geometry: Geometry) {
             self.geometry = Some(geometry);
         }
+        fn set_rumble(&mut self, port: u32, motor: Motor, strength: u16) -> bool {
+            self.rumble.push((port, motor, strength));
+            true
+        }
+    }
+
+    #[test]
+    fn the_core_rumbles_a_ports_motors_through_the_frontend() {
+        let mut recorder = Recorder::default();
+        {
+            let _g = FrontendGuard::install(&mut recorder);
+            let mut rumble = sys::retro_rumble_interface {
+                set_rumble_state: None,
+            };
+            // libretro.h's number, so a wrong constant can't pass for a right one.
+            assert!(unsafe { env_trampoline(23, &mut rumble as *mut _ as *mut c_void) });
+            let set = rumble.set_rumble_state.unwrap();
+            unsafe {
+                assert!(set(1, 0, 40_000));
+                assert!(set(0, 1, 0));
+                assert!(!set(0, 7, 100));
+            }
+        }
+        assert_eq!(
+            recorder.rumble,
+            [(1, Motor::Strong, 40_000), (0, Motor::Weak, 0)]
+        );
     }
 
     fn raw_geometry(aspect_ratio: f32) -> sys::retro_game_geometry {
