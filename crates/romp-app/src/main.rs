@@ -42,6 +42,7 @@ mod restore;
 mod romm;
 mod rotation;
 mod rpcs3;
+mod rumble;
 mod saves;
 mod scale;
 mod screenshot;

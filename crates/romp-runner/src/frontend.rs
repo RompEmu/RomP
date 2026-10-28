@@ -136,7 +136,10 @@ mod tests {
         assert_eq!(frontend.take_rumble(), [(1, 40_000, 9_000)]);
         assert!(frontend.take_rumble().is_empty());
         frontend.set_rumble(1, lr::Motor::Weak, 9_000);
-        assert!(frontend.take_rumble().is_empty(), "no change, nothing to send");
+        assert!(
+            frontend.take_rumble().is_empty(),
+            "no change, nothing to send"
+        );
         frontend.set_rumble(1, lr::Motor::Strong, 0);
         frontend.set_rumble(0, lr::Motor::Weak, 5);
         assert_eq!(frontend.take_rumble(), [(0, 0, 5), (1, 0, 9_000)]);

@@ -221,7 +221,12 @@ fn trigger_presses(held: &mut [bool; 2], pad: &Pad) -> Vec<Button> {
 struct Shared {
     pads: Vec<Pad>,
     presses: Vec<(u32, Button)>,
+    /// Each controller's strong and weak motor, and for how long, for the polling thread to set.
+    rumble: Option<(Vec<Motors>, Duration)>,
 }
+
+/// A controller's id with its strong and weak motor.
+type Motors = (u32, u16, u16);
 
 /// How long the polling thread waits for SDL between copies, at most.
 const POLL_EVERY: Duration = Duration::from_millis(4);
@@ -233,6 +238,8 @@ struct Sdl {
     subsystem: GamepadSubsystem,
     events: EventPump,
     open: Vec<(sdl3::gamepad::Gamepad, Pad, [bool; 2])>,
+    /// Controllers that refused to rumble, so the log says so once.
+    refused: std::collections::HashSet<u32>,
 }
 
 impl Sdl {
@@ -247,6 +254,7 @@ impl Sdl {
             subsystem,
             events,
             open: Vec::new(),
+            refused: std::collections::HashSet::new(),
         };
         for id in sdl.subsystem.gamepads()? {
             sdl.open(id);
@@ -291,6 +299,20 @@ impl Sdl {
         self.open.sort_by_key(|(_, p, _)| p.id);
     }
 
+    fn rumble(&mut self, motors: &[Motors], duration: Duration) {
+        let ms = duration.as_millis().try_into().unwrap_or(u32::MAX);
+        for (gamepad, pad, _) in &mut self.open {
+            let Some(&(_, strong, weak)) = motors.iter().find(|(id, _, _)| *id == pad.id) else {
+                continue;
+            };
+            if let Err(e) = gamepad.set_rumble(strong, weak, ms) {
+                if self.refused.insert(pad.id) {
+                    tracing::info!("{} can't rumble: {e}", pad.name);
+                }
+            }
+        }
+    }
+
     /// Waits a moment for SDL, then copies every controller and the presses since last time.
     fn step(&mut self, presses: &mut Vec<(u32, Button)>) {
         let first = self.events.wait_event_timeout(POLL_EVERY);
@@ -328,6 +350,10 @@ fn poll_on_this_thread(shared: &std::sync::Mutex<Shared>, stop: &std::sync::atom
     let mut presses = Vec::new();
     while !stop.load(std::sync::atomic::Ordering::Relaxed) {
         sdl.step(&mut presses);
+        let rumble = shared.lock().unwrap().rumble.take();
+        if let Some((motors, duration)) = rumble {
+            sdl.rumble(&motors, duration);
+        }
         let mut shared = shared.lock().unwrap();
         shared.pads = sdl.open.iter().map(|(_, p, _)| p.clone()).collect();
         shared.presses.append(&mut presses);
@@ -431,6 +457,20 @@ impl Gamepads {
                 }
             })
             .collect()
+    }
+
+    /// Rumbles each controller's strong and weak motor with what `motors` gives for its key.
+    pub fn rumble(&mut self, motors: impl Fn(&str) -> (u16, u16), duration: Duration) {
+        let rumble = self
+            .keys()
+            .iter()
+            .zip(self.pads())
+            .map(|(key, pad)| {
+                let (strong, weak) = motors(key);
+                (pad.id, strong, weak)
+            })
+            .collect();
+        self.shared.lock().unwrap().rumble = Some((rumble, duration));
     }
 
     /// The family of the controller used last, for naming its buttons.

@@ -212,6 +212,7 @@ struct Game {
     port_options: RefCell<Vec<ports::Options>>,
     port_devices: RefCell<Vec<u32>>,
     discs: Cell<Option<Discs>>,
+    rumble: RefCell<crate::rumble::Rumble>,
     saved_ports: Vec<(u8, u32)>,
     save_ports: SavePorts,
     volume: Cell<u8>,
@@ -1412,6 +1413,7 @@ pub fn launch(
             port_options: RefCell::default(),
             port_devices: RefCell::default(),
             discs: Cell::new(None),
+            rumble: RefCell::default(),
             saved_ports: opts.port_devices.clone(),
             save_ports: opts.save_ports,
             volume: Cell::new(opts.prefs.volume),
@@ -1524,6 +1526,20 @@ pub fn launch(
             };
             game.pads(&inputs);
             game.send_mouse_motion();
+            game.rumble
+                .borrow_mut()
+                .set_quiet(game.paused.get() || game.menu_open.get());
+            if let Some(motors) = game.rumble.borrow_mut().due(std::time::Instant::now()) {
+                let players = players.borrow();
+                gamepads.borrow_mut().rumble(
+                    |key| {
+                        players
+                            .player(key)
+                            .map_or((0, 0), |p| motors[usize::from(p) - 1])
+                    },
+                    crate::rumble::RUMBLE_FOR,
+                );
+            }
             if !game.paused.get() && !game.menu_open.get() {
                 let keyboard = players.borrow().player(KEYBOARD);
                 let mut commands = game.controls.borrow_mut().set_keyboard_player(keyboard);
@@ -1626,6 +1642,10 @@ pub fn launch(
                 }
                 if let SessionEvent::Runner(RunnerMsg::Controllers { ports }) = event {
                     game.set_ports(ports);
+                    continue;
+                }
+                if let SessionEvent::Runner(RunnerMsg::Rumble { port, strong, weak }) = event {
+                    game.rumble.borrow_mut().set(port, strong, weak);
                     continue;
                 }
                 if let SessionEvent::Runner(RunnerMsg::Discs { count, current }) = event {
