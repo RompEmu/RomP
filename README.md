@@ -31,7 +31,7 @@ Download the [latest release](https://github.com/RompEmu/RomP/releases/latest) o
 
 ## Features
 
-- **Your RomM library:** platforms, favorites, collections and recently played, with search, sorting and box art shaped like each console's.
+- **Your RomM library:** platforms, favorites, collections, recently played, now playing and backlog, with search, sorting and box art shaped like each console's.
 - **One click to play:** RomP installs the right emulator and BIOS files. Downloaded games play offline.
 - **Saves that follow you:** in-game saves and save states sync with RomM before and after you play. If both sides changed, you choose which to keep.
 - **Sandboxed emulators:** emulators are native code downloaded from the internet, and games are files from anywhere. Each game runs in its own locked-down process that can only write to that game's saves and its own temporary files, so a buggy or malicious emulator or ROM can't touch your other files or take RomP down with it. xemu and RPCS3 run outside the sandbox.
