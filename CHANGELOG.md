@@ -10,6 +10,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - Save states can be deleted from the game's page, including where you left off. Each asks first, keeps a backup in the game's save folder, and is deleted on RomM too, unless another device has saved a newer one there since.
 - A game's status can be set from its page, as in RomM: now playing, backlogged, and how far you got, from incomplete to completed 100%. It's saved on RomM, so it shows there and on your other devices, and statuses set in RomM come down with each sync. The sidebar lists the games you're playing now and your backlog.
 - Controllers rumble when the game rumbles them, on each player's own controller. The game menu and pause stop it.
+- Surprise me, the dice next to Refresh in the library, opens a random game from the list you're looking at, never the same one twice in a row. With a controller, press X on Xbox pads, Square on PlayStation, Y on Nintendo.
 
 ### Fixed
 
