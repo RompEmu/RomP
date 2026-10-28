@@ -28,6 +28,8 @@ const AUTO_SECTIONS: [(&str, &str, CollectionKind); 3] = [
 const PAIR_KEY: &str = "pair";
 pub(super) const RECENT_KEY: &str = "recent";
 pub(super) const FOR_YOU_KEY: &str = "for-you";
+pub(super) const NOW_PLAYING_KEY: &str = "now-playing";
+pub(super) const BACKLOG_KEY: &str = "backlog";
 
 pub(super) enum DialogAction {
     Create { add_game: Option<i64> },
@@ -127,6 +129,8 @@ pub(super) fn heading_for(key: &str, entries: &[(String, String)]) -> String {
         "favorites" | PAIR_KEY => tr!("Favorites"),
         RECENT_KEY => tr!("Recently played"),
         FOR_YOU_KEY => tr!("For you"),
+        NOW_PLAYING_KEY => tr!("Now playing"),
+        BACKLOG_KEY => tr!("Backlog"),
         _ => entries
             .iter()
             .find(|(k, _)| k == key)
@@ -154,6 +158,8 @@ pub(super) fn scope_for(key: &str) -> Scope {
         "all" => Scope::All,
         RECENT_KEY => Scope::Recent,
         FOR_YOU_KEY => Scope::ForYou,
+        NOW_PLAYING_KEY => Scope::NowPlaying,
+        BACKLOG_KEY => Scope::Backlog,
         _ => match key.strip_prefix("p:").and_then(|id| id.parse().ok()) {
             Some(id) => Scope::Platform(id),
             None => Scope::Collection(key.to_string()),
@@ -163,6 +169,14 @@ pub(super) fn scope_for(key: &str) -> Scope {
 
 fn recent_icon() -> Image {
     Image::load_from_svg_data(include_bytes!("../../ui/icons/recent.svg")).unwrap_or_default()
+}
+
+fn now_playing_icon() -> Image {
+    Image::load_from_svg_data(include_bytes!("../../ui/icons/gamepad.svg")).unwrap_or_default()
+}
+
+fn backlog_icon() -> Image {
+    Image::load_from_svg_data(include_bytes!("../../ui/icons/backlog.svg")).unwrap_or_default()
 }
 
 fn for_you_icon() -> Image {
@@ -213,7 +227,7 @@ impl Controller {
         let downloaded_only = self.library.borrow().filter.downloaded_only;
         let show_collections = self.has_scope("collections.read");
         let can_edit = self.can_edit_collections();
-        let (platforms, collections, recent, for_you) = {
+        let (platforms, collections, recent, for_you, (now_playing, backlog)) = {
             let store = self.shared.store.lock().unwrap();
             let collections = if show_collections {
                 store.collections(downloaded_only)
@@ -225,6 +239,7 @@ impl Controller {
                 collections,
                 store.recent_count(downloaded_only),
                 store.recommended_count(downloaded_only),
+                store.status_counts(downloaded_only),
             )
         };
         let expanded = self.expanded.borrow().clone();
@@ -253,6 +268,22 @@ impl Controller {
                 ..item(RECENT_KEY, &tr!("Recently played"), recent, "")
             });
             keys.push(RECENT_KEY.to_string());
+        }
+        if now_playing > 0 {
+            entries.push(SidebarEntry {
+                has_icon: true,
+                icon: now_playing_icon(),
+                ..item(NOW_PLAYING_KEY, &tr!("Now playing"), now_playing, "")
+            });
+            keys.push(NOW_PLAYING_KEY.to_string());
+        }
+        if backlog > 0 {
+            entries.push(SidebarEntry {
+                has_icon: true,
+                icon: backlog_icon(),
+                ..item(BACKLOG_KEY, &tr!("Backlog"), backlog, "")
+            });
+            keys.push(BACKLOG_KEY.to_string());
         }
         if for_you > 0 {
             entries.push(SidebarEntry {
@@ -737,6 +768,8 @@ mod tests {
         assert_eq!(heading_for("favorites", &entries), "Favorites");
         assert_eq!(heading_for(RECENT_KEY, &entries), "Recently played");
         assert_eq!(heading_for(FOR_YOU_KEY, &entries), "For you");
+        assert_eq!(heading_for(NOW_PLAYING_KEY, &entries), "Now playing");
+        assert_eq!(heading_for(BACKLOG_KEY, &entries), "Backlog");
         assert_eq!(heading_for("v:gone", &entries), "Games");
         assert_eq!(games_label(0), "No games");
         assert_eq!(games_label(1), "1 game");
@@ -845,6 +878,8 @@ mod tests {
         assert_eq!(scope_for("all"), Scope::All);
         assert_eq!(scope_for(RECENT_KEY), Scope::Recent);
         assert_eq!(scope_for(FOR_YOU_KEY), Scope::ForYou);
+        assert_eq!(scope_for(NOW_PLAYING_KEY), Scope::NowPlaying);
+        assert_eq!(scope_for(BACKLOG_KEY), Scope::Backlog);
         assert_eq!(scope_for("p:12"), Scope::Platform(12));
         assert_eq!(scope_for("c:3"), Scope::Collection("c:3".into()));
         assert_eq!(scope_for("v:eyJu"), Scope::Collection("v:eyJu".into()));
