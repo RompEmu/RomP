@@ -10,6 +10,7 @@ mod save_sync;
 mod screenshots;
 mod settings;
 mod slots;
+mod surprise;
 mod updates;
 
 use crate::cores::Cores;
@@ -129,6 +130,7 @@ struct Controller {
     offline: Cell<bool>,
     offline_retry: RefCell<Option<Timer>>,
     selected: RefCell<String>,
+    surprise_last: Cell<Option<i64>>,
     expanded: RefCell<HashSet<String>>,
     platform_filter: RefCell<String>,
     sidebar_names: RefCell<Vec<(String, String)>>,
@@ -232,6 +234,7 @@ pub fn run() -> anyhow::Result<()> {
         offline: Cell::new(false),
         offline_retry: RefCell::new(None),
         selected: RefCell::new("all".into()),
+        surprise_last: Cell::new(None),
         platform_filter: RefCell::default(),
         sidebar_names: RefCell::default(),
         expanded: RefCell::new(
@@ -383,6 +386,7 @@ impl Controller {
         ui.on_columns_changed(|n| with_controller(|c| c.set_columns(n)));
         ui.on_row_shown(|i| with_controller(|c| c.row_shown(i.max(0) as usize)));
         ui.on_refresh(|| with_controller(|c| c.sync()));
+        ui.on_surprise_me(|| with_controller(|c| c.surprise()));
         ui.on_open_game(|id| with_controller(|c| c.open_game(i64::from(id))));
         ui.on_back_to_library(|| with_controller(|c| c.back_to_library()));
         crate::mouse::on_back_button(|id| with_controller(|c| c.mouse_back(id)));

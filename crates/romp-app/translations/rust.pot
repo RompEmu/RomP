@@ -695,6 +695,10 @@ msgid "Change list"
 msgstr ""
 
 #: crates/romp-app/src/app/navigation.rs
+msgid "Surprise me"
+msgstr ""
+
+#: crates/romp-app/src/app/navigation.rs
 msgid "Settings"
 msgstr ""
 

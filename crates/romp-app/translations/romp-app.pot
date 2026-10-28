@@ -218,6 +218,10 @@ msgid "Last played"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Surprise me: open a random game from this list"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Refresh library"
 msgstr ""
 

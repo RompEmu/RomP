@@ -696,6 +696,7 @@ component Library inherits Rectangle {
     callback columns-changed(int);
     callback row-shown(int);
     callback refresh();
+    callback surprise-me();
     callback open-settings();
     callback open-game(int);
     in property <bool> needs-pairing;
@@ -1097,6 +1098,15 @@ component Library inherits Rectangle {
                             checked <=> root.downloaded-only;
                             enabled: !root.offline;
                             toggled => { root.downloaded-only-toggled(self.checked); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                icon: @image-url("icons/dice.svg");
+                                tooltip: @tr("Surprise me: open a random game from this list");
+                                enabled: root.rows.length > 0;
+                                clicked => { root.surprise-me(); }
+                            }
                         }
                         VerticalLayout {
                             alignment: center;
@@ -2741,6 +2751,7 @@ export component AppWindow inherits Window {
     callback columns-changed(int);
     callback row-shown(int);
     callback refresh();
+    callback surprise-me();
     callback open-game(int);
 
     in property <string> game-title;
@@ -2934,6 +2945,7 @@ export component AppWindow inherits Window {
         columns-changed(n) => { root.columns-changed(n); }
         row-shown(i) => { root.row-shown(i); }
         refresh => { root.refresh(); }
+        surprise-me => { root.surprise-me(); }
         open-game(id) => { root.open-game(id); }
         needs-pairing: root.needs-pairing;
         pair-prompt: root.pair-prompt;
