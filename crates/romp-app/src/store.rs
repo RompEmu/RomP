@@ -2,7 +2,7 @@ mod collections;
 
 pub use collections::{CollectionItem, CollectionKind, CollectionRecord};
 
-use crate::romm::types::{Platform, Rom, RomMetadata};
+use crate::romm::types::{Platform, PlayStatus, Progress, Rom, RomMetadata};
 use rusqlite::{params, Connection};
 use std::path::Path;
 
@@ -74,6 +74,8 @@ pub enum Scope {
     Collection(String),
     Recent,
     ForYou,
+    NowPlaying,
+    Backlog,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -126,6 +128,19 @@ CREATE TABLE IF NOT EXISTS games (
 );
 CREATE INDEX IF NOT EXISTS games_platform ON games(platform_id);
 ";
+
+fn write_play_status(conn: &Connection, id: i64, status: PlayStatus) {
+    conn.execute(
+        "UPDATE games SET now_playing = ?2, backlogged = ?3, progress = ?4 WHERE id = ?1",
+        params![
+            id,
+            status.now_playing,
+            status.backlogged,
+            status.progress.map(Progress::as_str)
+        ],
+    )
+    .expect("write play status");
+}
 
 fn json_column<T: serde::de::DeserializeOwned + Default>(text: Option<String>) -> T {
     text.and_then(|t| serde_json::from_str(&t).ok())
@@ -252,6 +267,16 @@ impl Store {
                 "BEGIN;
                  ALTER TABLE platforms ADD COLUMN aliases TEXT;
                  PRAGMA user_version = 11;
+                 COMMIT;",
+            )?;
+        }
+        if version < 12 {
+            conn.execute_batch(
+                "BEGIN;
+                 ALTER TABLE games ADD COLUMN now_playing INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE games ADD COLUMN backlogged INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE games ADD COLUMN progress TEXT;
+                 PRAGMA user_version = 12;
                  COMMIT;",
             )?;
         }
@@ -422,16 +447,22 @@ impl Store {
                    AND (?4 IS NULL OR g.id IN (SELECT rom_id FROM collection_roms WHERE key = ?4))
                    AND (?5 = 0 OR g.last_played IS NOT NULL)
                    AND (?6 = 0 OR r.rom_id IS NOT NULL)
+                   AND (?7 = 0 OR g.now_playing = 1)
+                   AND (?8 = 0 OR g.backlogged = 1)
                  ORDER BY {order}",
             ))
             .expect("prepare");
         let (platform, collection) = match &filter.scope {
-            Scope::All | Scope::Recent | Scope::ForYou => (None, None),
+            Scope::All | Scope::Recent | Scope::ForYou | Scope::NowPlaying | Scope::Backlog => {
+                (None, None)
+            }
             Scope::Platform(id) => (Some(*id), None),
             Scope::Collection(key) => (None, Some(key.as_str())),
         };
         let recent = filter.scope == Scope::Recent;
         let for_you = filter.scope == Scope::ForYou;
+        let now_playing = filter.scope == Scope::NowPlaying;
+        let backlog = filter.scope == Scope::Backlog;
         stmt.query_map(
             params![
                 platform,
@@ -439,7 +470,9 @@ impl Store {
                 filter.downloaded_only,
                 collection,
                 recent,
-                for_you
+                for_you,
+                now_playing,
+                backlog
             ],
             |r| {
                 Ok(GameItem {
@@ -606,6 +639,55 @@ impl Store {
 
     pub fn mark_played(&mut self, id: i64, when: i64) {
         self.merge_last_played(&[(id, when)]);
+    }
+
+    /// Takes RomM's statuses as the whole truth: games it didn't list have none.
+    pub fn replace_play_statuses(&mut self, statuses: &[(i64, PlayStatus)]) {
+        let tx = self.conn.transaction().expect("tx");
+        tx.execute(
+            "UPDATE games SET now_playing = 0, backlogged = 0, progress = NULL",
+            [],
+        )
+        .expect("clear play statuses");
+        for (id, status) in statuses {
+            write_play_status(&tx, *id, *status);
+        }
+        tx.commit().expect("commit");
+    }
+
+    pub fn set_play_status(&self, id: i64, status: PlayStatus) {
+        write_play_status(&self.conn, id, status);
+    }
+
+    pub fn play_status(&self, id: i64) -> PlayStatus {
+        self.conn
+            .query_row(
+                "SELECT now_playing, backlogged, progress FROM games WHERE id = ?1",
+                [id],
+                |r| {
+                    Ok(PlayStatus {
+                        now_playing: r.get(0)?,
+                        backlogged: r.get(1)?,
+                        progress: r
+                            .get::<_, Option<String>>(2)?
+                            .as_deref()
+                            .and_then(Progress::parse),
+                    })
+                },
+            )
+            .unwrap_or_default()
+    }
+
+    /// How many games are now playing and how many are in the backlog.
+    pub fn status_counts(&self, downloaded_only: bool) -> (i64, i64) {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(SUM(now_playing), 0), COALESCE(SUM(backlogged), 0) FROM games
+                 WHERE ?1 = 0 OR local_path IS NOT NULL",
+                [downloaded_only],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .expect("count play statuses")
     }
 
     pub fn merge_last_played(&mut self, plays: &[(i64, i64)]) {
@@ -953,6 +1035,41 @@ mod tests {
         );
         assert_eq!(s.recent_count(false), 2);
         assert_eq!(s.recent_count(true), 0);
+    }
+
+    #[test]
+    fn play_statuses_are_replaced_by_the_servers_and_list_their_games() {
+        use crate::romm::types::{PlayStatus, Progress};
+        let mut s = Store::open_in_memory().unwrap();
+        s.upsert_games(&[
+            rom(1, 1, "Aladdin", "t"),
+            rom(2, 1, "Banjo", "t"),
+            rom(3, 1, "Castlevania", "t"),
+        ]);
+        let playing = PlayStatus {
+            now_playing: true,
+            ..PlayStatus::default()
+        };
+        let finished_backlog = PlayStatus {
+            backlogged: true,
+            progress: Some(Progress::Finished),
+            ..PlayStatus::default()
+        };
+        s.replace_play_statuses(&[(1, playing), (2, finished_backlog), (99, playing)]);
+        assert_eq!(s.play_status(2), finished_backlog);
+        assert_eq!(s.play_status(3), PlayStatus::default());
+        assert_eq!(sorted(&s, Scope::NowPlaying, SortOrder::Name), [1]);
+        assert_eq!(sorted(&s, Scope::Backlog, SortOrder::Name), [2]);
+        assert_eq!(s.status_counts(false), (1, 1));
+        assert_eq!(s.status_counts(true), (0, 0));
+
+        s.replace_play_statuses(&[(3, finished_backlog)]);
+        assert_eq!(s.play_status(1), PlayStatus::default());
+        assert_eq!(sorted(&s, Scope::Backlog, SortOrder::Name), [3]);
+
+        s.set_play_status(1, playing);
+        assert_eq!(s.play_status(1), playing);
+        assert_eq!(s.status_counts(false), (1, 1));
     }
 
     #[test]
@@ -1356,7 +1473,9 @@ mod tests {
                     "ALTER TABLE games DROP COLUMN meta; ALTER TABLE games DROP COLUMN screenshots;
                      ALTER TABLE games DROP COLUMN added_at; ALTER TABLE games DROP COLUMN last_played;
                      ALTER TABLE platforms DROP COLUMN category;
-                     ALTER TABLE platforms DROP COLUMN aliases; PRAGMA user_version = 2;",
+                     ALTER TABLE platforms DROP COLUMN aliases;
+                     ALTER TABLE games DROP COLUMN now_playing; ALTER TABLE games DROP COLUMN backlogged;
+                     ALTER TABLE games DROP COLUMN progress; PRAGMA user_version = 2;",
                 )
                 .unwrap();
         }
