@@ -1,6 +1,7 @@
 use crate::romm::types::{
-    DeviceAuth, Firmware, Heartbeat, InstallRequest, Platform, PollOutcome, RemoteCollection,
-    RemoteNotification, RemoteSave, RemoteState, RomDetail, RomFile, RomPage, User,
+    DeviceAuth, Firmware, Heartbeat, InstallRequest, Platform, PlayStatus, PollOutcome,
+    Progress, RemoteCollection, RemoteNotification, RemoteSave, RemoteState, RomDetail, RomFile,
+    RomPage, User,
 };
 use crate::store::PlaySession;
 use serde::de::DeserializeOwned;
@@ -297,6 +298,37 @@ impl Client {
             ("with_rom_id_index", "false".to_string()),
         ];
         self.get_json("/api/roms", &query).await
+    }
+
+    pub async fn status_roms(&self, offset: i64, limit: i64) -> Result<RomPage, Error> {
+        let mut query = vec![
+            ("offset", offset.to_string()),
+            ("limit", limit.to_string()),
+            ("order_by", "id".to_string()),
+            ("with_char_index", "false".to_string()),
+            ("with_filter_values", "false".to_string()),
+            ("with_rom_id_index", "false".to_string()),
+        ];
+        for status in ["now_playing", "backlogged"]
+            .into_iter()
+            .chain(Progress::ALL.map(Progress::as_str))
+        {
+            query.push(("statuses", status.to_string()));
+        }
+        self.get_json("/api/roms", &query).await
+    }
+
+    pub async fn set_play_status(&self, id: i64, status: PlayStatus) -> Result<(), Error> {
+        self.send(
+            self.request(reqwest::Method::PUT, &format!("/api/roms/{id}/props"))
+                .json(&serde_json::json!({
+                    "now_playing": status.now_playing,
+                    "backlogged": status.backlogged,
+                    "status": status.progress.map(Progress::as_str),
+                })),
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn mark_played(&self, id: i64) -> Result<(), Error> {
@@ -1080,6 +1112,82 @@ pub(crate) mod tests {
             page.items[0].last_played(),
             crate::sync::parse_iso("2026-09-01T10:00:00Z")
         );
+    }
+
+    #[tokio::test]
+    async fn status_roms_asks_for_games_with_any_play_status() {
+        let server = MockServer::start().await;
+        let mut mock = Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("offset", "0"))
+            .and(query_param("limit", "100"));
+        for status in [
+            "now_playing",
+            "backlogged",
+            "incomplete",
+            "finished",
+            "completed_100",
+            "retired",
+            "never_playing",
+        ] {
+            mock = mock.and(query_param("statuses", status));
+        }
+        mock.respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "items": [{
+                "id": 7, "platform_id": 1, "name": "A", "fs_name": "a.md", "summary": null,
+                "updated_at": "t", "path_cover_small": null, "path_cover_large": null,
+                "fs_size_bytes": 1, "rom_user": {"backlogged": true}
+            }]
+        })))
+        .mount(&server)
+        .await;
+        let page = authed(&server).status_roms(0, 100).await.unwrap();
+        assert!(page.items[0].play_status().backlogged);
+    }
+
+    #[tokio::test]
+    async fn set_play_status_sends_every_field_so_cleared_ones_clear() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/api/roms/7/props"))
+            .and(query_param_is_missing("update_last_played"))
+            .and(body_json(serde_json::json!({
+                "now_playing": true, "backlogged": false, "status": null
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/api/roms/8/props"))
+            .and(body_json(serde_json::json!({
+                "now_playing": false, "backlogged": false, "status": "finished"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = authed(&server);
+        client
+            .set_play_status(
+                7,
+                PlayStatus {
+                    now_playing: true,
+                    ..PlayStatus::default()
+                },
+            )
+            .await
+            .unwrap();
+        client
+            .set_play_status(
+                8,
+                PlayStatus {
+                    progress: Some(Progress::Finished),
+                    ..PlayStatus::default()
+                },
+            )
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
