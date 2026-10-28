@@ -199,6 +199,54 @@ pub struct Rom {
 pub struct RomUser {
     #[serde(default)]
     pub last_played: Option<String>,
+    #[serde(default)]
+    pub now_playing: bool,
+    #[serde(default)]
+    pub backlogged: bool,
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+/// How far the user got with a game, as RomM names it. At most one is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Progress {
+    Incomplete,
+    Finished,
+    Completed100,
+    Retired,
+    NeverPlaying,
+}
+
+impl Progress {
+    pub const ALL: [Self; 5] = [
+        Self::Incomplete,
+        Self::Finished,
+        Self::Completed100,
+        Self::Retired,
+        Self::NeverPlaying,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Incomplete => "incomplete",
+            Self::Finished => "finished",
+            Self::Completed100 => "completed_100",
+            Self::Retired => "retired",
+            Self::NeverPlaying => "never_playing",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.as_str() == s)
+    }
+}
+
+/// The user's own marks on a game in RomM: playing it now, saving it for later, and how far they got.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PlayStatus {
+    pub now_playing: bool,
+    pub backlogged: bool,
+    pub progress: Option<Progress>,
 }
 
 impl Rom {
@@ -208,6 +256,14 @@ impl Rom {
 
     pub fn last_played(&self) -> Option<i64> {
         crate::sync::parse_iso(self.rom_user.as_ref()?.last_played.as_deref()?)
+    }
+
+    pub fn play_status(&self) -> PlayStatus {
+        self.rom_user.as_ref().map_or_else(PlayStatus::default, |u| PlayStatus {
+            now_playing: u.now_playing,
+            backlogged: u.backlogged,
+            progress: u.status.as_deref().and_then(Progress::parse),
+        })
     }
 
     pub fn title(&self) -> &str {
@@ -376,6 +432,51 @@ mod tests {
         .unwrap();
         assert_eq!(bare.added_at(), None);
         assert_eq!(bare.last_played(), None);
+    }
+
+    #[test]
+    fn rom_carries_its_play_status() {
+        let rom: Rom = serde_json::from_value(serde_json::json!({
+            "id": 1, "platform_id": 2, "name": "A", "fs_name": "a.md", "summary": null,
+            "updated_at": "t", "path_cover_small": null, "path_cover_large": null,
+            "fs_size_bytes": 5,
+            "rom_user": {"now_playing": true, "backlogged": false, "status": "completed_100"}
+        }))
+        .unwrap();
+        assert_eq!(
+            rom.play_status(),
+            PlayStatus {
+                now_playing: true,
+                backlogged: false,
+                progress: Some(Progress::Completed100)
+            }
+        );
+    }
+
+    #[test]
+    fn an_unknown_play_status_reads_as_none() {
+        let rom: Rom = serde_json::from_value(serde_json::json!({
+            "id": 1, "platform_id": 2, "name": "A", "fs_name": "a.md", "summary": null,
+            "updated_at": "t", "path_cover_small": null, "path_cover_large": null,
+            "fs_size_bytes": 5, "rom_user": {"backlogged": true, "status": "speedrunning"}
+        }))
+        .unwrap();
+        assert_eq!(
+            rom.play_status(),
+            PlayStatus {
+                backlogged: true,
+                ..PlayStatus::default()
+            }
+        );
+    }
+
+    #[test]
+    fn progress_names_round_trip_as_romm_spells_them() {
+        for p in Progress::ALL {
+            assert_eq!(Progress::parse(p.as_str()), Some(p));
+        }
+        assert_eq!(Progress::Completed100.as_str(), "completed_100");
+        assert_eq!(Progress::NeverPlaying.as_str(), "never_playing");
     }
 
     #[test]

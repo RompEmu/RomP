@@ -898,6 +898,7 @@ mod tests {
         r.created_at = Some(added.into());
         r.rom_user = Some(crate::romm::types::RomUser {
             last_played: last.map(String::from),
+            ..Default::default()
         });
         r
     }
