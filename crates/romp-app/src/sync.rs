@@ -201,6 +201,29 @@ pub async fn sync_played(
     }
 }
 
+/// Replaces the play statuses here with RomM's, once every page has come in, so a sync that
+/// fails partway leaves them as they were.
+pub async fn sync_statuses(
+    client: &Client,
+    store: &Mutex<Store>,
+    page_size: i64,
+    cancel: &AtomicBool,
+) -> Result<usize, Error> {
+    let mut offset = 0;
+    let mut statuses = Vec::new();
+    loop {
+        let page = client.status_roms(offset, page_size).await?;
+        let count = page.items.len();
+        statuses.extend(page.items.iter().map(|r| (r.id, r.play_status())));
+        offset += count as i64;
+        if (count as i64) < page_size {
+            break;
+        }
+    }
+    write(store, cancel, |s| s.replace_play_statuses(&statuses))?;
+    Ok(statuses.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -372,6 +395,95 @@ mod tests {
         let s = store.lock().unwrap();
         assert_eq!(s.last_played(3), parse_iso("2026-09-03T00:00:00Z"));
         assert_eq!(s.recent_count(false), 3);
+    }
+
+    #[tokio::test]
+    async fn play_statuses_from_the_server_replace_the_ones_here() {
+        use crate::romm::types::{PlayStatus, Progress};
+        let server = MockServer::start().await;
+        let marked = |id: i64, user: Value| {
+            let mut rom = rom_json(id, "t");
+            rom["rom_user"] = user;
+            rom
+        };
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("statuses", "now_playing"))
+            .and(query_param("offset", "0"))
+            .respond_with(page(vec![
+                marked(1, json!({"now_playing": true})),
+                marked(2, json!({"status": "finished"})),
+            ]))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("statuses", "now_playing"))
+            .and(query_param("offset", "2"))
+            .respond_with(page(vec![]))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let store = store();
+        {
+            let mut s = store.lock().unwrap();
+            s.upsert_games(&[
+                rom(1, 1, "A", "x"),
+                rom(2, 1, "B", "x"),
+                rom(3, 1, "C", "x"),
+            ]);
+            s.set_play_status(
+                3,
+                PlayStatus {
+                    backlogged: true,
+                    ..PlayStatus::default()
+                },
+            );
+        }
+        sync_statuses(&client(&server), &store, 2, &go())
+            .await
+            .unwrap();
+        let s = store.lock().unwrap();
+        assert!(s.play_status(1).now_playing);
+        assert_eq!(s.play_status(2).progress, Some(Progress::Finished));
+        assert_eq!(s.play_status(3), PlayStatus::default());
+    }
+
+    #[tokio::test]
+    async fn play_statuses_stay_when_the_server_fails_partway() {
+        use crate::romm::types::PlayStatus;
+        let server = MockServer::start().await;
+        let mut first = rom_json(1, "t");
+        first["rom_user"] = json!({"now_playing": true});
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("offset", "0"))
+            .respond_with(page(vec![first, rom_json(2, "t")]))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("offset", "2"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+        let store = store();
+        let backlog = PlayStatus {
+            backlogged: true,
+            ..PlayStatus::default()
+        };
+        {
+            let mut s = store.lock().unwrap();
+            s.upsert_games(&[rom(1, 1, "A", "x"), rom(3, 1, "C", "x")]);
+            s.set_play_status(3, backlog);
+        }
+        assert!(sync_statuses(&client(&server), &store, 2, &go())
+            .await
+            .is_err());
+        let s = store.lock().unwrap();
+        assert_eq!(s.play_status(3), backlog);
+        assert_eq!(s.play_status(1), PlayStatus::default());
     }
 
     #[tokio::test]

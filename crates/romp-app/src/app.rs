@@ -1092,6 +1092,7 @@ impl Controller {
         *self.sync_cancel.borrow_mut() = cancel.clone();
         let store = self.shared.store.clone();
         let collections = self.has_scope("collections.read");
+        let statuses = self.has_scope("roms.user.read");
         self.shared.rt.spawn(async move {
             let result = sync_library(&client, &store, PAGE_SIZE, &cancel).await;
             if result.is_ok() && collections && !cancel.load(Ordering::SeqCst) {
@@ -1103,6 +1104,13 @@ impl Controller {
                 if let Err(e) = crate::sync::sync_played(&client, &store, PAGE_SIZE, &cancel).await
                 {
                     tracing::warn!("syncing recently played games: {e}");
+                }
+            }
+            if result.is_ok() && statuses && !cancel.load(Ordering::SeqCst) {
+                if let Err(e) =
+                    crate::sync::sync_statuses(&client, &store, PAGE_SIZE, &cancel).await
+                {
+                    tracing::warn!("syncing play statuses: {e}");
                 }
             }
             on_ui(move |c| c.sync_finished(generation, result));
