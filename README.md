@@ -37,7 +37,7 @@ Download the [latest release](https://github.com/RompEmu/RomP/releases/latest) o
 - **Sandboxed emulators:** emulators are native code downloaded from the internet, and games are files from anywhere. Each game runs in its own locked-down process that can only write to that game's saves and its own temporary files, so a buggy or malicious emulator or ROM can't touch your other files or take RomP down with it. xemu and RPCS3 run outside the sandbox.
 - **RetroAchievements:** earn achievements as you play, with popups, leaderboards, and an achievement list in the game menu and on each game's page. Hardcore mode comes once RetroAchievements approves RomP, which it considers after an emulator has been public for six months. Only the app talks to RetroAchievements, never the sandboxed emulator.
 - **Many systems:** from the Atari 2600 to the PS3 and original Xbox, plus arcade and home computers. See [supported systems](#supported-systems).
-- **Controllers and multiplayer:** gamepads join as the next player, any key or button can be remapped, and the whole app works with a controller.
+- **Controllers and multiplayer:** gamepads join as the next player, rumble when the game does, any key or button can be remapped, and the whole app works with a controller.
 - **Light guns, mice and keyboards:** for the systems that use them.
 - **In-game menu:** pause, restart, save slots, changing discs, volume and full screen, from the Guide button or Esc.
 - **Two-screen Nintendo DS:** a window per screen, with the mouse as the touch pen.
