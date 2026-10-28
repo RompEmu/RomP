@@ -145,6 +145,12 @@ pub enum RunnerMsg {
         count: u32,
         current: u32,
     },
+    /// How hard a port's strong and weak motors rumble now, 0 for still.
+    Rumble {
+        port: u32,
+        strong: u16,
+        weak: u16,
+    },
     SramWritten,
     StateWritten {
         slot: u8,

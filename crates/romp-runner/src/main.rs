@@ -364,6 +364,9 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             let run_started = Instant::now();
             core.run(frontend);
             let run_time = run_started.elapsed();
+            for (port, strong, weak) in frontend.take_rumble() {
+                link.send(&RunnerMsg::Rumble { port, strong, weak });
+            }
             if let Some((slot, give_up)) = resume {
                 match saves.try_load_state(slot, &mut core, frontend) {
                     Ok(()) => {

@@ -1,5 +1,5 @@
 use crate::audio_pipe::{self, SharedAudio};
-use crate::input::InputState;
+use crate::input::{InputState, PORTS};
 use romp_libretro as lr;
 
 pub struct VideoFrame {
@@ -20,6 +20,9 @@ pub struct Frontend {
     pub hw_frame_dirty: bool,
     pub hw_frame_width: u32,
     pub hw_frame_height: u32,
+    /// Each port's strong and weak motor, as the core set them and as last sent to the app.
+    rumble: [[u16; 2]; PORTS],
+    sent_rumble: [[u16; 2]; PORTS],
 }
 
 impl Frontend {
@@ -35,7 +38,23 @@ impl Frontend {
             hw_frame_dirty: false,
             hw_frame_width: 0,
             hw_frame_height: 0,
+            rumble: [[0; 2]; PORTS],
+            sent_rumble: [[0; 2]; PORTS],
         }
+    }
+}
+
+impl Frontend {
+    /// The ports whose motors changed since last asked, with their strong and weak strengths.
+    pub fn take_rumble(&mut self) -> Vec<(u32, u16, u16)> {
+        let mut changed = Vec::new();
+        for (port, (now, sent)) in self.rumble.iter().zip(&mut self.sent_rumble).enumerate() {
+            if now != sent {
+                *sent = *now;
+                changed.push((port as u32, now[0], now[1]));
+            }
+        }
+        changed
     }
 }
 
@@ -93,12 +112,36 @@ impl lr::Frontend for Frontend {
     fn set_geometry(&mut self, geometry: lr::Geometry) {
         self.aspect = geometry.aspect_ratio;
     }
+
+    fn set_rumble(&mut self, port: u32, motor: lr::Motor, strength: u16) -> bool {
+        let Some(motors) = self.rumble.get_mut(port as usize) else {
+            return false;
+        };
+        motors[motor as usize] = strength;
+        true
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use romp_libretro::Frontend as _;
+
+    #[test]
+    fn rumble_reports_each_port_once_per_change() {
+        let mut frontend = Frontend::new();
+        assert!(frontend.take_rumble().is_empty());
+        assert!(frontend.set_rumble(1, lr::Motor::Strong, 40_000));
+        assert!(frontend.set_rumble(1, lr::Motor::Weak, 9_000));
+        assert_eq!(frontend.take_rumble(), [(1, 40_000, 9_000)]);
+        assert!(frontend.take_rumble().is_empty());
+        frontend.set_rumble(1, lr::Motor::Weak, 9_000);
+        assert!(frontend.take_rumble().is_empty(), "no change, nothing to send");
+        frontend.set_rumble(1, lr::Motor::Strong, 0);
+        frontend.set_rumble(0, lr::Motor::Weak, 5);
+        assert_eq!(frontend.take_rumble(), [(0, 0, 5), (1, 0, 9_000)]);
+        assert!(!frontend.set_rumble(8, lr::Motor::Strong, 1));
+    }
 
     #[test]
     fn geometry_changes_update_the_aspect_ratio() {
