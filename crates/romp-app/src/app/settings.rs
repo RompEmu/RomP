@@ -551,14 +551,29 @@ impl Controller {
     fn show_consoles(&self) {
         let Some(ui) = self.ui() else { return };
         let chosen = self.console_choices();
-        let groups: Vec<ConsoleGroup> = console_settings::consoles()
-            .map(|console| ConsoleGroup {
-                name: console.name.into(),
-                options: ModelRc::new(VecModel::from(
-                    console
-                        .settings
-                        .iter()
-                        .map(|setting| ConsoleOption {
+        let groups: Vec<ConsoleGroup> = console_settings::console_groups(&chosen)
+            .filter_map(|console| {
+                let mut options: Vec<ConsoleOption> = Vec::new();
+                let cores = console_settings::cores_for(console.platform);
+                if cores.len() > 1 {
+                    options.push(ConsoleOption {
+                        key: console_settings::core_key(console.platform).into(),
+                        label: translate(console_settings::EMULATOR_LABEL).into(),
+                        detail: translate(console_settings::EMULATOR_DETAIL).into(),
+                        choices: ModelRc::new(VecModel::from(
+                            cores
+                                .iter()
+                                .map(|c| slint::SharedString::from(c.name))
+                                .collect::<Vec<_>>(),
+                        )),
+                        current: cores.iter().position(|c| c.id == console.core).unwrap_or(0)
+                            as i32,
+                    });
+                }
+                // Resolution settings need the Vulkan renderer, which isn't everywhere.
+                if !console.vulkan || crate::cores::uses_vulkan(console.core) {
+                    options.extend(console.settings.iter().map(|setting| {
+                        ConsoleOption {
                             key: setting.key.into(),
                             label: translate(setting.label).into(),
                             detail: translate(setting.detail).into(),
@@ -570,9 +585,13 @@ impl Controller {
                                     .collect::<Vec<slint::SharedString>>(),
                             )),
                             current: console_settings::selected(setting, &chosen) as i32,
-                        })
-                        .collect::<Vec<_>>(),
-                )),
+                        }
+                    }));
+                }
+                (!options.is_empty()).then(|| ConsoleGroup {
+                    name: console.name.into(),
+                    options: ModelRc::new(VecModel::from(options)),
+                })
             })
             .collect();
         ui.set_settings_consoles(ModelRc::new(VecModel::from(groups)));
@@ -636,6 +655,10 @@ impl Controller {
                 .lock()
                 .unwrap()
                 .set(console_settings::STORE_KEY, &json);
+            if key.starts_with(console_settings::CORE_KEY_PREFIX) {
+                // The console now lists the other emulator's settings.
+                self.show_consoles();
+            }
         }
     }
 

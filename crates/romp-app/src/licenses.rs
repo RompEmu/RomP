@@ -123,6 +123,11 @@ static CORE_LICENSES: &[(&str, &str, &str)] = &[
         "https://github.com/libretro/beetle-psx-libretro/blob/master/COPYING",
     ),
     (
+        "swanstation",
+        "GPL-3.0",
+        "https://github.com/libretro/swanstation/blob/main/LICENSE",
+    ),
+    (
         "mednafen_saturn",
         "GPL-2.0",
         "https://github.com/libretro/beetle-saturn-libretro/blob/master/COPYING",
