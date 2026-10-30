@@ -1,7 +1,7 @@
 use super::save_sync::PendingLaunch;
 use super::{on_ui, with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
 use crate::bios;
-use crate::cores::core_for_platform;
+use crate::cores::{core_for_platform, core_for_platform_with, CoreInfo};
 use crate::details;
 use crate::download::DownloadError;
 use crate::fetch::download_files;
@@ -637,7 +637,11 @@ impl Controller {
         if detail.platform_slug == rpcs3::PLATFORM {
             return self.play_with_rpcs3(detail, rom);
         }
-        let Some(core) = core_for_platform(&detail.platform_slug) else {
+        let chosen = self.console_choices();
+        let chosen_id = chosen.get(&crate::console_settings::core_key(&detail.platform_slug));
+        let Some(core) =
+            core_for_platform_with(&detail.platform_slug, chosen_id.map(String::as_str))
+        else {
             return;
         };
         self.requested_slot.set(slot);
@@ -726,7 +730,7 @@ impl Controller {
                 }
                 _ => None,
             };
-            on_ui(move |c| c.launch_ready(detail, rom, core.jit, core_path, missing, sram));
+            on_ui(move |c| c.launch_ready(detail, rom, core, core_path, missing, sram));
         });
     }
 
@@ -1149,12 +1153,12 @@ impl Controller {
         &self,
         detail: GameDetail,
         rom: PathBuf,
-        jit: bool,
+        core: &'static CoreInfo,
         core_path: Result<PathBuf, String>,
         missing: Vec<String>,
         sram: Option<Result<SramOutcome, Error>>,
     ) {
-        let core = match core_path {
+        let core_path = match core_path {
             Ok(path) => path,
             Err(e) => {
                 self.preparing.set(false);
@@ -1170,15 +1174,15 @@ impl Controller {
                 return self.show_conflict(PendingLaunch {
                     detail,
                     rom,
-                    jit,
                     core,
+                    core_path,
                     conflict,
                 });
             }
             Some(Err(e)) => tracing::warn!("save sync before launch: {e}"),
             _ => {}
         }
-        self.start_game(detail, rom, jit, core);
+        self.start_game(detail, rom, core, core_path);
     }
 
     /// How a console's games are drawn: the player's choice, or the console's default.
@@ -1209,18 +1213,23 @@ impl Controller {
         }
     }
 
-    pub(super) fn start_game(&self, detail: GameDetail, rom: PathBuf, jit: bool, core: PathBuf) {
+    pub(super) fn start_game(
+        &self,
+        detail: GameDetail,
+        rom: PathBuf,
+        core: &'static CoreInfo,
+        core_path: PathBuf,
+    ) {
         self.preparing.set(false);
         let save_dir = self.game_saves(&detail).map_or_else(
             || paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
             |game| game.dir,
         );
+        let states_dir = save_dir.join(core.id);
+        let _ = std::fs::create_dir_all(&states_dir);
         let prefs = self.prefs.get();
-        let states = core_for_platform(&detail.platform_slug)
-            .is_none_or(|core| crate::cores::saves_states(core.id));
-        let reliable = states
-            && core_for_platform(&detail.platform_slug)
-                .is_some_and(|core| crate::cores::resumes_reliably(core.id));
+        let states = crate::cores::saves_states(core.id);
+        let reliable = states && crate::cores::resumes_reliably(core.id);
         let achievements = self.achievements_launch(&detail);
         let hardcore = achievements.as_ref().is_some_and(|a| a.hardcore);
         let requested = self.requested_slot.take().filter(|_| !hardcore && states);
@@ -1228,27 +1237,21 @@ impl Controller {
             (reliable
                 && prefs.resume
                 && !hardcore
-                && save_dir.join(crate::saves::AUTO_STATE).exists())
+                && states_dir.join(crate::saves::AUTO_STATE).exists())
             .then_some(0)
         });
         let options = GameOptions {
-            core,
+            core: core_path,
             rom,
             save_dir,
             title: detail.title.clone(),
-            jit,
-            vulkan: core_for_platform(&detail.platform_slug)
-                .is_some_and(|core| crate::cores::uses_vulkan(core.id)),
-            options: core_for_platform(&detail.platform_slug)
-                .map(|core| {
-                    crate::cores::with_platform_options(
-                        &detail.platform_slug,
-                        crate::console_settings::core_options(core.id, &self.console_choices()),
-                    )
-                })
-                .unwrap_or_default(),
-            split_screens: core_for_platform(&detail.platform_slug)
-                .is_some_and(|core| core.id == "melondsds"),
+            jit: core.jit,
+            vulkan: crate::cores::uses_vulkan(core.id),
+            options: crate::cores::with_platform_options(
+                &detail.platform_slug,
+                crate::console_settings::core_options(core.id, &self.console_choices()),
+            ),
+            split_screens: core.id == "melondsds",
             gamepads: self.gamepads.clone(),
             players: self.players.clone(),
             prefs,
@@ -1257,10 +1260,8 @@ impl Controller {
             states,
             mappings: self.mappings.clone(),
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
-            mouse: core_for_platform(&detail.platform_slug)
-                .is_some_and(|core| crate::cores::uses_mouse(core.id)),
-            computer: core_for_platform(&detail.platform_slug)
-                .is_some_and(|core| crate::cores::is_computer(core.id)),
+            mouse: crate::cores::uses_mouse(core.id),
+            computer: crate::cores::is_computer(core.id),
             port_devices: self.saved_ports(detail.id),
             volume_changed: Box::new(|volume| {
                 let _ = slint::invoke_from_event_loop(move || {

@@ -39,6 +39,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - A game's status can be set from its page, as in RomM: now playing, backlogged, and how far you got, from incomplete to completed 100%. It's saved on RomM, so it shows there and on your other devices, and statuses set in RomM come down with each sync. The sidebar lists the games you're playing now and your backlog.
 - Controllers rumble when the game rumbles them, on each player's own controller. The game menu and pause stop it.
 - Surprise me, the dice next to Refresh in the library, opens a random game from the list you're looking at, never the same one twice in a row. With a controller, press X on Xbox pads, Square on PlayStation, Y on Nintendo.
+- PlayStation games can run on SwanStation instead of Beetle PSX HW, chosen under **Settings → Consoles → Emulator core**. Both keep their saves in the same memory card format, so a game carries on from where the other emulator left it.
 
 ### Fixed
 
