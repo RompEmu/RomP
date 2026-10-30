@@ -238,8 +238,9 @@ struct Sdl {
     subsystem: GamepadSubsystem,
     events: EventPump,
     open: Vec<(sdl3::gamepad::Gamepad, Pad, [bool; 2])>,
-    /// Controllers that refused to rumble, so the log says so once.
+    /// Controllers that refused to rumble, and those that rumbled, so the log says so once.
     refused: std::collections::HashSet<u32>,
+    rumbled: std::collections::HashSet<u32>,
 }
 
 impl Sdl {
@@ -255,6 +256,7 @@ impl Sdl {
             events,
             open: Vec::new(),
             refused: std::collections::HashSet::new(),
+            rumbled: std::collections::HashSet::new(),
         };
         for id in sdl.subsystem.gamepads()? {
             sdl.open(id);
@@ -286,7 +288,9 @@ impl Sdl {
         );
         let name = gamepad.name().unwrap_or_else(|| "Controller".into());
         let family = family(gamepad.r#type());
-        tracing::info!("controller connected: {name}");
+        // SAFETY: the gamepad is open, which is all SDL asks of a properties query.
+        let rumble = unsafe { gamepad.has_rumble() };
+        tracing::info!(rumble, "controller connected: {name}");
         let pad = Pad {
             id: raw,
             uuid,
@@ -305,10 +309,18 @@ impl Sdl {
             let Some(&(_, strong, weak)) = motors.iter().find(|(id, _, _)| *id == pad.id) else {
                 continue;
             };
-            if let Err(e) = gamepad.set_rumble(strong, weak, ms) {
-                if self.refused.insert(pad.id) {
-                    tracing::info!("{} can't rumble: {e}", pad.name);
+            match gamepad.set_rumble(strong, weak, ms) {
+                Err(e) => {
+                    if self.refused.insert(pad.id) {
+                        tracing::info!("{} can't rumble: {e}", pad.name);
+                    }
                 }
+                Ok(()) if strong > 0 || weak > 0 => {
+                    if self.rumbled.insert(pad.id) {
+                        tracing::info!(strong, weak, "rumbling {}", pad.name);
+                    }
+                }
+                Ok(()) => {}
             }
         }
     }
