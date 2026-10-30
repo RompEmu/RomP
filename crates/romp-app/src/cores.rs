@@ -27,6 +27,13 @@ const fn core(id: &'static str, name: &'static str, lib: &'static str, jit: bool
 
 const ARMSX2: CoreInfo = core("armsx2", "ARMSX2", "armsx2_libretro", true);
 const FAKE08: CoreInfo = core("fake08", "FAKE-08", "fake08_libretro", false);
+const MEDNAFEN_PSX_HW: CoreInfo = core(
+    "mednafen_psx_hw",
+    "Beetle PSX HW",
+    "mednafen_psx_hw_libretro",
+    false,
+);
+const SWANSTATION: CoreInfo = core("swanstation", "SwanStation", "swanstation_libretro", true);
 
 /// Cores the libretro buildbot doesn't build, published from RompEmu's own forks:
 /// (core, where its releases are, this computer's file).
@@ -106,15 +113,10 @@ static CORES: &[(&[&str], CoreInfo)] = &[
             false,
         ),
     ),
-    (
-        &["psx"],
-        core(
-            "mednafen_psx_hw",
-            "Beetle PSX HW",
-            "mednafen_psx_hw_libretro",
-            false,
-        ),
-    ),
+    (&["psx"], MEDNAFEN_PSX_HW),
+    // A second PlayStation emulator, offered as a choice on the console's settings; the first
+    // entry stays the default.
+    (&["psx"], SWANSTATION),
     (
         &["pc-fx"],
         core(
@@ -295,10 +297,22 @@ pub fn all_cores() -> impl Iterator<Item = &'static CoreInfo> {
 }
 
 pub fn core_for_platform(slug: &str) -> Option<&'static CoreInfo> {
+    choices_for_platform(slug).next()
+}
+
+/// Every core that can play a platform, the first one being the default.
+pub fn choices_for_platform(slug: &str) -> impl Iterator<Item = &'static CoreInfo> + use<'_> {
     CORES
         .iter()
-        .find(|(slugs, _)| slugs.contains(&slug))
+        .filter(move |(slugs, _)| slugs.contains(&slug))
         .map(|(_, c)| c)
+}
+
+/// The core chosen for a platform, or its default when none is chosen or the choice is gone.
+pub fn core_for_platform_with(slug: &str, chosen: Option<&str>) -> Option<&'static CoreInfo> {
+    chosen
+        .and_then(|id| choices_for_platform(slug).find(|core| core.id == id))
+        .or_else(|| core_for_platform(slug))
 }
 
 const NINTENDO: [&str; 11] = [
@@ -343,7 +357,7 @@ pub fn is_computer(core_id: &str) -> bool {
 
 // These draw through Vulkan where this computer has a working Vulkan device, which on
 // macOS is the bundled MoltenVK.
-const VULKAN_CORES: [(&str, &[(&str, &str)]); 6] = [
+const VULKAN_CORES: [(&str, &[(&str, &str)]); 7] = [
     ("dolphin", &[]),
     ("flycast", &[]),
     (
@@ -356,6 +370,7 @@ const VULKAN_CORES: [(&str, &[(&str, &str)]); 6] = [
     ),
     ("ppsspp", &[("ppsspp_backend", "vulkan")]),
     ("pcsx2", &[("pcsx2_renderer", "Vulkan")]),
+    ("swanstation", &[("swanstation_GPU_Renderer", "Vulkan")]),
 ];
 
 fn vulkan_options(core_id: &str) -> Option<&'static [(&'static str, &'static str)]> {
@@ -434,6 +449,8 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
             ("puae_immediate_blits", "immediate"),
         ],
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
+        // OpenGL always works; Vulkan replaces it where this computer has it.
+        "swanstation" => &[("swanstation_GPU_Renderer", "OpenGL")],
         "vice_x64sc" | "vice_xvic" | "vice_xplus4" | "vice_x128" => {
             &[("vice_drive_true_emulation", "disabled")]
         }
@@ -755,6 +772,24 @@ mod tests {
             core_for_platform("psx").unwrap().lib,
             "mednafen_psx_hw_libretro"
         );
+        let psx: Vec<_> = choices_for_platform("psx").map(|c| c.id).collect();
+        assert_eq!(psx, ["mednafen_psx_hw", "swanstation"]);
+        assert_eq!(
+            core_for_platform_with("psx", Some("swanstation"))
+                .unwrap()
+                .id,
+            "swanstation"
+        );
+        assert_eq!(
+            core_for_platform_with("psx", Some("nope")).unwrap().id,
+            "mednafen_psx_hw"
+        );
+        assert_eq!(
+            core_for_platform_with("psx", None).unwrap().id,
+            "mednafen_psx_hw"
+        );
+        assert_eq!(choices_for_platform("psx").count(), 2);
+        assert_eq!(choices_for_platform("snes").count(), 1);
         assert!(core_for_platform("dc").unwrap().jit);
         assert!(core_for_platform("xbox").is_none());
         for slug in ["ngc", "wii"] {
@@ -818,6 +853,7 @@ mod tests {
             "mupen64plus_next",
             "ppsspp",
             "pcsx2",
+            "swanstation",
         ] {
             assert_eq!(uses_vulkan(core), vulkan, "{core}");
         }
@@ -827,6 +863,17 @@ mod tests {
         let ps2 = default_options("pcsx2");
         let renderer = ps2.iter().filter(|(k, _)| k == "pcsx2_renderer").count();
         assert_eq!(renderer, 1, "one renderer choice, Vulkan replacing OpenGL");
+        let swanstation = default_options("swanstation");
+        let renderers: Vec<_> = swanstation
+            .iter()
+            .filter(|(k, _)| k == "swanstation_GPU_Renderer")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(
+            renderers,
+            [if vulkan { "Vulkan" } else { "OpenGL" }],
+            "one renderer choice, Vulkan replacing OpenGL"
+        );
         assert!(default_options("mednafen_psx_hw")
             .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
         assert_eq!(download_base(&ARMSX2), ARMSX2_RELEASE);
