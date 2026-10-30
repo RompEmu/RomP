@@ -1023,6 +1023,17 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             });
             true
         }
+        sys::RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL => {
+            if data.is_null() {
+                return false;
+            }
+            let intl = unsafe { &*(data as *const sys::retro_core_options_intl) };
+            if intl.us.is_null() {
+                return false;
+            }
+            store_core_option_defs(unsafe { parse_v1_definitions(intl.us) });
+            true
+        }
         sys::RETRO_ENVIRONMENT_SET_VARIABLES => {
             if data.is_null() {
                 return false;
@@ -1456,6 +1467,48 @@ mod tests {
             self.rumble.push((port, motor, strength));
             true
         }
+    }
+
+    #[test]
+    fn options_set_with_translations_take_their_english_definitions() {
+        clear_core_options();
+        let key = CString::new("pokemini_rumble_lv").unwrap();
+        let ten = CString::new("10").unwrap();
+        let empty = sys::retro_core_option_value {
+            value: std::ptr::null(),
+            label: std::ptr::null(),
+        };
+        let mut values = [empty; sys::RETRO_NUM_CORE_OPTION_VALUES_MAX];
+        values[0].value = ten.as_ptr();
+        let defs = [
+            sys::retro_core_option_definition {
+                key: key.as_ptr(),
+                desc: std::ptr::null(),
+                info: std::ptr::null(),
+                values,
+                default_value: ten.as_ptr(),
+            },
+            sys::retro_core_option_definition {
+                key: std::ptr::null(),
+                desc: std::ptr::null(),
+                info: std::ptr::null(),
+                values: [empty; sys::RETRO_NUM_CORE_OPTION_VALUES_MAX],
+                default_value: std::ptr::null(),
+            },
+        ];
+        let mut intl = sys::retro_core_options_intl {
+            us: defs.as_ptr(),
+            local: std::ptr::null(),
+        };
+        // libretro.h's numbers, so a wrong constant can't pass for a right one.
+        assert!(unsafe { env_trampoline(54, &mut intl as *mut _ as *mut c_void) });
+        let mut var = sys::retro_variable {
+            key: key.as_ptr(),
+            value: std::ptr::null(),
+        };
+        assert!(unsafe { env_trampoline(15, &mut var as *mut _ as *mut c_void) });
+        assert_eq!(unsafe { CStr::from_ptr(var.value) }.to_str().unwrap(), "10");
+        clear_core_options();
     }
 
     #[test]

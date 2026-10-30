@@ -97,6 +97,7 @@ pub const RETRO_ENVIRONMENT_GET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_SUPPORT:
 pub const RETRO_ENVIRONMENT_GET_FASTFORWARDING: c_uint = 49 | 0x10000;
 pub const RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION: c_uint = 52;
 pub const RETRO_ENVIRONMENT_SET_CORE_OPTIONS: c_uint = 53;
+pub const RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL: c_uint = 54;
 pub const RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2: c_uint = 67;
 pub const RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL: c_uint = 68;
 pub const RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE: c_uint = 13;
@@ -285,6 +286,12 @@ pub struct retro_core_option_definition {
     pub info: *const c_char,
     pub values: [retro_core_option_value; RETRO_NUM_CORE_OPTION_VALUES_MAX],
     pub default_value: *const c_char,
+}
+
+#[repr(C)]
+pub struct retro_core_options_intl {
+    pub us: *const retro_core_option_definition,
+    pub local: *const retro_core_option_definition,
 }
 
 #[repr(C)]
