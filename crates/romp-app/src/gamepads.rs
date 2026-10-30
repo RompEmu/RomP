@@ -149,18 +149,39 @@ fn model_uuid(bus: u16, vendor: u16, product: u16, version: u16) -> [u8; 16] {
     uuid
 }
 
+/// Where `Pad::axes` keeps each stick and trigger.
+const AXES: [Axis; 6] = [
+    Axis::LeftX,
+    Axis::LeftY,
+    Axis::RightX,
+    Axis::RightY,
+    Axis::TriggerLeft,
+    Axis::TriggerRight,
+];
+
+fn bit(button: Button) -> u32 {
+    1 << button as u32
+}
+
+/// A copy of a controller as the polling thread last saw it.
+#[derive(Debug, Clone)]
 struct Pad {
-    id: JoystickId,
+    id: u32,
     uuid: [u8; 16],
     name: String,
     family: Family,
-    triggers: [bool; 2],
-    gamepad: sdl3::gamepad::Gamepad,
+    buttons: u32,
+    axes: [i16; 6],
 }
 
 impl Pad {
+    fn axis(&self, axis: Axis) -> f32 {
+        let at = AXES.iter().position(|a| *a == axis).unwrap_or(0);
+        axis_value(self.axes[at])
+    }
+
     fn trigger(&self, axis: Axis) -> f32 {
-        axis_value(self.gamepad.axis(axis)).max(0.0)
+        self.axis(axis).max(0.0)
     }
 
     fn value(&self, button: Button) -> f32 {
@@ -178,18 +199,40 @@ impl Pad {
         if let Some((_, axis)) = TRIGGERS.iter().find(|(b, _)| *b == button) {
             return self.trigger(*axis) >= TRIGGER_PRESS;
         }
-        SDL_BUTTONS
-            .iter()
-            .find(|(b, _)| *b == button)
-            .is_some_and(|(_, sdl)| self.gamepad.button(*sdl))
+        self.buttons & bit(button) != 0
     }
 }
 
-struct Sdl {
+/// The triggers that went down since `held` was last updated, which they're counted as pressing.
+fn trigger_presses(held: &mut [bool; 2], pad: &Pad) -> Vec<Button> {
+    let mut pressed = Vec::new();
+    for (i, (button, axis)) in TRIGGERS.iter().enumerate() {
+        let down = pad.trigger(*axis) >= TRIGGER_PRESS;
+        if down && !held[i] {
+            pressed.push(*button);
+        }
+        held[i] = down;
+    }
+    pressed
+}
+
+/// What the polling thread hands over: every controller, and the presses since last asked.
+#[derive(Default)]
+struct Shared {
     pads: Vec<Pad>,
-    events: EventPump,
-    subsystem: GamepadSubsystem,
+    presses: Vec<(u32, Button)>,
+}
+
+/// How long the polling thread waits for SDL between copies, at most.
+const POLL_EVERY: Duration = Duration::from_millis(4);
+
+/// SDL lives on its own thread. On macOS, finding controllers runs the calling thread's
+/// event loop, and run on the window's thread from inside a window event, that aborts the app.
+struct Sdl {
     _context: sdl3::Sdl,
+    subsystem: GamepadSubsystem,
+    events: EventPump,
+    open: Vec<(sdl3::gamepad::Gamepad, Pad, [bool; 2])>,
 }
 
 impl Sdl {
@@ -200,10 +243,10 @@ impl Sdl {
         let subsystem = context.gamepad()?;
         let events = context.event_pump()?;
         let mut sdl = Self {
-            pads: Vec::new(),
-            events,
-            subsystem,
             _context: context,
+            subsystem,
+            events,
+            open: Vec::new(),
         };
         for id in sdl.subsystem.gamepads()? {
             sdl.open(id);
@@ -212,7 +255,8 @@ impl Sdl {
     }
 
     fn open(&mut self, id: JoystickId) {
-        if self.pads.iter().any(|p| p.id == id) {
+        let raw = u32::from(id);
+        if self.open.iter().any(|(_, p, _)| p.id == raw) {
             return;
         }
         let gamepad = match self.subsystem.open(id) {
@@ -235,78 +279,116 @@ impl Sdl {
         let name = gamepad.name().unwrap_or_else(|| "Controller".into());
         let family = family(gamepad.r#type());
         tracing::info!("controller connected: {name}");
-        self.pads.push(Pad {
-            id,
+        let pad = Pad {
+            id: raw,
             uuid,
             name,
             family,
-            triggers: [false; 2],
-            gamepad,
-        });
-        self.pads.sort_by_key(|p| p.id);
-    }
-}
-
-pub struct Gamepads {
-    sdl: Option<Sdl>,
-    active: HashMap<JoystickId, Instant>,
-    presses: Vec<(JoystickId, Button)>,
-}
-
-impl Gamepads {
-    pub fn new() -> Self {
-        let sdl = Sdl::new()
-            .map_err(|e| tracing::warn!("gamepads unavailable: {e}"))
-            .ok();
-        Self {
-            sdl,
-            active: HashMap::new(),
-            presses: Vec::new(),
-        }
-    }
-
-    fn pressed(&mut self, id: JoystickId, button: Button) {
-        self.active.insert(id, Instant::now());
-        self.presses.push((id, button));
-        if self.presses.len() > 32 {
-            self.presses.remove(0);
-        }
-    }
-
-    pub fn poll(&mut self) {
-        let Some(sdl) = self.sdl.as_mut() else {
-            return;
+            buttons: 0,
+            axes: [0; 6],
         };
-        let mut pressed = Vec::new();
-        let events: Vec<Event> = sdl.events.poll_iter().collect();
+        self.open.push((gamepad, pad, [false; 2]));
+        self.open.sort_by_key(|(_, p, _)| p.id);
+    }
+
+    /// Waits a moment for SDL, then copies every controller and the presses since last time.
+    fn step(&mut self, presses: &mut Vec<(u32, Button)>) {
+        let first = self.events.wait_event_timeout(POLL_EVERY);
+        let events: Vec<Event> = first.into_iter().chain(self.events.poll_iter()).collect();
         for event in events {
             match event {
-                Event::GamepadAdded { which, .. } => sdl.open(which),
-                Event::GamepadRemoved { which, .. } => sdl.pads.retain(|p| p.id != which),
+                Event::GamepadAdded { which, .. } => self.open(which),
+                Event::GamepadRemoved { which, .. } => {
+                    self.open.retain(|(_, p, _)| p.id != u32::from(which));
+                }
                 Event::GamepadButtonDown { which, button, .. } => {
                     if let Some(button) = from_sdl(button) {
-                        pressed.push((which, button));
+                        presses.push((u32::from(which), button));
                     }
                 }
                 _ => {}
             }
         }
-        for pad in &mut sdl.pads {
-            for (i, (button, axis)) in TRIGGERS.iter().enumerate() {
-                let down = pad.trigger(*axis) >= TRIGGER_PRESS;
-                if down && !pad.triggers[i] {
-                    pressed.push((pad.id, *button));
-                }
-                pad.triggers[i] = down;
-            }
+        for (gamepad, pad, held) in &mut self.open {
+            pad.buttons = SDL_BUTTONS
+                .iter()
+                .filter(|(_, sdl)| gamepad.button(*sdl))
+                .fold(0, |bits, (ours, _)| bits | bit(*ours));
+            pad.axes = AXES.map(|a| gamepad.axis(a));
+            presses.extend(trigger_presses(held, pad).into_iter().map(|b| (pad.id, b)));
         }
-        for (id, button) in pressed {
-            self.pressed(id, button);
+    }
+}
+
+fn poll_on_this_thread(shared: &std::sync::Mutex<Shared>, stop: &std::sync::atomic::AtomicBool) {
+    let mut sdl = match Sdl::new() {
+        Ok(sdl) => sdl,
+        Err(e) => return tracing::warn!("gamepads unavailable: {e}"),
+    };
+    let mut presses = Vec::new();
+    while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+        sdl.step(&mut presses);
+        let mut shared = shared.lock().unwrap();
+        shared.pads = sdl.open.iter().map(|(_, p, _)| p.clone()).collect();
+        shared.presses.append(&mut presses);
+        if shared.presses.len() > 32 {
+            let extra = shared.presses.len() - 32;
+            shared.presses.drain(..extra);
+        }
+    }
+}
+
+pub struct Gamepads {
+    pads: Vec<Pad>,
+    shared: std::sync::Arc<std::sync::Mutex<Shared>>,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    active: HashMap<u32, Instant>,
+    presses: Vec<(u32, Button)>,
+}
+
+impl Gamepads {
+    pub fn new() -> Self {
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(Shared::default()));
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let thread = {
+            let (shared, stop) = (shared.clone(), stop.clone());
+            std::thread::Builder::new()
+                .name("gamepads".into())
+                .spawn(move || poll_on_this_thread(&shared, &stop))
+                .map_err(|e| tracing::warn!("gamepads unavailable: {e}"))
+                .ok()
+        };
+        Self {
+            pads: Vec::new(),
+            shared,
+            stop,
+            thread,
+            active: HashMap::new(),
+            presses: Vec::new(),
+        }
+    }
+
+    /// Takes the polling thread's latest copy of the controllers and their presses.
+    pub fn poll(&mut self) {
+        let presses = {
+            let mut shared = self.shared.lock().unwrap();
+            self.pads.clone_from(&shared.pads);
+            std::mem::take(&mut shared.presses)
+        };
+        let now = Instant::now();
+        for (id, button) in presses {
+            self.active.insert(id, now);
+            self.presses.push((id, button));
+        }
+        if self.presses.len() > 32 {
+            let extra = self.presses.len() - 32;
+            self.presses.drain(..extra);
         }
     }
 
     fn pads(&self) -> &[Pad] {
-        self.sdl.as_ref().map_or(&[], |sdl| &sdl.pads)
+        &self.pads
     }
 
     fn keys(&self) -> Vec<String> {
@@ -361,7 +443,7 @@ impl Gamepads {
     }
 
     pub fn take_presses(&mut self) -> Vec<(String, Button)> {
-        let keys: HashMap<JoystickId, String> =
+        let keys: HashMap<u32, String> =
             self.pads().iter().map(|p| p.id).zip(self.keys()).collect();
         std::mem::take(&mut self.presses)
             .into_iter()
@@ -381,6 +463,15 @@ impl Gamepads {
             })
             .map(|(key, _)| key)
             .collect()
+    }
+}
+
+impl Drop for Gamepads {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 
@@ -406,7 +497,7 @@ fn pad_state(pad: &Pad, mappings: &Mappings, model: &str) -> PadState {
             state.buttons |= 1 << button;
         }
     }
-    let axis = |a: Axis| axis_value(pad.gamepad.axis(a));
+    let axis = |a: Axis| pad.axis(a);
     let trigger = |b: Button| (pad.value(b) * 32767.0) as i16;
     state.axes = [
         input::stick(axis(Axis::LeftX), false),
@@ -478,6 +569,57 @@ mod tests {
         assert_eq!(game_state(a, &mappings, true, Family::Xbox), b);
         assert_eq!(game_state(a, &mappings, true, Family::Nintendo), a);
         assert_eq!(game_state(a, &mappings, false, Family::Xbox), a);
+    }
+
+    fn copied(buttons: &[Button], left_trigger: i16) -> Pad {
+        Pad {
+            id: 1,
+            uuid: [0; 16],
+            name: "Pad".into(),
+            family: Family::Xbox,
+            buttons: buttons.iter().fold(0, |bits, b| bits | bit(*b)),
+            axes: [0, 0, 0, 0, left_trigger, 0],
+        }
+    }
+
+    #[test]
+    fn a_pad_reads_its_buttons_and_triggers_from_the_copy() {
+        let pad = copied(&[Button::South, Button::DPadUp], 30_000);
+        assert!(pad.pressed(Button::South) && pad.pressed(Button::DPadUp));
+        assert!(!pad.pressed(Button::East));
+        assert!(pad.pressed(Button::LeftTrigger2), "most of the way down");
+        assert!(!pad.pressed(Button::RightTrigger2));
+        assert!((pad.value(Button::LeftTrigger2) - 30_000.0 / 32_767.0).abs() < 1e-6);
+        assert_eq!(pad.value(Button::South), 1.0);
+        assert!(
+            !copied(&[], 20_000).pressed(Button::LeftTrigger2),
+            "not far enough"
+        );
+    }
+
+    #[test]
+    fn a_trigger_counts_as_one_press_each_time_it_goes_down() {
+        let mut held = [false; 2];
+        assert!(trigger_presses(&mut held, &copied(&[], 0)).is_empty());
+        assert_eq!(
+            trigger_presses(&mut held, &copied(&[], 32_767)),
+            [Button::LeftTrigger2]
+        );
+        assert!(trigger_presses(&mut held, &copied(&[], 32_767)).is_empty());
+        assert!(trigger_presses(&mut held, &copied(&[], 0)).is_empty());
+        assert_eq!(
+            trigger_presses(&mut held, &copied(&[], 32_767)),
+            [Button::LeftTrigger2]
+        );
+    }
+
+    #[test]
+    fn the_polling_thread_stops_when_its_owner_goes() {
+        let started = Instant::now();
+        let mut pads = Gamepads::new();
+        pads.poll();
+        drop(pads);
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[test]
