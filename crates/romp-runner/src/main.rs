@@ -130,6 +130,8 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let _ = frame::unlink(&args.frames);
     std::fs::create_dir_all(&args.save_dir)?;
     std::fs::create_dir_all(&args.system_dir)?;
+    sandbox::create_core_cache_dirs(&args.core, &args.system_dir)
+        .context("creating the core's cache folder")?;
     lr::set_core_dirs(Some(&args.system_dir), Some(&args.save_dir));
 
     let vulkan_library = args.vulkan.then(hw_vulkan::library_path);

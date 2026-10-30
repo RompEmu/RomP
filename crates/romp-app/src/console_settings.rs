@@ -1,8 +1,17 @@
-use crate::cores::{core_for_platform, default_options, uses_vulkan};
+use crate::cores::{
+    choices_for_platform, core_for_platform_with, default_options, uses_vulkan, CoreInfo,
+};
 use crate::gettext_noop;
 use std::collections::BTreeMap;
 
 pub const STORE_KEY: &str = "console_settings";
+
+/// The chosen core for a console is kept beside its settings under this prefix, so the store
+/// keeps its shape and the choice travels with everything else.
+pub const CORE_KEY_PREFIX: &str = "core:";
+pub const EMULATOR_LABEL: &str = gettext_noop!("Emulator core");
+pub const EMULATOR_DETAIL: &str =
+    gettext_noop!("Swaps the emulator that runs this console's games.");
 
 pub struct Choice {
     pub label: &'static str,
@@ -173,6 +182,24 @@ static CONSOLES: &[Console] = &[
         }],
     },
     Console {
+        name: "PlayStation",
+        platform: "psx",
+        core: "swanstation",
+        vulkan: true,
+        settings: &[Setting {
+            key: "swanstation_GPU_ResolutionScale",
+            label: gettext_noop!("Resolution"),
+            detail: RESOLUTION_DETAIL,
+            choices: &[
+                choice(gettext_noop!("Native"), "1"),
+                choice("2x", "2"),
+                choice("3x", "3"),
+                choice("4x", "4"),
+            ],
+            default: 1,
+        }],
+    },
+    Console {
         name: "PSP",
         platform: "psp",
         core: "ppsspp",
@@ -209,12 +236,35 @@ static CONSOLES: &[Console] = &[
     },
 ];
 
-/// The consoles whose emulator on this computer has settings.
-pub fn consoles() -> impl Iterator<Item = &'static Console> {
-    CONSOLES.iter().filter(|c| {
-        core_for_platform(c.platform).is_some_and(|core| core.id == c.core)
-            && (!c.vulkan || uses_vulkan(c.core))
-    })
+/// The key a console's core choice is stored under.
+pub fn core_key(platform: &str) -> String {
+    format!("{CORE_KEY_PREFIX}{platform}")
+}
+
+/// The cores this computer can run a console on; more than one means the console offers a choice.
+pub fn cores_for(platform: &str) -> Vec<&'static CoreInfo> {
+    choices_for_platform(platform).collect()
+}
+
+/// The console's emulator: the one the player chose, or the console's default.
+pub fn chosen_core(chosen: &Chosen, platform: &str) -> Option<&'static CoreInfo> {
+    core_for_platform_with(
+        platform,
+        chosen.get(&core_key(platform)).map(String::as_str),
+    )
+}
+
+/// The console entry matching the chosen (or default) core, even where its settings need Vulkan
+/// and so aren't shown: the emulator choice stays reachable.
+pub fn console_groups(chosen: &Chosen) -> impl Iterator<Item = &'static Console> + use<'_> {
+    CONSOLES
+        .iter()
+        .filter(move |c| chosen_core(chosen, c.platform).is_some_and(|core| core.id == c.core))
+}
+
+/// The consoles whose emulator on this computer has settings, set up for the chosen core.
+pub fn consoles(chosen: &Chosen) -> impl Iterator<Item = &'static Console> + use<'_> {
+    console_groups(chosen).filter(|c| !c.vulkan || uses_vulkan(c.core))
 }
 
 pub type Chosen = BTreeMap<String, String>;
@@ -233,6 +283,13 @@ pub fn selected(setting: &Setting, chosen: &Chosen) -> usize {
 
 /// Sets `key` to its choice at `index`, returning false for an unknown setting or choice.
 pub fn choose(chosen: &mut Chosen, key: &str, index: usize) -> bool {
+    if let Some(platform) = key.strip_prefix(CORE_KEY_PREFIX) {
+        let Some(core) = choices_for_platform(platform).nth(index) else {
+            return false;
+        };
+        chosen.insert(key.to_string(), core.id.to_string());
+        return true;
+    }
     let Some(setting) = CONSOLES
         .iter()
         .flat_map(|c| c.settings)
@@ -250,7 +307,7 @@ pub fn choose(chosen: &mut Chosen, key: &str, index: usize) -> bool {
 /// The core options a game starts with: the core's own defaults, then its console settings.
 pub fn core_options(core_id: &str, chosen: &Chosen) -> Vec<(String, String)> {
     let mut options = default_options(core_id);
-    for setting in consoles()
+    for setting in consoles(chosen)
         .filter(|c| c.core == core_id)
         .flat_map(|c| c.settings)
     {
@@ -323,7 +380,8 @@ mod tests {
 
     #[test]
     fn vulkan_settings_only_show_where_the_emulator_uses_vulkan() {
-        let listed: Vec<_> = consoles().map(|c| c.core).collect();
+        let chosen = Chosen::new();
+        let listed: Vec<_> = consoles(&chosen).map(|c| c.core).collect();
         assert_eq!(listed.contains(&"dolphin"), cfg!(target_os = "macos"));
         assert_eq!(
             listed.contains(&"mupen64plus_next"),
@@ -337,7 +395,7 @@ mod tests {
     }
 
     fn ps2() -> Option<&'static Console> {
-        consoles().find(|c| c.platform == "ps2")
+        consoles(&Chosen::new()).find(|c| c.platform == "ps2")
     }
 
     #[test]
@@ -379,16 +437,98 @@ mod tests {
 
     #[test]
     fn only_the_emulators_this_computer_uses_are_listed() {
-        for console in consoles() {
+        let chosen = Chosen::new();
+        for console in consoles(&chosen) {
             assert_eq!(
-                core_for_platform(console.platform).unwrap().id,
+                chosen_core(&chosen, console.platform).unwrap().id,
                 console.core
             );
         }
         assert_eq!(
-            consoles().filter(|c| c.platform == "ps2").count(),
+            consoles(&chosen).filter(|c| c.platform == "ps2").count(),
             1,
             "one PS2 emulator per computer"
         );
+        assert_eq!(
+            console_groups(&chosen)
+                .filter(|c| c.platform == "psx")
+                .count(),
+            1,
+            "one PlayStation emulator per choice"
+        );
+    }
+
+    #[test]
+    fn the_playstation_can_run_on_either_emulator() {
+        let listed: Vec<_> = cores_for("psx").iter().map(|c| c.id).collect();
+        assert_eq!(listed, ["mednafen_psx_hw", "swanstation"]);
+        assert_eq!(
+            chosen_core(&Chosen::new(), "psx").unwrap().id,
+            "mednafen_psx_hw",
+            "Beetle stays the default"
+        );
+
+        let mut chosen = Chosen::new();
+        assert!(choose(&mut chosen, &core_key("psx"), 1));
+        assert_eq!(
+            chosen.get(&core_key("psx")).map(String::as_str),
+            Some("swanstation")
+        );
+        assert_eq!(chosen_core(&chosen, "psx").unwrap().id, "swanstation");
+        assert!(!choose(&mut chosen, &core_key("psx"), 9));
+        assert!(!choose(&mut chosen, &core_key("nope"), 0));
+
+        // Whichever emulator runs, the console stays listed so the choice stays reachable.
+        let groups = |chosen: &Chosen| {
+            console_groups(chosen)
+                .filter(|c| c.platform == "psx")
+                .map(|c| c.core)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(groups(&Chosen::new()), ["mednafen_psx_hw"]);
+        assert_eq!(groups(&chosen), ["swanstation"]);
+        // The resolution setting, though, only shows where the emulator draws through Vulkan.
+        let shown = |chosen: &Chosen| {
+            consoles(chosen)
+                .filter(|c| c.platform == "psx")
+                .map(|c| c.core)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            shown(&Chosen::new()),
+            if uses_vulkan("mednafen_psx_hw") {
+                vec!["mednafen_psx_hw"]
+            } else {
+                vec![]
+            }
+        );
+        assert_eq!(
+            shown(&chosen),
+            if uses_vulkan("swanstation") {
+                groups(&chosen)
+            } else {
+                vec![]
+            }
+        );
+        if uses_vulkan("swanstation") {
+            let options = core_options("swanstation", &chosen);
+            assert!(options.contains(&("swanstation_GPU_ResolutionScale".into(), "2".into())));
+        }
+    }
+
+    #[test]
+    fn every_emulator_a_console_offers_has_an_entry() {
+        for console in CONSOLES {
+            for core in cores_for(console.platform) {
+                assert!(
+                    CONSOLES
+                        .iter()
+                        .any(|c| c.platform == console.platform && c.core == core.id),
+                    "{} offers {} with nowhere to show its settings",
+                    console.name,
+                    core.name
+                );
+            }
+        }
     }
 }

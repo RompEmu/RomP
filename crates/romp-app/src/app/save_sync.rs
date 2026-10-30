@@ -1,5 +1,5 @@
 use super::{on_ui, Controller};
-use crate::cores::core_for_platform;
+use crate::cores::CoreInfo;
 use crate::paths;
 use crate::play::CoreIdentity;
 use crate::romm::client::{Client, Error};
@@ -12,8 +12,8 @@ use tr::tr;
 pub(super) struct PendingLaunch {
     pub detail: GameDetail,
     pub rom: PathBuf,
-    pub jit: bool,
-    pub core: PathBuf,
+    pub core: &'static CoreInfo,
+    pub core_path: PathBuf,
     pub conflict: SramConflict,
 }
 
@@ -102,7 +102,8 @@ impl Controller {
     }
 
     pub(super) fn game_saves(&self, detail: &GameDetail) -> Option<GameSaves> {
-        let core = core_for_platform(&detail.platform_slug)?;
+        let chosen = self.console_choices();
+        let core = crate::console_settings::chosen_core(&chosen, &detail.platform_slug)?;
         let dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
         if core.id == "melondsds" {
             if let Err(e) = crate::saves::adopt_desmume_saves(&dir) {
@@ -169,7 +170,7 @@ impl Controller {
                 if let Err(e) = result {
                     tracing::warn!("resolving save conflict: {e}");
                 }
-                c.start_game(pending.detail, pending.rom, pending.jit, pending.core);
+                c.start_game(pending.detail, pending.rom, pending.core, pending.core_path);
             });
         });
     }
