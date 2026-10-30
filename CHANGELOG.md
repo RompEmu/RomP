@@ -11,6 +11,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Fixed
 
+- Connecting a controller during a game, or one reconnecting by itself, no longer crashes RomP on macOS.
 - A mouse button let go over the game menu no longer stays held in the game. Held through Restart, it stopped Amiga games booting from their disk.
 - Amiga games made for the Amiga 1200, with "AGA" in their name, start on an Amiga 1200 instead of an Amiga 600, which can't run them. Others with the model in their name, such as "(A500)", get that model too, and the rest still start on an Amiga 600.
 - After the computer's clock was set back, the backup RomP makes of a save before replacing it could be removed straight away instead of kept with the newest ten.
