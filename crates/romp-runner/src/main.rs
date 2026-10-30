@@ -218,6 +218,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     saves.load_initial_sram(&mut core, frontend);
     // Some cores initialise lazily on the first run, and some boot on a thread of their own
     // and refuse a state until they have, so loading is retried for a while.
+    let mut rumbled = false;
     let mut resume = args
         .load_slot
         .map(|slot| (slot, Instant::now() + RESUME_WAIT));
@@ -365,6 +366,10 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             core.run(frontend);
             let run_time = run_started.elapsed();
             for (port, strong, weak) in frontend.take_rumble() {
+                if !rumbled {
+                    rumbled = true;
+                    info!(port, strong, weak, "the core rumbled");
+                }
                 link.send(&RunnerMsg::Rumble { port, strong, weak });
             }
             if let Some((slot, give_up)) = resume {

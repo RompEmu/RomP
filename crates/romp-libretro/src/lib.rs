@@ -1202,6 +1202,7 @@ unsafe extern "C" fn env_trampoline(cmd: c_uint, data: *mut c_void) -> bool {
             }
             let rumble = unsafe { &mut *(data as *mut sys::retro_rumble_interface) };
             rumble.set_rumble_state = Some(set_rumble_trampoline);
+            log!("[libretro] the core can rumble");
             true
         }
         sys::RETRO_ENVIRONMENT_GET_LOG_INTERFACE => {
