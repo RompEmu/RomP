@@ -8,6 +8,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - The first time a new version of RomP opens, it shows what's new in it, with a link to the full changelog. It can be turned off there, and opened again from the About window.
 
+### Security
+
+- Updated the zip library for security advisory GHSA-m665-v7pm-7grj. RomP wasn't affected, since it reads zips with only one of the library's two readers, and the problem needs both.
+
 ## [0.20.0] - 2026-10-31
 
 ### Added
