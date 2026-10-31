@@ -97,27 +97,22 @@ struct Readback {
     coherent: bool,
 }
 
-/// Picks the memory type for reading frames back, and whether it's coherent. Cached system RAM comes
-/// first: memory the CPU can't cache, such as VRAM behind Resizable BAR, takes ages to read.
+/// Cached memory makes CPU reads fast, including DEVICE_LOCAL memory on integrated GPUs.
 fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u32, bool)> {
     use vk::MemoryPropertyFlags as F;
-    let visible = F::HOST_VISIBLE;
-    let cached = F::HOST_VISIBLE | F::HOST_CACHED;
-    let wanted = [
-        (cached | F::HOST_COHERENT, false),
-        (cached, false),
-        (visible | F::HOST_COHERENT, false),
-        (visible | F::HOST_COHERENT, true),
-    ];
-    wanted.iter().find_map(|&(needs, vram_ok)| {
-        (0..types.len() as u32)
-            .find(|&i| {
-                let flags = types[i as usize];
-                allowed & (1 << i) != 0
-                    && flags.contains(needs)
-                    && (vram_ok || !flags.contains(F::DEVICE_LOCAL))
-            })
-            .map(|i| (i, types[i as usize].contains(F::HOST_COHERENT)))
+    [
+        F::HOST_VISIBLE | F::HOST_CACHED | F::HOST_COHERENT,
+        F::HOST_VISIBLE | F::HOST_CACHED,
+        F::HOST_VISIBLE | F::HOST_COHERENT,
+        F::HOST_VISIBLE,
+    ]
+    .iter()
+    .find_map(|&needs| {
+        types
+            .iter()
+            .enumerate()
+            .find(|&(i, flags)| allowed & (1 << i) != 0 && flags.contains(needs))
+            .map(|(i, flags)| (i as u32, flags.contains(F::HOST_COHERENT)))
     })
 }
 
@@ -798,6 +793,28 @@ mod tests {
     fn readback_falls_back_to_any_coherent_memory() {
         assert_eq!(readback_memory(&AMD_REBAR, 0b0110), Some((2, true)));
         assert_eq!(readback_memory(&AMD_REBAR, 0b0001), None);
+    }
+
+    #[test]
+    fn readback_prefers_cached_integrated_gpu_memory_over_uncached_system_memory() {
+        use vk::MemoryPropertyFlags as F;
+        let types = [
+            F::HOST_VISIBLE | F::HOST_COHERENT,
+            F::DEVICE_LOCAL | F::HOST_VISIBLE | F::HOST_CACHED | F::HOST_COHERENT,
+        ];
+        assert_eq!(readback_memory(&types, !0), Some((1, true)));
+        assert_eq!(readback_memory(&types, 1), Some((0, true)));
+    }
+
+    #[test]
+    fn readback_can_invalidate_noncoherent_integrated_gpu_memory() {
+        use vk::MemoryPropertyFlags as F;
+        let types = [
+            F::HOST_VISIBLE | F::HOST_COHERENT,
+            F::DEVICE_LOCAL | F::HOST_VISIBLE | F::HOST_CACHED,
+        ];
+        assert_eq!(readback_memory(&types, !0), Some((1, false)));
+        assert_eq!(readback_memory(&[F::HOST_VISIBLE], 1), Some((0, false)));
     }
 
     fn one(format: vk::Format, raw: &[u8]) -> [u8; 4] {
