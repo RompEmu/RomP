@@ -1,4 +1,7 @@
-use super::{with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
+use super::{
+    with_controller, Controller, SCREEN_CONNECT, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_PAIRING,
+    SCREEN_SETTINGS, SCREEN_WELCOME,
+};
 use crate::gamepads::Button;
 use crate::gettext_noop;
 use crate::i18n::translate;
@@ -102,6 +105,10 @@ impl Controller {
             return;
         }
         match (ui.get_screen(), button) {
+            (SCREEN_WELCOME | SCREEN_CONNECT | SCREEN_PAIRING, UP | DOWN) => {
+                let delta = if button == UP { 64.0 } else { -64.0 };
+                ui.set_setup_scroll_y(ui.get_setup_scroll_y() + delta);
+            }
             (SCREEN_LIBRARY, UP) => self.move_card(Dir::Up),
             (SCREEN_LIBRARY, DOWN) => self.move_card(Dir::Down),
             (SCREEN_LIBRARY, LEFT) => self.move_card(Dir::Left),
@@ -258,6 +265,49 @@ fn pad_key(badge: Badge) -> crate::PadKey {
 mod tests {
     use super::*;
     use crate::pad_labels::Shape;
+
+    #[test]
+    fn pairing_can_scroll_on_a_short_display() {
+        use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+        use slint::{ComponentHandle, PhysicalSize};
+
+        struct Platform(std::rc::Rc<MinimalSoftwareWindow>);
+        impl slint::platform::Platform for Platform {
+            fn create_window_adapter(
+                &self,
+            ) -> Result<std::rc::Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError>
+            {
+                Ok(self.0.clone())
+            }
+        }
+
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+        slint::platform::set_platform(Box::new(Platform(window.clone()))).unwrap();
+        let ui = crate::AppWindow::new().unwrap();
+        ui.set_screen(SCREEN_PAIRING);
+        ui.show().unwrap();
+        for (height, overflows) in [(400, true), (1000, false)] {
+            window.set_size(PhysicalSize::new(640, height));
+            window.draw_if_needed(|renderer| {
+                let mut pixels = vec![slint::Rgb8Pixel::default(); 640 * height as usize];
+                renderer.render(&mut pixels, 640);
+            });
+            ui.window()
+                .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                    position: slint::LogicalPosition::new(320.0, 200.0),
+                    delta_x: 0.0,
+                    delta_y: -64.0,
+                });
+            assert_eq!(
+                ui.get_setup_scroll_y() < 0.0,
+                overflows,
+                "window size: {:?}, scroll offset: {}",
+                ui.window().size(),
+                ui.get_setup_scroll_y()
+            );
+            ui.set_setup_scroll_y(0.0);
+        }
+    }
 
     #[test]
     fn hints_name_the_buttons_of_the_controller_in_use() {

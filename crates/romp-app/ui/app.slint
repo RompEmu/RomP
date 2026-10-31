@@ -1,8 +1,8 @@
-import { Locale, Row, Theme } from "theme.slint";
+import { ListView, Locale, Row, ScrollView, Theme } from "theme.slint";
 import { FocusRing, KeyActivator } from "focus.slint";
 import { AchievementItem, AchievementRow } from "achievements.slint";
 import { SlotCard, SlotPicture } from "slots.slint";
-import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, ProgressIndicator, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool, note: bool }
 export struct NotificationRow { id: int, title: string, body: string, level: string, when: string, unread: bool }
@@ -162,22 +162,32 @@ component SetupFrame inherits Rectangle {
     in property <image> icon;
     in property <bool> has-icon;
     in property <length> content-width: 400px;
+    in-out property <length> scroll-y <=> setup.content-y;
+    changed scroll-y => {
+        self.scroll-y = clamp(self.scroll-y, -max(0px, setup.content-height - setup.visible-height), 0px);
+    }
     background: Theme.background;
-    VerticalLayout {
-        alignment: center;
-        padding: 24px;
-        Row {
+    setup := ScrollView {
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, body.preferred-height);
+        body := VerticalLayout {
+            width: setup.visible-width;
+            y: max(0px, (setup.visible-height - self.height) / 2);
             alignment: center;
-            VerticalLayout {
-                width: min(root.content-width, root.width - 48px);
-                Row {
-                    alignment: center;
-                    AppTile { size: 72px; icon: root.icon; has-icon: root.has-icon; }
+            padding: 24px;
+            Row {
+                alignment: center;
+                VerticalLayout {
+                    width: min(root.content-width, root.width - 48px);
+                    Row {
+                        alignment: center;
+                        AppTile { size: 72px; icon: root.icon; has-icon: root.has-icon; }
+                    }
+                    Rectangle { height: 18px; }
+                    StepDots { step: root.step; }
+                    Rectangle { height: 22px; }
+                    @children
                 }
-                Rectangle { height: 18px; }
-                StepDots { step: root.step; }
-                Rectangle { height: 22px; }
-                @children
             }
         }
     }
@@ -2636,6 +2646,8 @@ export component AppWindow inherits Window {
     min-height: 400px;
 
     in-out property <int> screen;
+    changed screen => { root.setup-scroll-y = 0px; }
+    in-out property <length> setup-scroll-y;
     in property <bool> first-run;
     property <bool> in-library: root.screen >= 2 && root.screen <= 4;
     property <bool> narrow;
@@ -2895,11 +2907,13 @@ export component AppWindow inherits Window {
     }
 
     if root.screen == 5: Welcome {
+        scroll-y <=> root.setup-scroll-y;
         icon: root.app-icon;
         has-icon: root.has-app-icon;
         start => { root.screen = 0; }
     }
     if root.screen == 0: Connect {
+        scroll-y <=> root.setup-scroll-y;
         icon: root.app-icon;
         has-icon: root.has-app-icon;
         server-url <=> root.server-url;
@@ -2910,6 +2924,7 @@ export component AppWindow inherits Window {
         back => { root.screen = 5; }
     }
     if root.screen == 1: Pairing {
+        scroll-y <=> root.setup-scroll-y;
         icon: root.app-icon;
         has-icon: root.has-app-icon;
         qr: root.qr;

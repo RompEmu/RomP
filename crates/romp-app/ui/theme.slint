@@ -1,4 +1,4 @@
-import { Palette } from "std-widgets.slint";
+import { Palette, ScrollView as StandardScrollView, ListView as StandardListView } from "std-widgets.slint";
 import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-Medium.ttf";
 import "fonts/Inter-SemiBold.ttf";
@@ -8,6 +8,15 @@ import "fonts/IBMPlexSansArabic-Regular.ttf";
 import "fonts/IBMPlexSansArabic-Medium.ttf";
 import "fonts/IBMPlexSansArabic-SemiBold.ttf";
 import "fonts/IBMPlexSansArabic-Bold.ttf";
+
+// Gamescope can deliver touchscreen swipes as mouse drags.
+export component ScrollView inherits StandardScrollView {
+    mouse-drag-pan-enabled: true;
+}
+
+export component ListView inherits StandardListView {
+    mouse-drag-pan-enabled: true;
+}
 
 export global Theme {
     out property <color> background: #15171c;
