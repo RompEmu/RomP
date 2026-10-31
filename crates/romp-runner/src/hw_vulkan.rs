@@ -5,6 +5,7 @@ use romp_libretro::{HwContextProvider, RETRO_HW_CONTEXT_VULKAN};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::{c_char, c_uint, c_void, CStr};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 const RETRO_HW_RENDER_INTERFACE_VULKAN: c_uint = 0;
 const RETRO_HW_RENDER_INTERFACE_VULKAN_VERSION: c_uint = 5;
@@ -97,28 +98,84 @@ struct Readback {
     coherent: bool,
 }
 
-/// Picks the memory type for reading frames back, and whether it's coherent. Cached system RAM comes
-/// first: memory the CPU can't cache, such as VRAM behind Resizable BAR, takes ages to read.
+/// Cached memory makes CPU reads fast, including DEVICE_LOCAL memory on integrated GPUs.
 fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u32, bool)> {
     use vk::MemoryPropertyFlags as F;
-    let visible = F::HOST_VISIBLE;
-    let cached = F::HOST_VISIBLE | F::HOST_CACHED;
-    let wanted = [
-        (cached | F::HOST_COHERENT, false),
-        (cached, false),
-        (visible | F::HOST_COHERENT, false),
-        (visible | F::HOST_COHERENT, true),
-    ];
-    wanted.iter().find_map(|&(needs, vram_ok)| {
-        (0..types.len() as u32)
-            .find(|&i| {
-                let flags = types[i as usize];
-                allowed & (1 << i) != 0
-                    && flags.contains(needs)
-                    && (vram_ok || !flags.contains(F::DEVICE_LOCAL))
-            })
-            .map(|i| (i, types[i as usize].contains(F::HOST_COHERENT)))
+    [
+        F::HOST_VISIBLE | F::HOST_CACHED | F::HOST_COHERENT,
+        F::HOST_VISIBLE | F::HOST_CACHED,
+        F::HOST_VISIBLE | F::HOST_COHERENT,
+        F::HOST_VISIBLE,
+    ]
+    .iter()
+    .find_map(|&needs| {
+        types
+            .iter()
+            .enumerate()
+            .filter(|&(i, flags)| allowed & (1 << i) != 0 && flags.contains(needs))
+            .min_by_key(|(_, flags)| flags.contains(F::DEVICE_LOCAL))
+            .map(|(i, flags)| (i as u32, flags.contains(F::HOST_COHERENT)))
     })
+}
+
+/// Keep enumeration order for equally suitable devices, but avoid software rendering when possible.
+fn preferred_gpu(devices: &[(vk::PhysicalDeviceType, bool)]) -> Option<usize> {
+    devices
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, graphics))| *graphics)
+        .min_by_key(|(_, (kind, _))| match *kind {
+            vk::PhysicalDeviceType::DISCRETE_GPU => 0,
+            vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
+            vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
+            vk::PhysicalDeviceType::CPU => 4,
+            _ => 3,
+        })
+        .map(|(i, _)| i)
+}
+
+struct ReadbackStats {
+    started: Instant,
+    frames: u32,
+    gpu: Duration,
+    gpu_max: Duration,
+    cpu: Duration,
+    cpu_max: Duration,
+}
+
+impl Default for ReadbackStats {
+    fn default() -> Self {
+        Self {
+            started: Instant::now(),
+            frames: 0,
+            gpu: Duration::ZERO,
+            gpu_max: Duration::ZERO,
+            cpu: Duration::ZERO,
+            cpu_max: Duration::ZERO,
+        }
+    }
+}
+
+impl ReadbackStats {
+    fn record(&mut self, gpu: Duration, cpu: Duration) {
+        self.frames += 1;
+        self.gpu += gpu;
+        self.gpu_max = self.gpu_max.max(gpu);
+        self.cpu += cpu;
+        self.cpu_max = self.cpu_max.max(cpu);
+        if self.started.elapsed() >= Duration::from_secs(10) {
+            let avg = |d: Duration| d.as_secs_f64() * 1000.0 / f64::from(self.frames);
+            tracing::info!(
+                frames = self.frames,
+                gpu_wait_ms_avg = avg(self.gpu),
+                gpu_wait_ms_max = self.gpu_max.as_secs_f64() * 1000.0,
+                cpu_convert_ms_avg = avg(self.cpu),
+                cpu_convert_ms_max = self.cpu_max.as_secs_f64() * 1000.0,
+                "Vulkan readback timing"
+            );
+            *self = Self::default();
+        }
+    }
 }
 
 struct DeviceState {
@@ -129,6 +186,8 @@ struct DeviceState {
     commands: vk::CommandBuffer,
     fence: vk::Fence,
     readback: Option<Readback>,
+    last_scanout: Option<(vk::Format, u32, u32)>,
+    timings: ReadbackStats,
 }
 
 pub struct HwVulkanContext {
@@ -248,11 +307,12 @@ impl HwVulkanContext {
         if let Some(create) = create {
             let mut context = RetroVulkanContext::default();
             let features = vk::PhysicalDeviceFeatures::default();
-            let created = unsafe {
+            let preferred = self.preferred_physical_device()?;
+            let mut attempt = |gpu| unsafe {
                 create(
                     &mut context,
                     self.instance.handle(),
-                    vk::PhysicalDevice::null(),
+                    gpu,
                     self.surface,
                     self._entry.static_fn().get_instance_proc_addr,
                     std::ptr::null(),
@@ -262,6 +322,14 @@ impl HwVulkanContext {
                     &features,
                 )
             };
+            let mut created = attempt(preferred);
+            if !created {
+                // libretro guarantees that false leaves no devices or queues initialized.
+                tracing::warn!(
+                    "core rejected preferred Vulkan GPU; retrying with the core's choice"
+                );
+                created = attempt(vk::PhysicalDevice::null());
+            }
             if !created || context.device == vk::Device::null() {
                 anyhow::bail!("the core could not create its Vulkan device");
             }
@@ -270,10 +338,27 @@ impl HwVulkanContext {
         self.create_own_device()
     }
 
+    fn preferred_physical_device(&self) -> anyhow::Result<vk::PhysicalDevice> {
+        let devices = unsafe { self.instance.enumerate_physical_devices() }?;
+        let capabilities: Vec<_> = devices
+            .iter()
+            .map(|&gpu| unsafe {
+                let properties = self.instance.get_physical_device_properties(gpu);
+                let graphics = self
+                    .instance
+                    .get_physical_device_queue_family_properties(gpu)
+                    .iter()
+                    .any(|f| f.queue_count > 0 && f.queue_flags.contains(vk::QueueFlags::GRAPHICS));
+                (properties.device_type, graphics)
+            })
+            .collect();
+        preferred_gpu(&capabilities)
+            .map(|i| devices[i])
+            .ok_or_else(|| anyhow::anyhow!("no Vulkan device with a graphics queue"))
+    }
+
     fn create_own_device(&self) -> anyhow::Result<RetroVulkanContext> {
-        let gpu = *unsafe { self.instance.enumerate_physical_devices() }?
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("no Vulkan device"))?;
+        let gpu = self.preferred_physical_device()?;
         let family = unsafe {
             self.instance
                 .get_physical_device_queue_family_properties(gpu)
@@ -309,6 +394,18 @@ impl HwVulkanContext {
     }
 
     fn state_for(&self, context: &RetroVulkanContext) -> anyhow::Result<DeviceState> {
+        let properties = unsafe { self.instance.get_physical_device_properties(context.gpu) };
+        tracing::info!(
+            gpu = %unsafe { CStr::from_ptr(properties.device_name.as_ptr()) }.to_string_lossy(),
+            kind = ?properties.device_type,
+            vendor_id = properties.vendor_id,
+            device_id = properties.device_id,
+            driver_version = properties.driver_version,
+            api = %format!("{}.{}.{}", vk::api_version_major(properties.api_version),
+                vk::api_version_minor(properties.api_version), vk::api_version_patch(properties.api_version)),
+            queue_family = context.queue_family_index,
+            "Vulkan device selected"
+        );
         let device = unsafe { ash::Device::load(self.instance.fp_v1_0(), context.device) };
         let pool = unsafe {
             device.create_command_pool(
@@ -334,6 +431,8 @@ impl HwVulkanContext {
             commands,
             fence,
             readback: None,
+            last_scanout: None,
+            timings: ReadbackStats::default(),
         })
     }
 
@@ -381,6 +480,14 @@ impl HwVulkanContext {
         let mapped =
             unsafe { device.map_memory(memory, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty()) }?
                 .cast();
+        tracing::info!(
+            bytes = size,
+            allocation_bytes = needs.size,
+            memory_type = type_index,
+            memory_flags = ?flags[type_index as usize],
+            coherent,
+            "Vulkan frame readback buffer allocated"
+        );
         state.readback = Some(Readback {
             buffer,
             memory,
@@ -397,6 +504,11 @@ impl HwVulkanContext {
         let state = guard
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("no Vulkan device"))?;
+        let scanout = (image.format, width, height);
+        if state.last_scanout != Some(scanout) {
+            tracing::info!(format = ?image.format, width, height, "Vulkan scanout changed");
+            state.last_scanout = Some(scanout);
+        }
         let bpp = bytes_per_pixel(image.format)
             .ok_or_else(|| anyhow::anyhow!("unsupported scanout format {:?}", image.format))?;
         let size = u64::from(width) * u64::from(height) * bpp;
@@ -487,6 +599,7 @@ impl HwVulkanContext {
             .wait_semaphores(&wait)
             .wait_dst_stage_mask(&stages)
             .signal_semaphores(&signal);
+        let gpu_started = Instant::now();
         self.queue_lock.lock();
         let submitted = unsafe { device.queue_submit(state.queue, &[submit], state.fence) };
         // SAFETY: locked just above on this thread.
@@ -503,9 +616,14 @@ impl HwVulkanContext {
                 .size(vk::WHOLE_SIZE);
             unsafe { device.invalidate_mapped_memory_ranges(&[range]) }?;
         }
+        let gpu_time = gpu_started.elapsed();
+        let cpu_started = Instant::now();
         // SAFETY: the mapping holds at least `size` bytes and the fence says the copy finished.
         let raw = unsafe { std::slice::from_raw_parts(mapped, size as usize) };
-        to_bgra(image.format, raw).ok_or_else(|| anyhow::anyhow!("unsupported scanout format"))
+        let pixels = to_bgra(image.format, raw)
+            .ok_or_else(|| anyhow::anyhow!("unsupported scanout format"))?;
+        state.timings.record(gpu_time, cpu_started.elapsed());
+        Ok(pixels)
     }
 
     fn render_interface_for(&self, state: &DeviceState) -> RenderInterface {
@@ -800,6 +918,83 @@ mod tests {
         assert_eq!(readback_memory(&AMD_REBAR, 0b0001), None);
     }
 
+    #[test]
+    fn readback_prefers_cached_integrated_gpu_memory_over_uncached_system_memory() {
+        use vk::MemoryPropertyFlags as F;
+        let types = [
+            F::HOST_VISIBLE | F::HOST_COHERENT,
+            F::DEVICE_LOCAL | F::HOST_VISIBLE | F::HOST_CACHED | F::HOST_COHERENT,
+        ];
+        assert_eq!(readback_memory(&types, !0), Some((1, true)));
+        assert_eq!(readback_memory(&types, 1), Some((0, true)));
+    }
+
+    #[test]
+    fn readback_prefers_system_memory_with_equivalent_cache_and_coherence() {
+        use vk::MemoryPropertyFlags as F;
+        for host_flags in [
+            F::HOST_VISIBLE,
+            F::HOST_VISIBLE | F::HOST_COHERENT,
+            F::HOST_VISIBLE | F::HOST_CACHED,
+            F::HOST_VISIBLE | F::HOST_CACHED | F::HOST_COHERENT,
+        ] {
+            let types = [host_flags | F::DEVICE_LOCAL, host_flags];
+            assert_eq!(
+                readback_memory(&types, !0),
+                Some((1, host_flags.contains(F::HOST_COHERENT)))
+            );
+            assert_eq!(
+                readback_memory(&types, 1),
+                Some((0, host_flags.contains(F::HOST_COHERENT)))
+            );
+        }
+    }
+
+    #[test]
+    fn readback_can_invalidate_noncoherent_integrated_gpu_memory() {
+        use vk::MemoryPropertyFlags as F;
+        let types = [
+            F::HOST_VISIBLE | F::HOST_COHERENT,
+            F::DEVICE_LOCAL | F::HOST_VISIBLE | F::HOST_CACHED,
+        ];
+        assert_eq!(readback_memory(&types, !0), Some((1, false)));
+        assert_eq!(readback_memory(&[F::HOST_VISIBLE], 1), Some((0, false)));
+    }
+
+    #[test]
+    fn gpu_selection_prefers_hardware_with_graphics_and_keeps_ties_stable() {
+        use vk::PhysicalDeviceType as T;
+        assert_eq!(
+            preferred_gpu(&[
+                (T::CPU, true),
+                (T::INTEGRATED_GPU, true),
+                (T::DISCRETE_GPU, false),
+                (T::DISCRETE_GPU, true),
+                (T::DISCRETE_GPU, true)
+            ]),
+            Some(3)
+        );
+        assert_eq!(preferred_gpu(&[(T::CPU, true)]), Some(0));
+        assert_eq!(preferred_gpu(&[(T::DISCRETE_GPU, false)]), None);
+        assert_eq!(preferred_gpu(&[]), None);
+    }
+
+    #[test]
+    fn readback_timings_accumulate_and_reset_once_per_window() {
+        let mut stats = ReadbackStats::default();
+        stats.record(Duration::from_millis(5), Duration::from_millis(2));
+        stats.record(Duration::from_millis(3), Duration::from_millis(4));
+        assert_eq!(stats.frames, 2);
+        assert_eq!(stats.gpu, Duration::from_millis(8));
+        assert_eq!(stats.gpu_max, Duration::from_millis(5));
+        assert_eq!(stats.cpu, Duration::from_millis(6));
+        assert_eq!(stats.cpu_max, Duration::from_millis(4));
+        stats.started = Instant::now() - Duration::from_secs(11);
+        stats.record(Duration::ZERO, Duration::ZERO);
+        assert_eq!(stats.frames, 0);
+        assert_eq!(stats.gpu, Duration::ZERO);
+    }
+
     fn one(format: vk::Format, raw: &[u8]) -> [u8; 4] {
         let out = to_bgra(format, raw).expect("supported format");
         out.try_into().expect("one pixel")
@@ -1042,6 +1237,53 @@ mod tests {
             // Dolphin presents only through a swapchain on this surface.
             assert_ne!(SURFACE.load(Ordering::SeqCst), 0);
         }
+    }
+
+    #[test]
+    fn a_rejected_preferred_gpu_falls_back_to_the_core_choice() {
+        use vk::Handle;
+        static ATTEMPTS: std::sync::Mutex<Vec<bool>> = std::sync::Mutex::new(Vec::new());
+        unsafe extern "C" fn create(
+            context: *mut RetroVulkanContext,
+            _instance: vk::Instance,
+            gpu: vk::PhysicalDevice,
+            _surface: vk::SurfaceKHR,
+            _get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+            _extensions: *const *const c_char,
+            _num_extensions: c_uint,
+            _layers: *const *const c_char,
+            _num_layers: c_uint,
+            _features: *const vk::PhysicalDeviceFeatures,
+        ) -> bool {
+            ATTEMPTS
+                .lock()
+                .unwrap()
+                .push(gpu == vk::PhysicalDevice::null());
+            if gpu != vk::PhysicalDevice::null() {
+                return false;
+            }
+            unsafe {
+                (*context).device = vk::Device::from_raw(1);
+            }
+            true
+        }
+        let Some((_guard, ctx)) = context() else {
+            return;
+        };
+        if ctx.preferred_physical_device().is_err() {
+            return;
+        }
+        ATTEMPTS.lock().unwrap().clear();
+        let negotiation = Negotiation {
+            interface_type: RETRO_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_VULKAN,
+            interface_version: NEGOTIATION_VERSION,
+            get_application_info: None,
+            create_device: Some(create),
+            destroy_device: None,
+        };
+        assert!(unsafe { ctx.set_negotiation_interface(&raw const negotiation as *const c_void) });
+        assert!(ctx.create_device().is_ok());
+        assert_eq!(*ATTEMPTS.lock().unwrap(), vec![false, true]);
     }
 
     #[test]
