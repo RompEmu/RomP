@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-31 08:20\n"
+"PO-Revision-Date: 2026-10-31 16:02\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
 "Language: de_DE\n"
@@ -736,6 +736,26 @@ msgstr ""
 
 #: crates/romp-app/src/app/slots.rs
 msgid "Couldn't delete the save state: {}."
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "New"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Changed"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Fixed"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Removed"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Security"
 msgstr ""
 
 #: crates/romp-app/src/bios.rs
