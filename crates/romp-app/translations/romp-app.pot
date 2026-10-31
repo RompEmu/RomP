@@ -714,7 +714,7 @@ msgid "Games and saves come from your RomM server."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
-msgid "Emulation by libretro cores and xemu."
+msgid "Emulation by libretro cores, xemu and RPCS3."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
