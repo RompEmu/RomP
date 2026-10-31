@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-23 20:33\n"
+"PO-Revision-Date: 2026-10-31 08:20\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
@@ -220,6 +220,10 @@ msgid "Last played"
 msgstr "Última jugada"
 
 #: crates/romp-app/ui/app.slint
+msgid "Surprise me: open a random game from this list"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Refresh library"
 msgstr "Actualizar biblioteca"
 
@@ -336,6 +340,10 @@ msgstr ""
 #: crates/romp-app/ui/app.slint
 msgid "Play from here"
 msgstr "Jugar desde aquí"
+
+#: crates/romp-app/ui/app.slint
+msgid "Delete"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Achievements"
@@ -765,6 +773,10 @@ msgstr "Logros · iniciar sesión en Ajustes"
 #: crates/romp-app/ui/game.slint
 msgid "Controllers…"
 msgstr "Controladores…"
+
+#: crates/romp-app/ui/game.slint
+msgid "Disc"
+msgstr ""
 
 #: crates/romp-app/ui/game.slint
 msgid "Quit game"
