@@ -1,4 +1,7 @@
-use super::{with_controller, Controller, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_SETTINGS};
+use super::{
+    with_controller, Controller, SCREEN_CONNECT, SCREEN_GAME, SCREEN_LIBRARY, SCREEN_PAIRING,
+    SCREEN_SETTINGS, SCREEN_WELCOME,
+};
 use crate::gamepads::Button;
 use crate::gettext_noop;
 use crate::i18n::translate;
@@ -6,11 +9,12 @@ use crate::input::{A, B, DOWN, L, LEFT, R, RIGHT, START, UP, X, Y};
 use crate::mapping::BUTTONS;
 use crate::navigation::{move_in_grid, Dir};
 use crate::pad_labels::{badge, Badge, Family};
+use slint::platform::{Key, WindowEvent, WindowEventDispatchResult};
 use slint::ComponentHandle;
 use slint::{Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::{Duration, Instant};
 
-const SETTINGS_SECTIONS: i32 = 4;
+const SETTINGS_SECTIONS: i32 = 6;
 const DPAD: u16 = 1 << UP | 1 << DOWN | 1 << LEFT | 1 << RIGHT;
 
 impl Controller {
@@ -92,6 +96,8 @@ impl Controller {
         if ui.get_dialog_open() {
             if button == B {
                 self.close_dialog();
+            } else {
+                navigate_controls(ui.window(), button);
             }
             return;
         }
@@ -102,6 +108,10 @@ impl Controller {
             return;
         }
         match (ui.get_screen(), button) {
+            (SCREEN_WELCOME | SCREEN_CONNECT | SCREEN_PAIRING, UP | DOWN) => {
+                let delta = if button == UP { 64.0 } else { -64.0 };
+                ui.set_setup_scroll_y(ui.get_setup_scroll_y() + delta);
+            }
             (SCREEN_LIBRARY, UP) => self.move_card(Dir::Up),
             (SCREEN_LIBRARY, DOWN) => self.move_card(Dir::Down),
             (SCREEN_LIBRARY, LEFT) => self.move_card(Dir::Left),
@@ -119,19 +129,23 @@ impl Controller {
             (SCREEN_LIBRARY, R) => self.step_sidebar(1),
             (SCREEN_LIBRARY, START) => self.open_settings(),
             (SCREEN_LIBRARY, Y) => self.surprise(),
-            (SCREEN_GAME, A) => {
-                if ui.get_game_downloaded() && !ui.get_game_busy() {
-                    self.play_game();
-                } else if ui.get_game_playable() && ui.get_game_can_download() {
-                    self.download_game();
+            (SCREEN_GAME | SCREEN_SETTINGS, UP | DOWN | LEFT | RIGHT | A) => {
+                navigate_controls(ui.window(), button);
+            }
+            (SCREEN_GAME | SCREEN_SETTINGS, B) => {
+                if !send_key(ui.window(), Key::Escape) {
+                    self.back_to_library();
                 }
+            }
+            (SCREEN_GAME, L | R) => {
+                let delta = if button == L { 160.0 } else { -160.0 };
+                ui.set_game_scroll_y(ui.get_game_scroll_y() + delta);
             }
             (SCREEN_GAME, X) => {
                 if ui.get_can_edit_collections() {
                     self.toggle_favorite();
                 }
             }
-            (SCREEN_GAME | SCREEN_SETTINGS, B) => self.back_to_library(),
             (SCREEN_SETTINGS, L | R) => {
                 let step = tab_step(button, crate::i18n::rtl());
                 let section = (ui.get_settings_section() + step).rem_euclid(SETTINGS_SECTIONS);
@@ -199,6 +213,52 @@ impl Controller {
     }
 }
 
+/// Use native focus order and widget behavior, including popup ownership and scroll-to-focus.
+fn navigate_controls(window: &slint::Window, button: u32) {
+    let previous = button == UP || button == LEFT;
+    let tab = if previous { Key::Backtab } else { Key::Tab };
+    match button {
+        UP | DOWN => {
+            send_key(window, tab);
+        }
+        LEFT | RIGHT => {
+            let arrow = if previous {
+                Key::LeftArrow
+            } else {
+                Key::RightArrow
+            };
+            let choice = if previous {
+                Key::UpArrow
+            } else {
+                Key::DownArrow
+            };
+            if !send_key(window, arrow) && !send_key(window, choice) {
+                send_key(window, tab);
+            }
+        }
+        A => {
+            send_key(window, Key::Return);
+        }
+        B => {
+            send_key(window, Key::Escape);
+        }
+        _ => {}
+    }
+}
+
+fn send_key(window: &slint::Window, key: Key) -> bool {
+    let text: slint::SharedString = key.into();
+    let result = window.dispatch_event_with_result(WindowEvent::KeyPressed { text: text.clone() });
+    window.dispatch_event(WindowEvent::KeyReleased { text });
+    match result {
+        Ok(result) => result == WindowEventDispatchResult::Accepted,
+        Err(error) => {
+            tracing::warn!(%error, "could not deliver controller navigation to UI");
+            true
+        }
+    }
+}
+
 /// LB moves to the tab on the left, which is the next one when tabs run right to left.
 fn tab_step(button: u32, rtl: bool) -> i32 {
     if (button == L) != rtl {
@@ -227,13 +287,20 @@ fn hints(screen: i32, family: Family) -> Vec<Hint> {
         ],
         SCREEN_GAME => vec![
             (
-                vec![key(family.confirm())],
-                gettext_noop!("Play or download"),
+                vec![Badge::Text(gettext_noop!("D-pad"))],
+                gettext_noop!("Move"),
             ),
+            (vec![key(family.confirm())], gettext_noop!("Select")),
+            (shoulders, gettext_noop!("Scroll")),
             (vec![key(Button::North)], gettext_noop!("Favorite")),
             (vec![key(family.back())], gettext_noop!("Back")),
         ],
         SCREEN_SETTINGS => vec![
+            (
+                vec![Badge::Text(gettext_noop!("D-pad"))],
+                gettext_noop!("Move or change value"),
+            ),
+            (vec![key(family.confirm())], gettext_noop!("Select")),
             (shoulders, gettext_noop!("Change section")),
             (vec![key(family.back())], gettext_noop!("Back")),
         ],
@@ -260,6 +327,218 @@ mod tests {
     use crate::pad_labels::Shape;
 
     #[test]
+    fn pages_support_controller_focus_and_drag_scrolling() {
+        use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+        use slint::{ComponentHandle, PhysicalSize};
+
+        struct Platform(std::rc::Rc<MinimalSoftwareWindow>);
+        impl slint::platform::Platform for Platform {
+            fn create_window_adapter(
+                &self,
+            ) -> Result<std::rc::Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError>
+            {
+                Ok(self.0.clone())
+            }
+        }
+
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+        slint::platform::set_platform(Box::new(Platform(window.clone()))).unwrap();
+        let ui = crate::AppWindow::new().unwrap();
+        ui.set_screen(SCREEN_PAIRING);
+        ui.show().unwrap();
+        for (height, overflows) in [(400, true), (1000, false)] {
+            window.set_size(PhysicalSize::new(640, height));
+            window.draw_if_needed(|renderer| {
+                let mut pixels = vec![slint::Rgb8Pixel::default(); 640 * height as usize];
+                renderer.render(&mut pixels, 640);
+            });
+            ui.window()
+                .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                    position: slint::LogicalPosition::new(320.0, 200.0),
+                    delta_x: 0.0,
+                    delta_y: -64.0,
+                });
+            assert_eq!(
+                ui.get_setup_scroll_y() < 0.0,
+                overflows,
+                "window size: {:?}, scroll offset: {}",
+                ui.window().size(),
+                ui.get_setup_scroll_y()
+            );
+            ui.set_setup_scroll_y(0.0);
+        }
+
+        let draw = || {
+            window.draw_if_needed(|renderer| {
+                let mut pixels = vec![slint::Rgb8Pixel::default(); 800 * 400];
+                renderer.render(&mut pixels, 800);
+            });
+        };
+        window.set_size(PhysicalSize::new(800, 400));
+        ui.set_game_title("A game with screenshots and saves".into());
+        ui.set_game_summary("A long overview. ".repeat(400).into());
+        ui.set_game_downloaded(true);
+        ui.set_game_playable(true);
+        ui.set_show_collections(true);
+        ui.set_can_edit_collections(true);
+        ui.set_game_shots(ModelRc::new(VecModel::from(vec![
+            crate::Shot::default();
+            3
+        ])));
+        let plays = std::rc::Rc::new(std::cell::Cell::new(0));
+        let deletes = std::rc::Rc::new(std::cell::Cell::new(0));
+        let backs = std::rc::Rc::new(std::cell::Cell::new(0));
+        let favorites = std::rc::Rc::new(std::cell::Cell::new(0));
+        let count = plays.clone();
+        ui.on_play_game(move || count.set(count.get() + 1));
+        let count = deletes.clone();
+        ui.on_delete_game(move || count.set(count.get() + 1));
+        let count = backs.clone();
+        ui.on_back_to_library(move || count.set(count.get() + 1));
+        let count = favorites.clone();
+        ui.on_toggle_favorite(move || count.set(count.get() + 1));
+        ui.set_screen(SCREEN_GAME);
+        draw();
+        navigate_controls(ui.window(), A);
+        assert_eq!(plays.get(), 1, "initial confirm retains the primary action");
+        for _ in 0..3 {
+            navigate_controls(ui.window(), DOWN);
+        }
+        navigate_controls(ui.window(), A);
+        assert_eq!(plays.get(), 2, "confirm activates focused Play");
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), A);
+        assert_eq!(deletes.get(), 1, "Delete receives confirm instead of Play");
+        assert_eq!(plays.get(), 2);
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), A);
+        assert_eq!(favorites.get(), 1);
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), A);
+        navigate_controls(ui.window(), B);
+        assert_eq!(backs.get(), 0, "Back closes the collections popup first");
+        navigate_controls(ui.window(), DOWN);
+        draw();
+        assert!(
+            ui.get_game_scroll_y() < -200.0,
+            "offscreen screenshots scroll into view"
+        );
+        navigate_controls(ui.window(), A);
+        navigate_controls(ui.window(), RIGHT);
+        navigate_controls(ui.window(), B);
+        assert_eq!(backs.get(), 0, "Back closes the screenshot viewer first");
+
+        ui.set_game_scroll_y(0.0);
+        draw();
+        use slint::platform::PointerEventButton;
+        ui.window().dispatch_event(WindowEvent::PointerPressed {
+            position: slint::LogicalPosition::new(500.0, 350.0),
+            button: PointerEventButton::Left,
+        });
+        for y in [320.0, 280.0, 240.0, 200.0, 150.0] {
+            ui.window().dispatch_event(WindowEvent::PointerMoved {
+                position: slint::LogicalPosition::new(500.0, y),
+            });
+        }
+        ui.window().dispatch_event(WindowEvent::PointerReleased {
+            position: slint::LogicalPosition::new(500.0, 150.0),
+            button: PointerEventButton::Left,
+        });
+        assert!(
+            ui.get_game_scroll_y() < -100.0,
+            "mouse-emulated touchscreen swipe scrolls the page"
+        );
+        assert_eq!(plays.get(), 2, "a swipe must not activate a game action");
+
+        // Upstream's play-status popup participates in the same focus order.
+        ui.set_show_status(true);
+        ui.set_can_edit_status(true);
+        ui.set_game_status_options(ModelRc::new(VecModel::from(vec![crate::StatusOption {
+            label: "Now playing".into(),
+            checked: false,
+        }])));
+        let statuses = std::rc::Rc::new(std::cell::Cell::new(0));
+        let count = statuses.clone();
+        ui.on_toggle_status(move |index, on| {
+            assert_eq!(index, 0);
+            assert!(on);
+            count.set(count.get() + 1);
+        });
+        ui.set_screen(SCREEN_LIBRARY);
+        draw();
+        ui.set_screen(SCREEN_GAME);
+        draw();
+        for _ in 0..7 {
+            navigate_controls(ui.window(), DOWN);
+        }
+        navigate_controls(ui.window(), A);
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), A);
+        assert_eq!(statuses.get(), 1, "controller can change the play status");
+        navigate_controls(ui.window(), B);
+        assert_eq!(backs.get(), 0, "Back closes the play-status popup first");
+        assert_eq!(plays.get(), 2);
+
+        ui.set_screen(SCREEN_SETTINGS);
+        ui.set_settings_section(0);
+        ui.set_pref_ui_scale(2);
+        draw();
+        // Two breadcrumb controls, six tabs, then three switches, volume and scale.
+        for _ in 0..13 {
+            navigate_controls(ui.window(), DOWN);
+        }
+        navigate_controls(ui.window(), LEFT);
+        assert_eq!(
+            ui.get_pref_ui_scale(),
+            1,
+            "controller can recover interface size"
+        );
+        draw();
+        let confirmed = std::rc::Rc::new(std::cell::Cell::new(0));
+        let cancelled = std::rc::Rc::new(std::cell::Cell::new(0));
+        let count = confirmed.clone();
+        ui.on_dialog_accepted(move |_| count.set(count.get() + 1));
+        let count = cancelled.clone();
+        ui.on_dialog_cancelled(move || count.set(count.get() + 1));
+        ui.set_dialog_confirm("Delete".into());
+        ui.set_dialog_destructive(true);
+        ui.set_dialog_open(true);
+        draw();
+        navigate_controls(ui.window(), A);
+        assert_eq!(cancelled.get(), 1, "confirmation starts on Cancel");
+        assert_eq!(confirmed.get(), 0);
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), A);
+        assert_eq!(
+            confirmed.get(),
+            1,
+            "destructive action requires choosing Confirm"
+        );
+        ui.set_dialog_open(false);
+        draw();
+        ui.set_dialog_asks_name(true);
+        ui.set_dialog_value("".into());
+        ui.set_dialog_open(true);
+        draw();
+        navigate_controls(ui.window(), UP);
+        navigate_controls(ui.window(), A);
+        assert_eq!(
+            cancelled.get(),
+            2,
+            "Backtab leaves an empty name field for Cancel"
+        );
+        assert_eq!(confirmed.get(), 1, "disabled Confirm remains unreachable");
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), A);
+        assert_eq!(
+            cancelled.get(),
+            3,
+            "Tab skips disabled Confirm and wraps inside dialog"
+        );
+    }
+
+    #[test]
     fn hints_name_the_buttons_of_the_controller_in_use() {
         let library = hints(SCREEN_LIBRARY, Family::Xbox);
         assert_eq!(library[1], (vec![Badge::Text("A")], "Open"));
@@ -269,13 +548,10 @@ mod tests {
         );
         assert_eq!(library[3], (vec![Badge::Text("X")], "Surprise me"));
         let game = hints(SCREEN_GAME, Family::Ps5);
-        assert_eq!(
-            game[0],
-            (vec![Badge::Shape(Shape::Cross)], "Play or download")
-        );
-        assert_eq!(game[2], (vec![Badge::Shape(Shape::Circle)], "Back"));
+        assert_eq!(game[1], (vec![Badge::Shape(Shape::Cross)], "Select"));
+        assert_eq!(game[4], (vec![Badge::Shape(Shape::Circle)], "Back"));
         let settings = hints(SCREEN_SETTINGS, Family::Nintendo);
-        assert_eq!(settings[1], (vec![Badge::Text("B")], "Back"));
+        assert_eq!(settings[3], (vec![Badge::Text("B")], "Back"));
     }
 
     #[test]

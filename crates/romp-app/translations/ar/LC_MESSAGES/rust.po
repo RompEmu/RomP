@@ -682,9 +682,13 @@ msgstr "قائمة التغيير"
 msgid "Settings"
 msgstr "الإعدادات"
 
+#: crates/romp-app/src/app/navigation.rs crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
+msgid "Select"
+msgstr "حدد"
+
 #: crates/romp-app/src/app/navigation.rs
-msgid "Play or download"
-msgstr "تشغيل أو تنزيل"
+msgid "Scroll"
+msgstr "تمرير"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Favorite"
@@ -693,6 +697,10 @@ msgstr "المفضلة"
 #: crates/romp-app/src/app/navigation.rs crates/romp-app/src/pad_labels.rs
 msgid "Back"
 msgstr "الرجوع"
+
+#: crates/romp-app/src/app/navigation.rs
+msgid "Move or change value"
+msgstr "التنقل أو تغيير القيمة"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Change section"
@@ -1045,10 +1053,6 @@ msgstr "Dithering"
 #: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
 msgid "Start"
 msgstr "ابدأ"
-
-#: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
-msgid "Select"
-msgstr "حدد"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Up"
