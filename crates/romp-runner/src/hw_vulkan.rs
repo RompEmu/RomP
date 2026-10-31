@@ -5,6 +5,7 @@ use romp_libretro::{HwContextProvider, RETRO_HW_CONTEXT_VULKAN};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::{c_char, c_uint, c_void, CStr};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 const RETRO_HW_RENDER_INTERFACE_VULKAN: c_uint = 0;
 const RETRO_HW_RENDER_INTERFACE_VULKAN_VERSION: c_uint = 5;
@@ -132,6 +133,50 @@ fn preferred_gpu(devices: &[(vk::PhysicalDeviceType, bool)]) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
+struct ReadbackStats {
+    started: Instant,
+    frames: u32,
+    gpu: Duration,
+    gpu_max: Duration,
+    cpu: Duration,
+    cpu_max: Duration,
+}
+
+impl Default for ReadbackStats {
+    fn default() -> Self {
+        Self {
+            started: Instant::now(),
+            frames: 0,
+            gpu: Duration::ZERO,
+            gpu_max: Duration::ZERO,
+            cpu: Duration::ZERO,
+            cpu_max: Duration::ZERO,
+        }
+    }
+}
+
+impl ReadbackStats {
+    fn record(&mut self, gpu: Duration, cpu: Duration) {
+        self.frames += 1;
+        self.gpu += gpu;
+        self.gpu_max = self.gpu_max.max(gpu);
+        self.cpu += cpu;
+        self.cpu_max = self.cpu_max.max(cpu);
+        if self.started.elapsed() >= Duration::from_secs(10) {
+            let avg = |d: Duration| d.as_secs_f64() * 1000.0 / f64::from(self.frames);
+            tracing::info!(
+                frames = self.frames,
+                gpu_wait_ms_avg = avg(self.gpu),
+                gpu_wait_ms_max = self.gpu_max.as_secs_f64() * 1000.0,
+                cpu_convert_ms_avg = avg(self.cpu),
+                cpu_convert_ms_max = self.cpu_max.as_secs_f64() * 1000.0,
+                "Vulkan readback timing"
+            );
+            *self = Self::default();
+        }
+    }
+}
+
 struct DeviceState {
     device: ash::Device,
     gpu: vk::PhysicalDevice,
@@ -140,6 +185,8 @@ struct DeviceState {
     commands: vk::CommandBuffer,
     fence: vk::Fence,
     readback: Option<Readback>,
+    last_scanout: Option<(vk::Format, u32, u32)>,
+    timings: ReadbackStats,
 }
 
 pub struct HwVulkanContext {
@@ -383,6 +430,8 @@ impl HwVulkanContext {
             commands,
             fence,
             readback: None,
+            last_scanout: None,
+            timings: ReadbackStats::default(),
         })
     }
 
@@ -430,6 +479,14 @@ impl HwVulkanContext {
         let mapped =
             unsafe { device.map_memory(memory, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty()) }?
                 .cast();
+        tracing::info!(
+            bytes = size,
+            allocation_bytes = needs.size,
+            memory_type = type_index,
+            memory_flags = ?flags[type_index as usize],
+            coherent,
+            "Vulkan frame readback buffer allocated"
+        );
         state.readback = Some(Readback {
             buffer,
             memory,
@@ -446,6 +503,11 @@ impl HwVulkanContext {
         let state = guard
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("no Vulkan device"))?;
+        let scanout = (image.format, width, height);
+        if state.last_scanout != Some(scanout) {
+            tracing::info!(format = ?image.format, width, height, "Vulkan scanout changed");
+            state.last_scanout = Some(scanout);
+        }
         let bpp = bytes_per_pixel(image.format)
             .ok_or_else(|| anyhow::anyhow!("unsupported scanout format {:?}", image.format))?;
         let size = u64::from(width) * u64::from(height) * bpp;
@@ -536,6 +598,7 @@ impl HwVulkanContext {
             .wait_semaphores(&wait)
             .wait_dst_stage_mask(&stages)
             .signal_semaphores(&signal);
+        let gpu_started = Instant::now();
         self.queue_lock.lock();
         let submitted = unsafe { device.queue_submit(state.queue, &[submit], state.fence) };
         // SAFETY: locked just above on this thread.
@@ -552,9 +615,14 @@ impl HwVulkanContext {
                 .size(vk::WHOLE_SIZE);
             unsafe { device.invalidate_mapped_memory_ranges(&[range]) }?;
         }
+        let gpu_time = gpu_started.elapsed();
+        let cpu_started = Instant::now();
         // SAFETY: the mapping holds at least `size` bytes and the fence says the copy finished.
         let raw = unsafe { std::slice::from_raw_parts(mapped, size as usize) };
-        to_bgra(image.format, raw).ok_or_else(|| anyhow::anyhow!("unsupported scanout format"))
+        let pixels = to_bgra(image.format, raw)
+            .ok_or_else(|| anyhow::anyhow!("unsupported scanout format"))?;
+        state.timings.record(gpu_time, cpu_started.elapsed());
+        Ok(pixels)
     }
 
     fn render_interface_for(&self, state: &DeviceState) -> RenderInterface {
@@ -887,6 +955,22 @@ mod tests {
         assert_eq!(preferred_gpu(&[(T::CPU, true)]), Some(0));
         assert_eq!(preferred_gpu(&[(T::DISCRETE_GPU, false)]), None);
         assert_eq!(preferred_gpu(&[]), None);
+    }
+
+    #[test]
+    fn readback_timings_accumulate_and_reset_once_per_window() {
+        let mut stats = ReadbackStats::default();
+        stats.record(Duration::from_millis(5), Duration::from_millis(2));
+        stats.record(Duration::from_millis(3), Duration::from_millis(4));
+        assert_eq!(stats.frames, 2);
+        assert_eq!(stats.gpu, Duration::from_millis(8));
+        assert_eq!(stats.gpu_max, Duration::from_millis(5));
+        assert_eq!(stats.cpu, Duration::from_millis(6));
+        assert_eq!(stats.cpu_max, Duration::from_millis(4));
+        stats.started = Instant::now() - Duration::from_secs(11);
+        stats.record(Duration::ZERO, Duration::ZERO);
+        assert_eq!(stats.frames, 0);
+        assert_eq!(stats.gpu, Duration::ZERO);
     }
 
     fn one(format: vk::Format, raw: &[u8]) -> [u8; 4] {
