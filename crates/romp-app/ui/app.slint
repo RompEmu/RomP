@@ -78,6 +78,7 @@ component AppTile inherits Rectangle {
 }
 
 component IconButton inherits Rectangle {
+    in property <bool> focus-enabled: true;
     in property <image> icon;
     in property <string> tooltip;
     in property <bool> enabled: true;
@@ -97,18 +98,20 @@ component IconButton inherits Rectangle {
     accessible-enabled: root.enabled;
     accessible-action-default => { root.clicked(); }
     touch := TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
-    keys := KeyActivator { enabled: root.enabled; activate => { root.clicked(); } }
+    keys := KeyActivator { enabled: root.enabled && root.focus-enabled; activate => { root.clicked(); } }
     if keys.has-focus: FocusRing { border-radius: root.border-radius; }
     if root.tooltip != "": Tooltip { text: @markdown("\{root.tooltip}"); }
 }
 
 // The inbox button, with how many notifications are unread.
 component BellButton inherits Rectangle {
+    in property <bool> focus-enabled: true;
     in property <int> unread;
     callback clicked();
     width: 32px;
     height: 32px;
     IconButton {
+        focus-enabled: root.focus-enabled;
         icon: @image-url("icons/bell.svg");
         tooltip: root.unread > 0 ? @tr("Notifications ({0} unread)", root.unread) : @tr("Notifications");
         clicked => { root.clicked(); }
@@ -410,6 +413,7 @@ component Avatar inherits Rectangle {
 }
 
 component SidebarItem inherits Rectangle {
+    in property <bool> focus-enabled: true;
     in property <string> label;
     in property <string> initial;
     in property <bool> compact;
@@ -429,7 +433,7 @@ component SidebarItem inherits Rectangle {
     accessible-item-selected: root.selected;
     accessible-action-default => { root.clicked(); }
     touch := TouchArea { clicked => { root.clicked(); } }
-    keys := KeyActivator { activate => { root.clicked(); } }
+    keys := KeyActivator { enabled: root.focus-enabled; activate => { root.clicked(); } }
     if keys.has-focus: FocusRing { border-radius: root.border-radius; }
     if root.compact: Rectangle {
         if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; }
@@ -468,6 +472,7 @@ component SidebarItem inherits Rectangle {
 }
 
 component SectionHeader inherits Rectangle {
+    in property <bool> focus-enabled: true;
     in property <string> label;
     in property <bool> expanded;
     in property <bool> can-add;
@@ -481,7 +486,7 @@ component SectionHeader inherits Rectangle {
     accessible-action-default => { root.toggled(); }
     accessible-action-expand => { root.toggled(); }
     touch := TouchArea { clicked => { root.toggled(); } }
-    keys := KeyActivator { activate => { root.toggled(); } }
+    keys := KeyActivator { enabled: root.focus-enabled; activate => { root.toggled(); } }
     if keys.has-focus: FocusRing { border-radius: 6px; }
     Row {
         padding-left: 10px;
@@ -516,7 +521,7 @@ component SectionHeader inherits Rectangle {
             accessible-label: @tr("New collection");
             accessible-action-default => { root.add(); }
             add-touch := TouchArea { clicked => { root.add(); } }
-            add-keys := KeyActivator { activate => { root.add(); } }
+            add-keys := KeyActivator { enabled: root.focus-enabled; activate => { root.add(); } }
             if add-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
             Tooltip { text: @markdown("\{@tr("New collection")}"); }
         }
@@ -837,6 +842,7 @@ component Library inherits Rectangle {
                     padding-left: Locale.rtl ? 14px : 0;
                     padding-right: Locale.rtl ? 0 : 14px;
                     FocusScope {
+                        focus-on-tab-navigation: !root.page-open;
                         height: platform-filter-field.preferred-height;
                         key-pressed(event) => {
                             if event.text == Key.Escape {
@@ -853,12 +859,13 @@ component Library inherits Rectangle {
                             reject
                         }
                         platform-filter-field := LineEdit {
+                            enabled: !root.page-open;
                             width: parent.width;
                             placeholder-text: @tr("Filter consoles");
                             text <=> root.platform-filter;
                             edited(text) => { root.platform-filter-edited(text); }
                         }
-                        if root.platform-filter != "": IconButton {
+                        if root.platform-filter != "": IconButton { focus-enabled: !root.page-open;
                             x: Locale.rtl ? 4px : parent.width - self.width - 4px;
                             y: (parent.height - self.height) / 2;
                             width: 24px;
@@ -886,7 +893,7 @@ component Library inherits Rectangle {
                             padding-right: 8px;
                             Rectangle { height: 1px; background: Theme.divider; }
                         }
-                        if e.header && !root.compact: SectionHeader {
+                        if e.header && !root.compact: SectionHeader { focus-enabled: !root.page-open;
                             label: e.name;
                             expanded: e.expanded;
                             can-add: e.can-add;
@@ -907,7 +914,7 @@ component Library inherits Rectangle {
                                 MenuItem { title: @tr("Rename…"); activated => { root.rename-collection(e.key); } }
                                 MenuItem { title: @tr("Delete…"); activated => { root.delete-collection(e.key); } }
                             }
-                            SidebarItem {
+                            SidebarItem { focus-enabled: !root.page-open;
                                 width: parent.width;
                                 compact: root.compact;
                                 initial: e.initial;
@@ -920,7 +927,7 @@ component Library inherits Rectangle {
                                 clicked => { root.select(e.key); }
                             }
                         }
-                        if !e.header && !e.note && !e.editable: SidebarItem {
+                        if !e.header && !e.note && !e.editable: SidebarItem { focus-enabled: !root.page-open;
                             compact: root.compact;
                             initial: e.initial;
                             label: e.name;
@@ -951,15 +958,15 @@ component Library inherits Rectangle {
                     }
                     if root.notifications-shown: Row {
                         alignment: center;
-                        BellButton { unread: root.notifications-unread; clicked => { root.open-notifications(); } }
+                        BellButton { focus-enabled: !root.page-open; unread: root.notifications-unread; clicked => { root.open-notifications(); } }
                     }
                     Row {
                         alignment: center;
-                        IconButton { icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
+                        IconButton { focus-enabled: !root.page-open; icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
                     }
                     Row {
                         alignment: center;
-                        IconButton { icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
+                        IconButton { focus-enabled: !root.page-open; icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
                     }
                 }
                 if !root.compact: Row {
@@ -982,9 +989,9 @@ component Library inherits Rectangle {
                             overflow: elide;
                         }
                     }
-                    if root.notifications-shown: BellButton { unread: root.notifications-unread; clicked => { root.open-notifications(); } }
-                    IconButton { icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
-                    IconButton { icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
+                    if root.notifications-shown: BellButton { focus-enabled: !root.page-open; unread: root.notifications-unread; clicked => { root.open-notifications(); } }
+                    IconButton { focus-enabled: !root.page-open; icon: @image-url("icons/info.svg"); tooltip: @tr("About"); clicked => { root.open-about(); } }
+                    IconButton { focus-enabled: !root.page-open; icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
                 }
 
             }
@@ -1373,6 +1380,8 @@ component Breadcrumb inherits Rectangle {
 }
 
 component GamePage inherits FocusScope {
+    in property <bool> modal-open;
+    changed modal-open => { if !root.modal-open { root.focus(); } }
     in property <string> back-label;
     in property <string> title;
     in property <string> category;
@@ -1425,28 +1434,46 @@ component GamePage inherits FocusScope {
     in property <[StatusOption]> status-options;
     callback toggle-status(int, bool);
 
+    in-out property <length> scroll-y <=> page.content-y;
+    changed scroll-y => {
+        root.scroll-y = clamp(root.scroll-y, -max(0px, page.content-height - page.visible-height), 0px);
+    }
     property <int> viewing: -1;
+    changed viewing => { if root.viewing < 0 { root.focus(); } }
     property <bool> banner-from-shot: root.shots.length > 0 && root.shots[0].loaded;
     property <bool> has-banner: root.banner-from-shot || root.has-cover;
     changed title => { self.viewing = -1; page.content-y = 0; }
     init => { self.focus(); }
+    capture-key-pressed(event) => {
+        if root.viewing >= 0 && event.text == Key.Escape {
+            root.viewing = -1;
+            return accept;
+        }
+        if root.viewing >= 0 && event.text == Key.LeftArrow {
+            root.viewing = max(0, root.viewing - 1);
+            return accept;
+        }
+        if root.viewing >= 0 && event.text == Key.RightArrow {
+            root.viewing = min(root.shots.length - 1, root.viewing + 1);
+            return accept;
+        }
+        if root.has-focus && root.viewing < 0 && event.text == Key.Return {
+            if root.downloaded && !root.busy { root.play(); }
+            else if !root.busy && root.playable && root.can-download { root.download(); }
+            return accept;
+        }
+        if root.viewing >= 0 && event.text == Key.Return {
+            root.viewing = -1;
+            return accept;
+        }
+        if root.viewing >= 0 && (event.text == Key.Tab || event.text == Key.Backtab) {
+            return accept;
+        }
+        return reject;
+    }
+
     key-pressed(event) => {
-        if event.text == Key.Escape {
-            if root.viewing >= 0 {
-                root.viewing = -1;
-            } else {
-                root.back();
-            }
-            return accept;
-        }
-        if root.viewing >= 0 && event.text == Key.LeftArrow && root.viewing > 0 {
-            root.viewing -= 1;
-            return accept;
-        }
-        if root.viewing >= 0 && event.text == Key.RightArrow && root.viewing < root.shots.length - 1 {
-            root.viewing += 1;
-            return accept;
-        }
+        if event.text == Key.Escape { root.back(); return accept; }
         return reject;
     }
 
@@ -1486,7 +1513,7 @@ component GamePage inherits FocusScope {
                 spacing: 32px;
                 HorizontalLayout {
                     spacing: 28px;
-                    if !Locale.rtl: VerticalLayout {
+                    if !Locale.rtl && root.width >= 700px: VerticalLayout {
                         alignment: start;
                         Rectangle {
                             width: min(260px, 347px * root.cover-aspect);
@@ -1513,6 +1540,7 @@ component GamePage inherits FocusScope {
                         if root.stats != "": Text { horizontal-alignment: Locale.start; text: root.stats; font-size: Theme.font-body; color: Theme.text-muted; wrap: word-wrap; }
                         if root.reason != "": Text { horizontal-alignment: Locale.start; text: root.reason; font-size: Theme.font-body; color: Theme.accent; wrap: word-wrap; }
                         Row {
+                            flex-wrap: wrap;
                             padding-top: 8px;
                             alignment: start;
                             spacing: 10px;
@@ -1533,6 +1561,7 @@ component GamePage inherits FocusScope {
                             }
                             if root.show-collections: Rectangle {
                                 width: collections-button.preferred-width;
+                                height: collections-button.preferred-height;
                                 collections-button := Button {
                                     width: parent.width;
                                     height: parent.height;
@@ -1648,7 +1677,7 @@ component GamePage inherits FocusScope {
                             }
                         }
                     }
-                    if Locale.rtl: VerticalLayout {
+                    if Locale.rtl && root.width >= 700px: VerticalLayout {
                         alignment: start;
                         Rectangle {
                             width: min(260px, 347px * root.cover-aspect);
@@ -1692,9 +1721,14 @@ component GamePage inherits FocusScope {
                                 width: 266px;
                                 height: 200px;
                                 border-radius: 8px;
-                                clip: true;
-                                background: Theme.surface-muted;
-                                if shot.loaded: Image { source: shot.image; width: parent.width; height: parent.height; image-fit: ImageFit.cover; }
+                                Rectangle {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    border-radius: 8px;
+                                    clip: true;
+                                    background: Theme.surface-muted;
+                                    if shot.loaded: Image { source: shot.image; width: parent.width; height: parent.height; image-fit: ImageFit.cover; }
+                                }
                                 accessible-role: button;
                                 accessible-label: @tr("Screenshot {}", i + 1);
                                 accessible-action-default => { root.viewing = i; }
@@ -1809,6 +1843,7 @@ component GamePage inherits FocusScope {
 
     if root.viewing >= 0 && root.viewing < root.shots.length: Rectangle {
         background: Theme.scrim-strong;
+        FocusScope { init => { self.focus(); } }
         TouchArea { clicked => { root.viewing = -1; } }
         Image {
             x: 72px;
@@ -1822,13 +1857,13 @@ component GamePage inherits FocusScope {
             x: 16px;
             y: (parent.height - self.height) / 2;
             text: "‹";
-            clicked => { root.viewing -= 1; }
+            clicked => { root.viewing = max(0, root.viewing - 1); }
         }
         if root.viewing < root.shots.length - 1: Button {
             x: parent.width - self.width - 16px;
             y: (parent.height - self.height) / 2;
             text: "›";
-            clicked => { root.viewing += 1; }
+            clicked => { root.viewing = min(root.shots.length - 1, root.viewing + 1); }
         }
         Button {
             x: Locale.rtl ? 16px : parent.width - self.width - 16px;
@@ -1840,7 +1875,6 @@ component GamePage inherits FocusScope {
 }
 
 component Panel inherits Rectangle {
-    clip: true;
     background: Theme.surface-raised;
     border-radius: 10px;
     border-width: 1px;
@@ -1934,10 +1968,14 @@ component LinkButton inherits Rectangle {
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
     link-label := Text { horizontal-alignment: Locale.start; text: root.text; font-size: Theme.font-small; color: Theme.accent-text; }
+    keys := KeyActivator { activate => { root.clicked(); } }
+    if keys.has-focus: FocusRing { border-radius: Theme.radius-small; }
     link-touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
 }
 
 component SettingsPage inherits FocusScope {
+    in property <bool> modal-open;
+    changed modal-open => { if !root.modal-open { root.focus(); } }
     callback open-link(string);
     in property <string> back-label;
     in property <bool> remap-open;
@@ -2014,6 +2052,7 @@ component SettingsPage inherits FocusScope {
             Text { horizontal-alignment: Locale.start; text: @tr("Settings"); font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; }
             Row {
                 alignment: start;
+                flex-wrap: wrap;
                 for label[i] in [@tr("General"), @tr("Account"), @tr("Players"), @tr("Storage"), @tr("Consoles"), @tr("Looks")]: SettingsTab {
                     label: label;
                     selected: root.section == i;
@@ -2423,7 +2462,23 @@ component Dialog inherits Rectangle {
     background: Theme.scrim;
     TouchArea { }
     FocusScope {
-        init => { self.focus(); }
+        init => { if root.asks-name { name-field.focus(); } else { cancel-button.focus(); } }
+        capture-key-pressed(event) => {
+            if event.text == Key.Tab || event.text == Key.Backtab {
+                if event.text == Key.Backtab {
+                    if confirm-button.has-focus { cancel-button.focus(); }
+                    else if cancel-button.has-focus && root.asks-name { name-field.focus(); }
+                    else if confirm-button.enabled { confirm-button.focus(); }
+                    else { cancel-button.focus(); }
+                } else {
+                    if cancel-button.has-focus && confirm-button.enabled { confirm-button.focus(); }
+                    else if root.asks-name && !name-field.has-focus { name-field.focus(); }
+                    else { cancel-button.focus(); }
+                }
+                return accept;
+            }
+            return reject;
+        }
         key-pressed(event) => {
             if event.text == Key.Escape {
                 root.cancelled();
@@ -2445,16 +2500,17 @@ component Dialog inherits Rectangle {
                 spacing: 12px;
                 Text { horizontal-alignment: Locale.start; text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
                 if root.message != "": Text { horizontal-alignment: Locale.start; text: root.message; color: Theme.text-secondary; wrap: word-wrap; }
-                if root.asks-name: LineEdit {
+                name-field := LineEdit {
+                    visible: root.asks-name;
                     text <=> root.value;
                     accepted => { if root.value != "" { root.accepted(root.value); } }
-                    init => { self.focus(); }
+                    init => { if root.asks-name { self.focus(); } }
                 }
                 Row {
                     alignment: end;
                     spacing: 10px;
-                    Button { text: @tr("Cancel"); clicked => { root.cancelled(); } }
-                    Button {
+                    cancel-button := Button { text: @tr("Cancel"); clicked => { root.cancelled(); } }
+                    confirm-button := Button {
                         text: root.confirm-label;
                         primary: !root.destructive;
                         enabled: !root.asks-name || root.value != "";
@@ -2648,6 +2704,7 @@ export component AppWindow inherits Window {
     in-out property <int> screen;
     changed screen => { root.setup-scroll-y = 0px; }
     in-out property <length> setup-scroll-y;
+    in-out property <length> game-scroll-y;
     in property <bool> first-run;
     property <bool> in-library: root.screen >= 2 && root.screen <= 4;
     property <bool> narrow;
@@ -3013,6 +3070,8 @@ export component AppWindow inherits Window {
             root.about-open = true;
         }
         if root.screen == 3: GamePage {
+            modal-open: root.dialog-open || root.remap-open || root.about-open;
+            scroll-y <=> root.game-scroll-y;
             back-label: root.heading;
             title: root.game-title;
             category: root.game-category;
@@ -3066,6 +3125,7 @@ export component AppWindow inherits Window {
             toggle-status(index, on) => { root.toggle-status(index, on); }
         }
         if root.screen == 4: SettingsPage {
+            modal-open: root.dialog-open || root.remap-open || root.about-open;
             back-label: root.heading;
             open-link(url) => { root.open-url(url); }
             remap-open: root.remap-open;

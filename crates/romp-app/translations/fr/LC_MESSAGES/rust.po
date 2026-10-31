@@ -654,9 +654,13 @@ msgstr "Modifier la liste"
 msgid "Settings"
 msgstr "Réglages"
 
+#: crates/romp-app/src/app/navigation.rs crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
+msgid "Select"
+msgstr "Sélectionner"
+
 #: crates/romp-app/src/app/navigation.rs
-msgid "Play or download"
-msgstr "Jouer ou télécharger"
+msgid "Scroll"
+msgstr "Faire défiler"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Favorite"
@@ -665,6 +669,10 @@ msgstr "Favoris"
 #: crates/romp-app/src/app/navigation.rs crates/romp-app/src/pad_labels.rs
 msgid "Back"
 msgstr "Précédent"
+
+#: crates/romp-app/src/app/navigation.rs
+msgid "Move or change value"
+msgstr "Déplacer ou modifier la valeur"
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Change section"
@@ -1017,10 +1025,6 @@ msgstr "Dithering"
 #: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
 msgid "Start"
 msgstr "Début"
-
-#: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
-msgid "Select"
-msgstr "Sélectionner"
 
 #: crates/romp-app/src/mapping.rs
 msgid "Up"
