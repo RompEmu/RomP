@@ -4,6 +4,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- The first time a new version of RomP opens, it shows what's new in it, with a link to the full changelog. It can be turned off there, and opened again from the About window.
+
 ## [0.20.0] - 2026-10-31
 
 ### Added
