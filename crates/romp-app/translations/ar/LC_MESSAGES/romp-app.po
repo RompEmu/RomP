@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-31 08:20\n"
+"PO-Revision-Date: 2026-10-31 16:44\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -272,7 +272,7 @@ msgid "Dismiss all"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Close"
 msgstr "أغلق"
@@ -432,6 +432,26 @@ msgstr "اللغة"
 #: crates/romp-app/ui/app.slint
 msgid "Some text changes once you leave this screen."
 msgstr "بعض النصوص تتغير بمجرد مغادرة هذه الشاشة."
+
+#: crates/romp-app/ui/app.slint
+msgid "Appearance"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Light or dark, or the same as your system."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "System"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Light"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Dark"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Check for updates"
@@ -639,12 +659,28 @@ msgid "Done"
 msgstr "تم"
 
 #: crates/romp-app/ui/app.slint
+msgid "What’s new in RomP {}"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Full changelog"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Show this after updates"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Licenses"
 msgstr "التراخيص"
 
 #: crates/romp-app/ui/app.slint
 msgid "Version {}"
 msgstr "الإصدار {}"
+
+#: crates/romp-app/ui/app.slint
+msgid "What’s new"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Version {} is available"
@@ -659,8 +695,8 @@ msgid "Games and saves come from your RomM server."
 msgstr "الألعاب و الحفظ تأتي من خادم روم."
 
 #: crates/romp-app/ui/app.slint
-msgid "Emulation by libretro cores and xemu."
-msgstr "محاكاة أجهزة اللعب من libretro و xemu."
+msgid "Emulation by libretro cores, xemu and RPCS3."
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Free software under the GNU GPL, version 3 or later."
