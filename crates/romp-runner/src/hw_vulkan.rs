@@ -112,7 +112,8 @@ fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u
         types
             .iter()
             .enumerate()
-            .find(|&(i, flags)| allowed & (1 << i) != 0 && flags.contains(needs))
+            .filter(|&(i, flags)| allowed & (1 << i) != 0 && flags.contains(needs))
+            .min_by_key(|(_, flags)| flags.contains(F::DEVICE_LOCAL))
             .map(|(i, flags)| (i as u32, flags.contains(F::HOST_COHERENT)))
     })
 }
@@ -926,6 +927,27 @@ mod tests {
         ];
         assert_eq!(readback_memory(&types, !0), Some((1, true)));
         assert_eq!(readback_memory(&types, 1), Some((0, true)));
+    }
+
+    #[test]
+    fn readback_prefers_system_memory_with_equivalent_cache_and_coherence() {
+        use vk::MemoryPropertyFlags as F;
+        for host_flags in [
+            F::HOST_VISIBLE,
+            F::HOST_VISIBLE | F::HOST_COHERENT,
+            F::HOST_VISIBLE | F::HOST_CACHED,
+            F::HOST_VISIBLE | F::HOST_CACHED | F::HOST_COHERENT,
+        ] {
+            let types = [host_flags | F::DEVICE_LOCAL, host_flags];
+            assert_eq!(
+                readback_memory(&types, !0),
+                Some((1, host_flags.contains(F::HOST_COHERENT)))
+            );
+            assert_eq!(
+                readback_memory(&types, 1),
+                Some((0, host_flags.contains(F::HOST_COHERENT)))
+            );
+        }
     }
 
     #[test]
