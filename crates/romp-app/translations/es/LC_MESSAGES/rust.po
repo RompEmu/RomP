@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-10-23 20:33\n"
+"PO-Revision-Date: 2026-10-31 08:20\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
@@ -212,7 +212,7 @@ msgstr "Instalando el software del sistema PS3…"
 msgid "Could not start the game: {e}"
 msgstr "No se pudo iniciar el juego: {e}"
 
-#: crates/romp-app/src/app/game.rs
+#: crates/romp-app/src/app/game.rs crates/romp-app/src/app/slots.rs
 msgid "Close the running game first."
 msgstr "Cierra el juego en ejecución primero."
 
@@ -280,6 +280,42 @@ msgstr ""
 
 #: crates/romp-app/src/notifications.rs
 msgid "Notification"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Incomplete"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Finished"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Completed 100%"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Retired"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Never playing"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs crates/romp-app/src/app/collections.rs
+msgid "Now playing"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Backlogged"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Status…"
+msgstr ""
+
+#: crates/romp-app/src/app/play_status.rs
+msgid "Couldn't update the game's status: {e}."
 msgstr ""
 
 #: crates/romp-app/src/app/save_sync.rs
@@ -548,6 +584,10 @@ msgstr "Reproducidas recientemente"
 msgid "For you"
 msgstr "Para ti"
 
+#: crates/romp-app/src/app/collections.rs
+msgid "Backlog"
+msgstr ""
+
 #: crates/romp-app/src/app/collections.rs crates/romp-app/src/storage.rs
 msgid "Games"
 msgstr "Juegos"
@@ -615,6 +655,10 @@ msgid "Delete"
 msgstr "Eliminar"
 
 #: crates/romp-app/src/app/collections.rs
+msgid "The save state is removed from this computer and from your RomM server. A backup stays in the game's save folder."
+msgstr ""
+
+#: crates/romp-app/src/app/collections.rs
 msgid "Couldn't rename \"{0}\": {1}."
 msgstr "No se pudo renombrar \"{0}\": {1}."
 
@@ -651,6 +695,10 @@ msgid "Change list"
 msgstr "Cambiar lista"
 
 #: crates/romp-app/src/app/navigation.rs
+msgid "Surprise me"
+msgstr ""
+
+#: crates/romp-app/src/app/navigation.rs
 msgid "Settings"
 msgstr "Ajustes"
 
@@ -684,6 +732,10 @@ msgstr ""
 
 #: crates/romp-app/src/app/slots.rs
 msgid "Couldn't use the save: {e}."
+msgstr ""
+
+#: crates/romp-app/src/app/slots.rs
+msgid "Couldn't delete the save state: {}."
 msgstr ""
 
 #: crates/romp-app/src/bios.rs
@@ -1201,6 +1253,10 @@ msgstr "Cargando estados está apagado en modo hardcore"
 #: crates/romp-app/src/play.rs
 msgid "Save slot {slot}"
 msgstr "Guardar espacio {slot}"
+
+#: crates/romp-app/src/play.rs
+msgid "{} of {}"
+msgstr ""
 
 #: crates/romp-app/src/play.rs
 msgid "Port {}"

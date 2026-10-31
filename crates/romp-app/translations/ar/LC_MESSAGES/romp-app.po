@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-23 20:33\n"
+"PO-Revision-Date: 2026-10-31 08:20\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -224,6 +224,10 @@ msgid "Last played"
 msgstr "آخر تشغيل"
 
 #: crates/romp-app/ui/app.slint
+msgid "Surprise me: open a random game from this list"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Refresh library"
 msgstr "تحديث المكتبة"
 
@@ -340,6 +344,10 @@ msgstr ""
 #: crates/romp-app/ui/app.slint
 msgid "Play from here"
 msgstr "العب من هنا"
+
+#: crates/romp-app/ui/app.slint
+msgid "Delete"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Achievements"
@@ -769,6 +777,10 @@ msgstr "الإنجازات · تسجيل الدخول تحت الإعدادات"
 #: crates/romp-app/ui/game.slint
 msgid "Controllers…"
 msgstr "المتحكمون…"
+
+#: crates/romp-app/ui/game.slint
+msgid "Disc"
+msgstr ""
 
 #: crates/romp-app/ui/game.slint
 msgid "Quit game"
