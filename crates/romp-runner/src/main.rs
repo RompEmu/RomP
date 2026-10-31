@@ -270,12 +270,17 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let mut next_frame_at = Instant::now();
     let mut paused = false;
     let mut stop_requested = false;
-    let mut stats = perf::FrameStats::new(Duration::from_secs(10), Instant::now());
+    let mut stats = perf::FrameStats::new(Duration::from_secs(10));
     loop {
+        let loop_started = Instant::now();
+        let started_paused = paused;
+        let mut times = perf::FrameTimes::default();
         let now = Instant::now();
         if now < next_frame_at {
             std::thread::sleep(next_frame_at - now);
         }
+        let controls_started = Instant::now();
+        times.sleep = controls_started.duration_since(loop_started);
         for msg in link.drain() {
             match msg {
                 AppMsg::Pause(p) => {
@@ -358,13 +363,15 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                 AppMsg::Pad { .. } | AppMsg::Pointer { .. } | AppMsg::Mouse { .. } => {}
             }
         }
+        times.controls = controls_started.elapsed();
+        let mut audio_stats = None;
         if stop_requested {
             break;
         }
         if !paused {
             let run_started = Instant::now();
             core.run(frontend);
-            let run_time = run_started.elapsed();
+            times.core = run_started.elapsed();
             for (port, strong, weak) in frontend.take_rumble() {
                 if !rumbled {
                     rumbled = true;
@@ -372,6 +379,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                 }
                 link.send(&RunnerMsg::Rumble { port, strong, weak });
             }
+            let resume_started = Instant::now();
             if let Some((slot, give_up)) = resume {
                 match saves.try_load_state(slot, &mut core, frontend) {
                     Ok(()) => {
@@ -387,6 +395,8 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                 frontend.video_dirty = false;
                 frontend.hw_frame_dirty = false;
             }
+            times.resume = resume_started.elapsed();
+            let mut publish_time = Duration::ZERO;
             let readback_started = Instant::now();
             if frontend.hw_frame_dirty {
                 frontend.hw_frame_dirty = false;
@@ -400,6 +410,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                         hw_gl::hw_frame_size(frontend.hw_frame_width, frontend.hw_frame_height)
                     };
                     let pixels = ctx.readback_bgra(w, h);
+                    let publish_started = Instant::now();
                     frames.write(
                         &pixels,
                         w,
@@ -408,8 +419,11 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                         SrcFormat::Xrgb8888,
                         frontend.aspect,
                     );
+                    publish_time += publish_started.elapsed();
                 }
             }
+            times.readback = readback_started.elapsed().saturating_sub(publish_time);
+            let publish_started = Instant::now();
             if frontend.video_dirty {
                 frontend.video_dirty = false;
                 if let Some(v) = &frontend.video {
@@ -423,24 +437,21 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     );
                 }
             }
-            let (audio_frames, audio_fill) = frontend.audio.lock().take_stats();
-            stats.record(
-                run_time,
-                readback_started.elapsed(),
-                audio_frames,
-                audio_fill,
-            );
-            if let Some(line) = stats.report(Instant::now()) {
-                info!("{line}");
-            }
+            times.publish = publish_time + publish_started.elapsed();
+            let audio_started = Instant::now();
+            audio_stats = Some(frontend.audio.lock().take_stats());
+            times.audio = audio_started.elapsed();
             if lr::rotation() != rotation {
                 rotation = lr::rotation();
                 link.send(&RunnerMsg::Rotation(rotation as u8));
             }
+            let saves_started = Instant::now();
             if saves.tick_sram(&mut core, frontend) {
                 link.send(&RunnerMsg::SramWritten);
             }
+            times.saves = saves_started.elapsed();
         }
+        let achievements_started = Instant::now();
         if let Some(a) = &mut achievements {
             let tick = a.tick(!paused, &rom);
             for message in &tick.messages {
@@ -448,6 +459,21 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             }
             if tick.reset_core {
                 core.reset(frontend);
+            }
+        }
+        times.achievements = achievements_started.elapsed();
+        if !paused {
+            times.total = loop_started.elapsed();
+            if started_paused {
+                // The sleep before an unpause belongs to the pause, not the first game frame.
+                times.total = times.total.saturating_sub(times.sleep);
+                times.sleep = Duration::ZERO;
+            }
+            if let Some((audio_frames, fill)) = audio_stats {
+                stats.record(times, audio_frames, fill);
+                if let Some(line) = stats.report() {
+                    info!("{line}");
+                }
             }
         }
         if frontend.shutdown {
