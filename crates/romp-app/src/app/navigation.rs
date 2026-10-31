@@ -450,6 +450,35 @@ mod tests {
         );
         assert_eq!(plays.get(), 2, "a swipe must not activate a game action");
 
+        // Upstream's play-status popup participates in the same focus order.
+        ui.set_show_status(true);
+        ui.set_can_edit_status(true);
+        ui.set_game_status_options(ModelRc::new(VecModel::from(vec![crate::StatusOption {
+            label: "Now playing".into(),
+            checked: false,
+        }])));
+        let statuses = std::rc::Rc::new(std::cell::Cell::new(0));
+        let count = statuses.clone();
+        ui.on_toggle_status(move |index, on| {
+            assert_eq!(index, 0);
+            assert!(on);
+            count.set(count.get() + 1);
+        });
+        ui.set_screen(SCREEN_LIBRARY);
+        draw();
+        ui.set_screen(SCREEN_GAME);
+        draw();
+        for _ in 0..7 {
+            navigate_controls(ui.window(), DOWN);
+        }
+        navigate_controls(ui.window(), A);
+        navigate_controls(ui.window(), DOWN);
+        navigate_controls(ui.window(), A);
+        assert_eq!(statuses.get(), 1, "controller can change the play status");
+        navigate_controls(ui.window(), B);
+        assert_eq!(backs.get(), 0, "Back closes the play-status popup first");
+        assert_eq!(plays.get(), 2);
+
         ui.set_screen(SCREEN_SETTINGS);
         ui.set_settings_section(0);
         ui.set_pref_ui_scale(2);
