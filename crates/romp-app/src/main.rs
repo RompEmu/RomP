@@ -100,6 +100,7 @@ fn main() -> anyhow::Result<()> {
         }))
         .init();
     tracing::info!(
+        revision = env!("ROMP_BUILD_REVISION"),
         "RomP {} on {} {}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
@@ -112,6 +113,18 @@ fn main() -> anyhow::Result<()> {
     if let Err(e) = adopted {
         tracing::warn!("moving the old data folder: {e}");
     }
+    tracing::info!(
+        desktop = ?std::env::var("XDG_CURRENT_DESKTOP").ok(),
+        session_desktop = ?std::env::var("XDG_SESSION_DESKTOP").ok(),
+        session_type = ?std::env::var("XDG_SESSION_TYPE").ok(),
+        gamescope_display = ?std::env::var("GAMESCOPE_WAYLAND_DISPLAY").ok(),
+        x11_display = std::env::var_os("DISPLAY").is_some(),
+        wayland_display = std::env::var_os("WAYLAND_DISPLAY").is_some(),
+        backend_request = ?std::env::var("SLINT_BACKEND").ok(),
+        slint_scale = ?std::env::var("SLINT_SCALE_FACTOR").ok(),
+        x11_scale = ?std::env::var("WINIT_X11_SCALE_FACTOR").ok(),
+        "UI session"
+    );
     slint::BackendSelector::new()
         .with_winit_custom_application_handler(mouse::RawMouse)
         .select()?;

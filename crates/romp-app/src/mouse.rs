@@ -42,6 +42,25 @@ thread_local! {
 pub struct RawMouse;
 
 impl CustomApplicationHandler for RawMouse {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) -> EventResult {
+        #[cfg(target_os = "linux")]
+        let window_system = {
+            use slint::winit_030::winit::platform::x11::ActiveEventLoopExtX11;
+            if event_loop.is_x11() {
+                "x11"
+            } else {
+                "wayland"
+            }
+        };
+        #[cfg(not(target_os = "linux"))]
+        let window_system = {
+            let _ = event_loop;
+            std::env::consts::OS
+        };
+        tracing::info!(backend = "winit", window_system, "UI backend resumed");
+        EventResult::Propagate
+    }
+
     fn device_event(
         &mut self,
         _event_loop: &ActiveEventLoop,
