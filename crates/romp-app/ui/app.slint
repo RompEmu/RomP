@@ -2541,11 +2541,21 @@ component WhatsNewDialog inherits Rectangle {
                             font-weight: 700;
                             color: Theme.text-strong;
                         }
-                        for item in section.items: HorizontalLayout {
-                            spacing: 8px;
-                            if !Locale.rtl: Text { text: "•"; font-size: Theme.font-body-large; color: Theme.text-muted; }
+                        // The text gets its width before its height is measured, so long notes
+                        // wrap into the height the list scrolls by.
+                        for item in section.items: Rectangle {
+                            height: note-text.preferred-height;
                             Text {
-                                horizontal-stretch: 1;
+                                x: Locale.rtl ? parent.width - self.width : 0;
+                                y: 0;
+                                text: "•";
+                                font-size: Theme.font-body-large;
+                                color: Theme.text-muted;
+                            }
+                            note-text := Text {
+                                x: Locale.rtl ? 0 : 16px;
+                                y: 0;
+                                width: parent.width - 16px;
                                 horizontal-alignment: Locale.start;
                                 text: item;
                                 font-size: Theme.font-body-large;
@@ -2553,7 +2563,6 @@ component WhatsNewDialog inherits Rectangle {
                                 wrap: word-wrap;
                                 line-height-factor: 1.2;
                             }
-                            if Locale.rtl: Text { text: "•"; font-size: Theme.font-body-large; color: Theme.text-muted; }
                         }
                     }
                 }
