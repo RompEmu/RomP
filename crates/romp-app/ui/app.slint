@@ -1972,6 +1972,7 @@ component SettingsPage inherits FocusScope {
     in-out property <int> ui-scale;
     in property <[string]> languages;
     in-out property <int> language;
+    in-out property <int> appearance;
     callback prefs-changed();
     in-out property <bool> nintendo-labels;
     in-out property <bool> stick-dpad;
@@ -2082,6 +2083,17 @@ component SettingsPage inherits FocusScope {
                                     width: 160px;
                                     model: root.languages;
                                     current-index <=> root.language;
+                                    selected => { root.prefs-changed(); }
+                                }
+                            }
+                            SettingRow {
+                                divider: true;
+                                label: @tr("Appearance");
+                                detail: @tr("Light or dark, or the same as your system.");
+                                ComboBox {
+                                    width: 160px;
+                                    model: [@tr("System"), @tr("Light"), @tr("Dark")];
+                                    current-index <=> root.appearance;
                                     selected => { root.prefs-changed(); }
                                 }
                             }
@@ -2719,6 +2731,7 @@ export component AppWindow inherits Window {
     in-out property <int> pref-ui-scale;
     in property <[string]> pref-languages;
     in-out property <int> pref-language;
+    in-out property <int> pref-appearance;
     callback prefs-changed();
     in-out property <bool> pref-nintendo-labels;
     in-out property <bool> pref-stick-dpad;
@@ -3095,6 +3108,7 @@ export component AppWindow inherits Window {
             ui-scale <=> root.pref-ui-scale;
             languages: root.pref-languages;
             language <=> root.pref-language;
+            appearance <=> root.pref-appearance;
             prefs-changed => { root.prefs-changed(); }
             nintendo-labels <=> root.pref-nintendo-labels;
             stick-dpad <=> root.pref-stick-dpad;

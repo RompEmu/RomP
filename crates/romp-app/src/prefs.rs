@@ -20,6 +20,8 @@ pub struct Preferences {
     pub check_updates: bool,
     /// Whether RomP offers itself under RomM's "Install on device", and downloads what comes.
     pub accept_installs: bool,
+    /// 0 follows the system, 1 is light and 2 is dark.
+    pub appearance: u8,
 }
 
 impl Default for Preferences {
@@ -35,6 +37,7 @@ impl Default for Preferences {
             language: 0,
             check_updates: true,
             accept_installs: true,
+            appearance: 0,
         }
     }
 }
@@ -54,7 +57,19 @@ impl Preferences {
         if usize::from(prefs.language) > crate::i18n::LANGUAGES.len() + 1 {
             prefs.language = 0;
         }
+        if prefs.appearance > 2 {
+            prefs.appearance = 0;
+        }
         prefs
+    }
+
+    pub fn color_scheme(self) -> slint::language::ColorScheme {
+        use slint::language::ColorScheme;
+        match self.appearance {
+            1 => ColorScheme::Light,
+            2 => ColorScheme::Dark,
+            _ => ColorScheme::Unknown,
+        }
     }
 
     pub fn scale_factor(self) -> f32 {
@@ -121,6 +136,21 @@ mod tests {
         assert_eq!(
             Preferences::from_json(Some(r#"{"ui_scale": 0}"#)).ui_scale,
             100
+        );
+    }
+
+    #[test]
+    fn appearance_follows_the_system_unless_one_is_chosen() {
+        use slint::language::ColorScheme;
+        assert_eq!(Preferences::default().appearance, 0);
+        assert_eq!(Preferences::default().color_scheme(), ColorScheme::Unknown);
+        let light = Preferences::from_json(Some(r#"{"appearance": 1}"#));
+        assert_eq!(light.color_scheme(), ColorScheme::Light);
+        let dark = Preferences::from_json(Some(r#"{"appearance": 2}"#));
+        assert_eq!(dark.color_scheme(), ColorScheme::Dark);
+        assert_eq!(
+            Preferences::from_json(Some(r#"{"appearance": 7}"#)).appearance,
+            0
         );
     }
 

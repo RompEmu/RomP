@@ -68,6 +68,7 @@ impl Controller {
             .collect();
         ui.set_pref_languages(ModelRc::new(VecModel::from(languages)));
         ui.set_pref_language(i32::from(prefs.language));
+        ui.set_pref_appearance(i32::from(prefs.appearance));
         ui.set_pref_ui_scale(
             UI_SCALES
                 .iter()
@@ -105,6 +106,7 @@ impl Controller {
             language: u8::try_from(ui.get_pref_language()).unwrap_or(0),
             check_updates: ui.get_pref_check_updates(),
             accept_installs: ui.get_pref_accept_installs(),
+            appearance: u8::try_from(ui.get_pref_appearance()).unwrap_or(0),
         };
         let before = self.prefs.get();
         if prefs == before {
@@ -127,6 +129,10 @@ impl Controller {
         }
         if prefs.accept_installs != before.accept_installs {
             self.refresh_installs();
+        }
+        if prefs.appearance != before.appearance {
+            ui.global::<crate::Palette>()
+                .set_color_scheme(prefs.color_scheme());
         }
         if prefs.language != before.language {
             crate::i18n::apply(crate::i18n::pick(prefs.language));

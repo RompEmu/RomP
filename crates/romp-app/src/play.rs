@@ -1303,6 +1303,9 @@ impl Game {
         self.volume.set(prefs.volume);
         for window in &self.windows {
             window.set_volume(i32::from(prefs.volume));
+            window
+                .global::<crate::Palette>()
+                .set_color_scheme(prefs.color_scheme());
         }
         self.send(&AppMsg::Volume(prefs.volume));
     }
@@ -1364,6 +1367,9 @@ pub fn launch(
     }
     for window in &windows {
         window.global::<crate::Locale>().set_rtl(crate::i18n::rtl());
+        window
+            .global::<crate::Palette>()
+            .set_color_scheme(opts.prefs.color_scheme());
         window.set_volume(i32::from(opts.prefs.volume));
     }
 

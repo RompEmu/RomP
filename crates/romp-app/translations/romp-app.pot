@@ -429,6 +429,26 @@ msgid "Some text changes once you leave this screen."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Appearance"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Light or dark, or the same as your system."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "System"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Light"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Dark"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Check for updates"
 msgstr ""
 
