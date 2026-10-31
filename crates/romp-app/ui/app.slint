@@ -4,7 +4,7 @@ import { AchievementItem, AchievementRow } from "achievements.slint";
 import { SlotCard, SlotPicture } from "slots.slint";
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
-export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, glyph: string, expanded: bool, can-add: bool, editable: bool, note: bool }
+export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, tint: bool, glyph: string, expanded: bool, can-add: bool, editable: bool, note: bool }
 export struct NotificationRow { id: int, title: string, body: string, level: string, when: string, unread: bool }
 export struct Membership { key: string, name: string, member: bool }
 export struct StatusOption { label: string, checked: bool }
@@ -407,6 +407,8 @@ component SidebarItem inherits Rectangle {
     in property <bool> selected;
     in property <image> icon;
     in property <bool> has-icon;
+    // RomP's own icons are white and take the text colour; consoles' icons keep theirs.
+    in property <bool> tint;
     in property <string> glyph;
     callback clicked();
     height: 34px;
@@ -422,7 +424,7 @@ component SidebarItem inherits Rectangle {
     keys := KeyActivator { activate => { root.clicked(); } }
     if keys.has-focus: FocusRing { border-radius: root.border-radius; }
     if root.compact: Rectangle {
-        if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; }
+        if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; colorize: root.tint ? (root.selected ? Theme.text-strong : Theme.text-secondary) : transparent; }
         if !root.has-icon && root.glyph != "": Text { horizontal-alignment: Locale.start; text: root.glyph; color: Theme.favorite; font-size: Theme.font-body; }
         if !root.has-icon && root.glyph == "": Text { horizontal-alignment: Locale.start;
             text: root.initial;
@@ -438,7 +440,7 @@ component SidebarItem inherits Rectangle {
         spacing: 10px;
         Rectangle {
             width: 18px;
-            if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; }
+            if root.has-icon: Image { source: root.icon; width: 18px; height: 18px; image-fit: contain; colorize: root.tint ? (root.selected ? Theme.text-strong : Theme.text-secondary) : transparent; }
             if !root.has-icon: Text { horizontal-alignment: Locale.start; text: root.glyph; color: Theme.favorite; font-size: Theme.font-body; }
         }
         Text { horizontal-alignment: Locale.start;
@@ -905,6 +907,7 @@ component Library inherits Rectangle {
                                 count: e.count;
                                 icon: e.icon;
                                 has-icon: e.has-icon;
+                                tint: e.tint;
                                 glyph: e.glyph;
                                 selected: root.selected-key == e.key;
                                 clicked => { root.select(e.key); }
@@ -917,6 +920,7 @@ component Library inherits Rectangle {
                             count: e.count;
                             icon: e.icon;
                             has-icon: e.has-icon;
+                            tint: e.tint;
                             glyph: e.glyph;
                             selected: root.selected-key == e.key;
                             clicked => { root.select(e.key); }

@@ -105,6 +105,7 @@ fn item(key: &str, name: &str, count: i64, glyph: &str) -> SidebarEntry {
         count: count as i32,
         icon: Image::default(),
         has_icon: false,
+        tint: false,
         glyph: glyph.into(),
         expanded: false,
         can_add: false,
@@ -264,6 +265,7 @@ impl Controller {
         if recent > 0 {
             entries.push(SidebarEntry {
                 has_icon: true,
+                tint: true,
                 icon: recent_icon(),
                 ..item(RECENT_KEY, &tr!("Recently played"), recent, "")
             });
@@ -272,6 +274,7 @@ impl Controller {
         if now_playing > 0 {
             entries.push(SidebarEntry {
                 has_icon: true,
+                tint: true,
                 icon: now_playing_icon(),
                 ..item(NOW_PLAYING_KEY, &tr!("Now playing"), now_playing, "")
             });
@@ -280,6 +283,7 @@ impl Controller {
         if backlog > 0 {
             entries.push(SidebarEntry {
                 has_icon: true,
+                tint: true,
                 icon: backlog_icon(),
                 ..item(BACKLOG_KEY, &tr!("Backlog"), backlog, "")
             });
@@ -288,6 +292,7 @@ impl Controller {
         if for_you > 0 {
             entries.push(SidebarEntry {
                 has_icon: true,
+                tint: true,
                 icon: for_you_icon(),
                 ..item(FOR_YOU_KEY, &tr!("For you"), for_you, "")
             });

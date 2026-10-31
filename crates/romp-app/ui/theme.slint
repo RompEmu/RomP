@@ -10,26 +10,30 @@ import "fonts/IBMPlexSansArabic-SemiBold.ttf";
 import "fonts/IBMPlexSansArabic-Bold.ttf";
 
 export global Theme {
-    out property <color> background: #15171c;
-    out property <color> sidebar: #111317;
-    out property <color> surface: #1c1f26;
-    out property <color> surface-raised: #23272f;
-    out property <color> surface-muted: #2a2e36;
-    out property <color> surface-selected: #3a3f4b;
-    out property <color> hover: #ffffff0d;
-    out property <color> pressed: #ffffff1f;
-    out property <color> border: #2a2f38;
-    out property <color> border-subtle: #ffffff1a;
-    out property <color> divider: #20242b;
-    out property <color> scrim: #000000a8;
-    out property <color> scrim-strong: #000000c8;
-    out property <color> shadow: #00000090;
+    // Slint's own widgets follow the system, or the scheme chosen in Settings; their palette's
+    // background tells which one is showing, so RomP's colours match them.
+    out property <bool> dark: Palette.background == #1c1c1c;
 
-    out property <color> text-strong: #ffffff;
-    out property <color> text: #e6e8eb;
-    out property <color> text-secondary: #c2c7cf;
-    out property <color> text-muted: #8a8f98;
-    out property <color> text-subtle: #6b7280;
+    out property <color> background: root.dark ? #15171c : #f4f5f7;
+    out property <color> sidebar: root.dark ? #111317 : #eceef1;
+    out property <color> surface: root.dark ? #1c1f26 : #ffffff;
+    out property <color> surface-raised: root.dark ? #23272f : #ffffff;
+    out property <color> surface-muted: root.dark ? #2a2e36 : #e9ecf0;
+    out property <color> surface-selected: root.dark ? #3a3f4b : #dbe0e7;
+    out property <color> hover: root.dark ? #ffffff0d : #0000000d;
+    out property <color> pressed: root.dark ? #ffffff1f : #0000001f;
+    out property <color> border: root.dark ? #2a2f38 : #d5dae1;
+    out property <color> border-subtle: root.dark ? #ffffff1a : #0000001a;
+    out property <color> divider: root.dark ? #20242b : #e3e6ea;
+    out property <color> scrim: root.dark ? #000000a8 : #00000080;
+    out property <color> scrim-strong: root.dark ? #000000c8 : #000000c8;
+    out property <color> shadow: root.dark ? #00000090 : #00000038;
+
+    out property <color> text-strong: root.dark ? #ffffff : #0b0d10;
+    out property <color> text: root.dark ? #e6e8eb : #1c2026;
+    out property <color> text-secondary: root.dark ? #c2c7cf : #3a414b;
+    out property <color> text-muted: root.dark ? #8a8f98 : #5c636d;
+    out property <color> text-subtle: root.dark ? #6b7280 : #767d87;
 
     out property <brush> accent: Palette.accent-background;
     out property <brush> accent-hover: Palette.accent-background.brighter(0.15);
@@ -37,13 +41,13 @@ export global Theme {
     out property <brush> accent-foreground: Palette.accent-foreground;
     out property <brush> accent-soft: Palette.accent-background.with-alpha(0.16);
     out property <brush> accent-soft-strong: Palette.accent-background.with-alpha(0.28);
-    out property <brush> accent-text: Palette.accent-background.brighter(0.5);
+    out property <brush> accent-text: root.dark ? Palette.accent-background.brighter(0.5) : Palette.accent-background.darker(0.2);
 
-    out property <color> success: #3fbf6b;
-    out property <color> warning: #f0a33c;
-    out property <color> warning-surface: #3b2f1e;
-    out property <color> danger: #e5484d;
-    out property <color> favorite: #ff5c7a;
+    out property <color> success: root.dark ? #3fbf6b : #1d8a4b;
+    out property <color> warning: root.dark ? #f0a33c : #a96300;
+    out property <color> warning-surface: root.dark ? #3b2f1e : #fbecd5;
+    out property <color> danger: root.dark ? #e5484d : #cf2f35;
+    out property <color> favorite: root.dark ? #ff5c7a : #d92c52;
 
     out property <length> font-caption: 11px;
     out property <length> font-small: 12px;
