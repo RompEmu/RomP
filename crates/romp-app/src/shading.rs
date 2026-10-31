@@ -1,6 +1,6 @@
 use glow::HasContext;
 use librashader::presets::ShaderFeatures;
-use librashader::runtime::gl::{FilterChain, GLImage};
+use librashader::runtime::gl::{FilterChain, FilterChainOptions, GLImage};
 use librashader::runtime::{FilterChainParameters, Size, Viewport};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,6 +22,7 @@ type Target = (glow::Texture, u32, u32);
 pub struct Shading {
     stages: Vec<Stage>,
     gl: Option<Arc<glow::Context>>,
+    options: Option<FilterChainOptions>,
     chains: std::collections::HashMap<PathBuf, Option<FilterChain>>,
     input: Option<Target>,
     targets: Vec<Option<Target>>,
@@ -59,6 +60,39 @@ pub fn game_size(window: (u32, u32), aspect: f32) -> (u32, u32) {
         width.round().max(1.0) as u32,
         height.round().max(1.0) as u32,
     )
+}
+
+/// GLSL has its own advertised version; do not infer its support from the OpenGL version.
+fn shader_options(
+    gl: &glow::Version,
+    glsl: &str,
+    texture_storage: bool,
+) -> Option<FilterChainOptions> {
+    let minimum = if gl.is_embedded { (3, 0) } else { (3, 3) };
+    if (gl.major, gl.minor) < minimum || !texture_storage {
+        return None;
+    }
+    let version = glsl
+        .split_whitespace()
+        .find(|word| word.starts_with(|c: char| c.is_ascii_digit()))?;
+    let (major, minor) = version.split_once('.')?;
+    let major: u16 = major.parse().ok()?;
+    let fraction: u16 = minor.get(..2).unwrap_or(minor).parse().ok()?;
+    let advertised = major.checked_mul(100)?.checked_add(if minor.len() == 1 {
+        fraction * 10
+    } else {
+        fraction
+    })?;
+    let supported = if gl.is_embedded {
+        &[320, 310, 300][..]
+    } else {
+        &[460, 450, 440, 430, 420, 410, 400, 330][..]
+    };
+    let glsl_version = *supported.iter().find(|&&version| version <= advertised)?;
+    Some(FilterChainOptions {
+        glsl_version,
+        ..Default::default()
+    })
 }
 
 /// The texture units a shader pass may bind its inputs and samplers to.
@@ -204,6 +238,30 @@ impl Shading {
 
     pub fn setup(&mut self, get_proc_address: &dyn Fn(&std::ffi::CStr) -> *const std::ffi::c_void) {
         let gl = unsafe { glow::Context::from_loader_function_cstr(|name| get_proc_address(name)) };
+        let version = gl.version();
+        let texture_storage = if version.is_embedded {
+            version.major >= 3
+        } else {
+            (version.major, version.minor) >= (4, 2)
+                || gl.supported_extensions().contains("GL_ARB_texture_storage")
+        };
+        let glsl = unsafe { gl.get_parameter_string(glow::SHADING_LANGUAGE_VERSION) };
+        self.options = shader_options(version, &glsl, texture_storage);
+        self.unavailable = self.options.is_none();
+        tracing::info!(
+            version = %unsafe { gl.get_parameter_string(glow::VERSION) },
+            glsl = %glsl,
+            vendor = %unsafe { gl.get_parameter_string(glow::VENDOR) },
+            renderer = %unsafe { gl.get_parameter_string(glow::RENDERER) },
+            texture_storage,
+            max_texture_size = unsafe { gl.get_parameter_i32(glow::MAX_TEXTURE_SIZE) },
+            max_texture_units = unsafe { gl.get_parameter_i32(glow::MAX_TEXTURE_IMAGE_UNITS) },
+            shader_glsl = self.options.as_ref().map(|o| o.glsl_version),
+            "game window OpenGL capabilities"
+        );
+        if self.unavailable {
+            tracing::warn!("shader effects need OpenGL 3.3 / OpenGL ES 3.0, a matching GLSL version and texture storage; showing the plain picture");
+        }
         self.gl = Some(Arc::new(gl));
     }
 
@@ -225,17 +283,26 @@ impl Shading {
             }
         }
         self.gl = None;
+        self.options = None;
         self.shown = false;
     }
 
     /// Builds a preset once and keeps it, so switching back to a look is instant. librashader
     /// doesn't free a chain's programs when it's dropped, so keeping them also avoids a leak.
     fn load(&mut self, gl: &Arc<glow::Context>, preset: &Path) -> bool {
+        let Some(options) = &self.options else {
+            return false;
+        };
         self.chains
             .entry(preset.to_path_buf())
             .or_insert_with(|| {
                 match unsafe {
-                    FilterChain::load_from_path(preset, ShaderFeatures::NONE, gl.clone(), None)
+                    FilterChain::load_from_path(
+                        preset,
+                        ShaderFeatures::NONE,
+                        gl.clone(),
+                        Some(options),
+                    )
                 } {
                     Ok(chain) => Some(chain),
                     Err(e) => {
@@ -308,7 +375,7 @@ impl Shading {
     /// when the window must be told to show it, and None when it already does or nothing changed.
     pub fn draw(&mut self, window: (u32, u32)) -> Option<Drawn> {
         let gl = self.gl.clone()?;
-        if self.stages.is_empty() || self.failed || self.frame_size.0 == 0 {
+        if !self.active() || self.frame_size.0 == 0 {
             return None;
         }
         let screen = game_size(window, self.aspect);
@@ -425,6 +492,119 @@ impl Shading {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shader_version_uses_glsl_capability_and_rejects_unsupported_contexts() {
+        let desktop = glow::Version {
+            major: 4,
+            minor: 6,
+            is_embedded: false,
+            revision: None,
+            vendor_info: String::new(),
+        };
+        assert_eq!(
+            shader_options(&desktop, "4.60 NVIDIA", true)
+                .unwrap()
+                .glsl_version,
+            460
+        );
+        assert_eq!(
+            shader_options(&desktop, "3.30 Intel", true)
+                .unwrap()
+                .glsl_version,
+            330
+        );
+        assert_eq!(
+            shader_options(&desktop, "4.5", true).unwrap().glsl_version,
+            450
+        );
+        assert!(shader_options(&desktop, "1.50", true).is_none());
+        assert!(shader_options(&desktop, "unknown", true).is_none());
+        assert!(shader_options(&desktop, "4.60", false).is_none());
+        assert!(shader_options(
+            &glow::Version {
+                major: 3,
+                minor: 2,
+                ..desktop.clone()
+            },
+            "3.30",
+            true
+        )
+        .is_none());
+        let embedded = glow::Version {
+            major: 3,
+            minor: 2,
+            is_embedded: true,
+            ..desktop.clone()
+        };
+        assert_eq!(
+            shader_options(&embedded, "OpenGL ES GLSL ES 3.20", true)
+                .unwrap()
+                .glsl_version,
+            320
+        );
+        assert!(shader_options(
+            &glow::Version {
+                major: 2,
+                minor: 0,
+                ..embedded
+            },
+            "OpenGL ES GLSL ES 1.00",
+            true
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn bundled_shimmerless_compiles_to_complete_glsl_version_directives() {
+        use librashader::presets::{ShaderPreset, ShaderPresetPack};
+        use librashader::reflect::cross::{GlslVersion, SpirvCross};
+        use librashader::reflect::targets::GLSL;
+        use librashader::reflect::{
+            CompilePresetTarget, CompileShader, ReflectShader, SpirvCompilation,
+        };
+        use librashader::runtime::gl::error::FilterChainError;
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("shaders/pixel-art-scaling/sharp-shimmerless.slangp");
+        for (version, directive) in [
+            (GlslVersion::Glsl330, "#version 330"),
+            (GlslVersion::Glsl400, "#version 400"),
+            (GlslVersion::Glsl460, "#version 460"),
+        ] {
+            let preset = ShaderPreset::try_parse(&path, ShaderFeatures::NONE).unwrap();
+            let pack = ShaderPresetPack::load_from_preset::<FilterChainError>(preset).unwrap();
+            let (passes, semantics) =
+                GLSL::compile_preset_passes::<SpirvCompilation, SpirvCross, FilterChainError>(
+                    pack.passes,
+                    pack.textures.iter().map(|t| &t.meta),
+                )
+                .unwrap();
+            assert!(!passes.is_empty());
+            for (i, (_, mut shader)) in passes.into_iter().enumerate() {
+                shader.reflect(i, &semantics).unwrap();
+                let generated = shader.compile(version).unwrap();
+                assert_eq!(generated.vertex.lines().next(), Some(directive));
+                assert_eq!(generated.fragment.lines().next(), Some(directive));
+            }
+        }
+    }
+
+    #[test]
+    fn unsupported_context_keeps_plain_frame_available() {
+        let mut shading = Shading::default();
+        shading.set_stages(vec![Stage {
+            preset: "unused.slangp".into(),
+            params: vec![],
+            to_screen: false,
+        }]);
+        shading.set_frame(&[1, 2, 3, 255], 1, 1, 1.0);
+        shading.set_unavailable();
+        assert!(!shading.active());
+        assert!(!shading.settling());
+        assert!(shading.draw((100, 100)).is_none());
+        assert_eq!(shading.frame(), Some((&[1, 2, 3, 255][..], 1, 1)));
+    }
 
     #[test]
     fn the_game_keeps_its_shape() {
