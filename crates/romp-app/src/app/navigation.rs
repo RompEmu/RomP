@@ -13,7 +13,7 @@ use slint::ComponentHandle;
 use slint::{Model, ModelRc, Timer, TimerMode, VecModel};
 use std::time::{Duration, Instant};
 
-const SETTINGS_SECTIONS: i32 = 4;
+const SETTINGS_SECTIONS: i32 = 6;
 const DPAD: u16 = 1 << UP | 1 << DOWN | 1 << LEFT | 1 << RIGHT;
 
 impl Controller {
