@@ -266,7 +266,7 @@ msgid "Dismiss all"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
-#: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint crates/romp-app/ui/game.slint
 msgid "Close"
 msgstr ""
@@ -678,11 +678,27 @@ msgid "Done"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "What’s new in RomP {}"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Full changelog"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Show this after updates"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Licenses"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Version {}"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "What’s new"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint

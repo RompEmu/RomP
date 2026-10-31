@@ -738,6 +738,26 @@ msgstr ""
 msgid "Couldn't delete the save state: {}."
 msgstr ""
 
+#: crates/romp-app/src/app/whats_new.rs
+msgid "New"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Changed"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Fixed"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Removed"
+msgstr ""
+
+#: crates/romp-app/src/app/whats_new.rs
+msgid "Security"
+msgstr ""
+
 #: crates/romp-app/src/bios.rs
 msgid "This game needs BIOS files your server doesn't have: {}. Add them to this platform's firmware in RomM."
 msgstr ""

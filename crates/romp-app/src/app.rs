@@ -12,6 +12,7 @@ mod settings;
 mod slots;
 mod surprise;
 mod updates;
+mod whats_new;
 
 use crate::cores::Cores;
 use crate::covers::Covers;
@@ -355,6 +356,10 @@ impl Controller {
         ui.on_remap_close(|| with_controller(|c| c.remap_close()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));
         ui.on_show_log(|| with_controller(|c| c.show_log()));
+        ui.on_open_whats_new(|| with_controller(|c| c.show_whats_new()));
+        ui.on_whats_new_after_updates_toggled(|on| {
+            with_controller(|c| c.set_whats_new_after_updates(on));
+        });
         ui.on_copy_log(|| with_controller(|c| c.copy_log()));
         ui.on_select(|key| {
             with_controller(|c| {
@@ -622,6 +627,7 @@ impl Controller {
         if let Some(id) = restore.and_then(|v| v.game) {
             self.open_game(id);
         }
+        self.show_whats_new_if_due();
         self.sync();
         self.shared.rt.spawn(async move {
             let me = client.me().await;

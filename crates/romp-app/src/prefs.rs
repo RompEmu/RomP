@@ -22,6 +22,8 @@ pub struct Preferences {
     pub accept_installs: bool,
     /// 0 follows the system, 1 is light and 2 is dark.
     pub appearance: u8,
+    /// Whether a new version shows what's new in it the first time it runs.
+    pub whats_new: bool,
 }
 
 impl Default for Preferences {
@@ -38,6 +40,7 @@ impl Default for Preferences {
             check_updates: true,
             accept_installs: true,
             appearance: 0,
+            whats_new: true,
         }
     }
 }
@@ -152,6 +155,13 @@ mod tests {
             Preferences::from_json(Some(r#"{"appearance": 7}"#)).appearance,
             0
         );
+    }
+
+    #[test]
+    fn whats_new_shows_after_updates_unless_turned_off() {
+        assert!(Preferences::default().whats_new);
+        assert!(Preferences::from_json(Some("{}")).whats_new);
+        assert!(!Preferences::from_json(Some(r#"{"whats_new":false}"#)).whats_new);
     }
 
     #[test]

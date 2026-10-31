@@ -8,6 +8,7 @@ export struct SidebarEntry { header: bool, key: string, name: string, initial: s
 export struct NotificationRow { id: int, title: string, body: string, level: string, when: string, unread: bool }
 export struct Membership { key: string, name: string, member: bool }
 export struct StatusOption { label: string, checked: bool }
+export struct NoteSection { title: string, items: [string] }
 export struct DeviceRow { key: string, name: string, detail: string, player: int, active: bool }
 export struct StorageRow { label: string, size: string }
 export struct LicenseRow { name: string, license: string, url: string }
@@ -2480,6 +2481,101 @@ component AboutFact inherits Text {
 }
 
 
+component WhatsNewDialog inherits Rectangle {
+    in property <string> version;
+    in property <[NoteSection]> notes;
+    in-out property <bool> show-after-updates;
+    callback show-after-updates-toggled(bool);
+    callback open-changelog();
+    callback close();
+    background: Theme.scrim;
+    TouchArea { clicked => { root.close(); } }
+    FocusScope {
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.close();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    Rectangle {
+        width: min(480px, parent.width - 32px);
+        height: min(540px, parent.height - 32px);
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: Theme.surface;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 30px;
+        drop-shadow-color: Theme.shadow;
+        clip: true;
+        TouchArea { }
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+            Text {
+                horizontal-alignment: Locale.start;
+                text: @tr("What’s new in RomP {}", root.version);
+                font-size: Theme.font-title;
+                font-weight: 800;
+                color: Theme.text-strong;
+                wrap: word-wrap;
+            }
+            ScrollView {
+                vertical-stretch: 1;
+                content-width: self.visible-width;
+                content-height: note-list.preferred-height;
+                note-list := VerticalLayout {
+                    width: parent.width;
+                    padding-right: 12px;
+                    spacing: 18px;
+                    for section in root.notes: VerticalLayout {
+                        spacing: 8px;
+                        Text {
+                            horizontal-alignment: Locale.start;
+                            text: section.title;
+                            font-size: Theme.font-subtitle;
+                            font-weight: 700;
+                            color: Theme.text-strong;
+                        }
+                        for item in section.items: HorizontalLayout {
+                            spacing: 8px;
+                            if !Locale.rtl: Text { text: "•"; font-size: Theme.font-body-large; color: Theme.text-muted; }
+                            Text {
+                                horizontal-stretch: 1;
+                                horizontal-alignment: Locale.start;
+                                text: item;
+                                font-size: Theme.font-body-large;
+                                color: Theme.text;
+                                wrap: word-wrap;
+                                line-height-factor: 1.2;
+                            }
+                            if Locale.rtl: Text { text: "•"; font-size: Theme.font-body-large; color: Theme.text-muted; }
+                        }
+                    }
+                }
+            }
+            Row {
+                alignment: start;
+                LinkButton { text: @tr("Full changelog"); clicked => { root.open-changelog(); } }
+            }
+            HorizontalLayout {
+                spacing: 12px;
+                CheckBox {
+                    text: @tr("Show this after updates");
+                    checked <=> root.show-after-updates;
+                    toggled => { root.show-after-updates-toggled(self.checked); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Button { text: @tr("Close"); primary: true; clicked => { root.close(); } }
+            }
+        }
+    }
+}
+
 component AboutDialog inherits Rectangle {
     in property <string> version;
     in property <string> update-version;
@@ -2493,6 +2589,7 @@ component AboutDialog inherits Rectangle {
     callback open-link(string);
     callback show-log();
     callback copy-log();
+    callback open-whats-new();
     in property <string> log-note;
     background: Theme.scrim;
     TouchArea { clicked => { root.close(); } }
@@ -2541,6 +2638,10 @@ component AboutDialog inherits Rectangle {
                 Text { text: Brand.name; font-size: Theme.font-heading; font-weight: 800; color: Theme.text-strong; horizontal-alignment: center; }
                 Rectangle { height: 4px; }
                 Text { text: @tr("Version {}", root.version); font-size: Theme.font-small; color: Theme.text-muted; horizontal-alignment: center; }
+                Row {
+                    alignment: center;
+                    LinkButton { text: @tr("What’s new"); clicked => { root.open-whats-new(); } }
+                }
                 if root.update-version != "": Row {
                     alignment: center;
                     LinkButton { text: @tr("Version {} is available", root.update-version); clicked => { root.open-update(); } }
@@ -2685,6 +2786,12 @@ export component AppWindow inherits Window {
     in property <bool> has-app-icon: true;
     in property <string> app-version;
     in-out property <bool> about-open;
+    in-out property <bool> whats-new-open;
+    in property <string> whats-new-version;
+    in property <[NoteSection]> whats-new-notes;
+    in-out property <bool> whats-new-after-updates;
+    callback open-whats-new();
+    callback whats-new-after-updates-toggled(bool);
     callback open-url(string);
     callback sign-out();
     callback open-settings();
@@ -3172,7 +3279,16 @@ export component AppWindow inherits Window {
         open-link(url) => { root.open-url(url); }
         show-log => { root.show-log(); }
         copy-log => { root.copy-log(); }
+        open-whats-new => { root.open-whats-new(); }
         log-note: root.about-log-note;
+    }
+    if root.whats-new-open: WhatsNewDialog {
+        version: root.whats-new-version;
+        notes: root.whats-new-notes;
+        show-after-updates <=> root.whats-new-after-updates;
+        show-after-updates-toggled(on) => { root.whats-new-after-updates-toggled(on); }
+        open-changelog => { root.open-url("https://github.com/RompEmu/RomP/blob/main/CHANGELOG.md"); }
+        close => { root.whats-new-open = false; }
     }
     if root.dialog-open: Dialog {
         title: root.dialog-title;

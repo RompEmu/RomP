@@ -55,6 +55,7 @@ mod store;
 mod sync;
 mod updates;
 mod vulkan;
+mod whats_new;
 mod xemu;
 
 use clap::Parser;
