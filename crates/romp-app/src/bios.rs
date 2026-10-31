@@ -1,8 +1,8 @@
 use crate::download::{download_file, DownloadError};
-use crate::romm::client::Client;
+use crate::romm::client::{Client, Error};
 use crate::romm::types::Firmware;
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const DC_FILES: [&str; 4] = ["dc_boot.bin", "dc_flash.bin", "naomi.zip", "awbios.zip"];
 const XEMU_DIR: &str = "xemu";
@@ -175,7 +175,7 @@ pub fn missing(platform_slug: &str, system_dir: &Path) -> Vec<String> {
 
 pub fn missing_message(missing: &[String]) -> String {
     tr::tr!(
-        "This game needs BIOS files your server doesn't have: {}. Add them to this platform's firmware in RomM.",
+        "This game needs BIOS files that are not available locally: {}. Add them to this platform's firmware in RomM and check that they can be downloaded.",
         missing.join("; ")
     )
 }
@@ -187,33 +187,46 @@ pub async fn ensure(
     system_dir: &Path,
     cancel: &AtomicBool,
 ) -> Result<Vec<String>, DownloadError> {
-    fetch_firmware(client, platform_id, platform_slug, system_dir, cancel).await?;
+    let list = list_firmware(client, Some(platform_id), platform_slug, cancel).await?;
+    let attempted: Vec<i64> = list.iter().map(|fw| fw.id).collect();
+    place(client, list, platform_slug, system_dir, cancel).await?;
     let wanted: Vec<&str> = unmet(platform_slug, system_dir).concat();
     if !wanted.is_empty() {
-        let elsewhere: Vec<Firmware> = client
-            .firmware(None)
-            .await
-            .map_err(DownloadError::Network)?
+        let elsewhere = list_firmware(client, None, platform_slug, cancel)
+            .await?
             .into_iter()
-            .filter(|fw| wanted.iter().any(|w| w.eq_ignore_ascii_case(&fw.file_name)))
+            .filter(|fw| {
+                !attempted.contains(&fw.id)
+                    && wanted.iter().any(|w| w.eq_ignore_ascii_case(&fw.file_name))
+            })
             .collect();
         place(client, elsewhere, platform_slug, system_dir, cancel).await?;
     }
-    Ok(missing(platform_slug, system_dir))
+    let missing = missing(platform_slug, system_dir);
+    if !missing.is_empty() {
+        tracing::warn!(
+            platform_id,
+            platform_slug,
+            ?missing,
+            "required BIOS still missing after firmware search"
+        );
+    }
+    Ok(missing)
 }
 
-pub async fn fetch_firmware(
+async fn list_firmware(
     client: &Client,
-    platform_id: i64,
+    platform_id: Option<i64>,
     platform_slug: &str,
-    system_dir: &Path,
     cancel: &AtomicBool,
-) -> Result<usize, DownloadError> {
-    let list = client
-        .firmware(Some(platform_id))
-        .await
-        .map_err(DownloadError::Network)?;
-    place(client, list, platform_slug, system_dir, cancel).await
+) -> Result<Vec<Firmware>, DownloadError> {
+    if cancel.load(Ordering::SeqCst) {
+        return Err(DownloadError::Cancelled);
+    }
+    client.firmware(platform_id).await.map_err(|error| {
+        tracing::warn!(?platform_id, platform_slug, %error, "firmware listing failed");
+        DownloadError::Network(error)
+    })
 }
 
 async fn place(
@@ -222,16 +235,17 @@ async fn place(
     platform_slug: &str,
     system_dir: &Path,
     cancel: &AtomicBool,
-) -> Result<usize, DownloadError> {
-    let mut fetched = 0;
+) -> Result<(), DownloadError> {
     for fw in list {
+        if cancel.load(Ordering::SeqCst) {
+            return Err(DownloadError::Cancelled);
+        }
         let rel = placement(platform_slug, &fw.file_name);
         if fw.file_name.is_empty() || rel.components().any(|c| !matches!(c, Component::Normal(_))) {
             return Err(DownloadError::UnsafePath);
         }
         let dest = system_dir.join(rel);
-        let existed = dest.exists();
-        download_file(
+        let result = download_file(
             client,
             client.firmware_url(&fw),
             &dest,
@@ -240,12 +254,22 @@ async fn place(
             &|_| {},
             cancel,
         )
-        .await?;
-        if !existed {
-            fetched += 1;
+        .await;
+        if let Err(error) = result {
+            tracing::warn!(
+                firmware_id = fw.id,
+                firmware_name = %fw.file_name,
+                firmware_platform_id = ?fw.platform_id,
+                platform_slug,
+                %error,
+                "firmware content download failed"
+            );
+            if !matches!(error, DownloadError::Network(Error::Status(404))) {
+                return Err(error);
+            }
         }
     }
-    Ok(fetched)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -446,6 +470,176 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_stale_firmware_record_does_not_block_later_required_firmware() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware"))
+            .and(query_param("platform_id", "32"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": 1, "platform_id": 32, "file_name": "scph5500.bin"},
+                {"id": 2, "platform_id": 32, "file_name": "scph5502.bin"}
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware/1/content/scph5500.bin"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware/2/content/scph5502.bin"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("bios"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/"));
+        assert!(
+            ensure(&client, 32, "psx", dir.path(), &AtomicBool::new(false))
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("scph5502.bin")).unwrap(),
+            b"bios"
+        );
+        assert!(!dir.path().join("scph5500.bin").exists());
+    }
+
+    #[tokio::test]
+    async fn a_stale_firmware_record_still_allows_cross_platform_fallback() {
+        let server = MockServer::start().await;
+        let stale = serde_json::json!({"id": 1, "platform_id": 32, "file_name": "scph5501.bin"});
+        Mock::given(method("GET"))
+            .and(path("/api/firmware"))
+            .and(query_param("platform_id", "32"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([stale.clone()])),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware"))
+            .and(query_param_is_missing("platform_id"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                stale, {"id": 2, "platform_id": 99, "file_name": "scph5501.bin"}
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware/1/content/scph5501.bin"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware/2/content/scph5501.bin"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("bios"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/"));
+        assert!(
+            ensure(&client, 32, "psx", dir.path(), &AtomicBool::new(false))
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("scph5501.bin")).unwrap(),
+            b"bios"
+        );
+    }
+
+    #[tokio::test]
+    async fn unavailable_content_is_reported_as_still_missing_without_retrying() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": 1, "file_name": "lynxboot.img"}
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware/1/content/lynxboot.img"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/"));
+        assert_eq!(
+            ensure(&client, 9, "lynx", dir.path(), &AtomicBool::new(false))
+                .await
+                .unwrap(),
+            ["lynxboot.img"]
+        );
+        assert!(!dir.path().join("lynxboot.img").exists());
+    }
+
+    #[tokio::test]
+    async fn firmware_listing_errors_and_cancellation_are_not_treated_as_missing_files() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/firmware"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/"));
+        assert!(matches!(
+            ensure(&client, 32, "psx", dir.path(), &AtomicBool::new(true)).await,
+            Err(DownloadError::Cancelled)
+        ));
+        assert!(matches!(
+            ensure(&client, 32, "psx", dir.path(), &AtomicBool::new(false)).await,
+            Err(DownloadError::Network(Error::Status(404)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn content_errors_other_than_not_found_stop_the_firmware_search() {
+        for status in [401, 500] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/api/firmware"))
+                .and(query_param("platform_id", "32"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                    {"id": 1, "file_name": "scph5501.bin"},
+                    {"id": 2, "file_name": "scph5502.bin"}
+                ])))
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/api/firmware/1/content/scph5501.bin"))
+                .respond_with(ResponseTemplate::new(status))
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/api/firmware/2/content/scph5502.bin"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("bios"))
+                .expect(0)
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let client = Client::new(base_of(&server, "/"));
+            let error = ensure(&client, 32, "psx", dir.path(), &AtomicBool::new(false))
+                .await
+                .unwrap_err();
+            if status == 401 {
+                assert!(matches!(error, DownloadError::Network(Error::Unauthorized)));
+            } else {
+                assert!(matches!(error, DownloadError::Network(Error::Status(500))));
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn bios_the_server_lacks_is_reported() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
@@ -484,7 +678,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetch_downloads_platform_firmware_into_place() {
+    async fn ensure_downloads_platform_firmware_into_place() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/api/firmware"))
@@ -500,10 +694,10 @@ mod tests {
             .await;
         let dir = tempfile::tempdir().unwrap();
         let client = Client::new(base_of(&server, "/"));
-        let n = fetch_firmware(&client, 8, "dc", dir.path(), &AtomicBool::new(false))
+        let missing = ensure(&client, 8, "dc", dir.path(), &AtomicBool::new(false))
             .await
             .unwrap();
-        assert_eq!(n, 1);
+        assert!(missing.is_empty());
         assert_eq!(
             std::fs::read(dir.path().join("dc/dc_boot.bin")).unwrap(),
             b"bio"

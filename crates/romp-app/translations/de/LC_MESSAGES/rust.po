@@ -687,8 +687,8 @@ msgid "Couldn't use the save: {e}."
 msgstr ""
 
 #: crates/romp-app/src/bios.rs
-msgid "This game needs BIOS files your server doesn't have: {}. Add them to this platform's firmware in RomM."
-msgstr "Dieses Spiel benötigt BIOS-Dateien, die Ihr Server nicht hat: {}. Füge sie zur Firmware dieser Plattform in RomM hinzu."
+msgid "This game needs BIOS files that are not available locally: {}. Add them to this platform's firmware in RomM and check that they can be downloaded."
+msgstr "Dieses Spiel benötigt BIOS-Dateien, die lokal nicht verfügbar sind: {}. Füge sie zur Firmware dieser Plattform in RomM hinzu und prüfe, ob sie heruntergeladen werden können."
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Higher is sharper and needs a faster computer."
