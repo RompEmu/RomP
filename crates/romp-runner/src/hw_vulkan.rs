@@ -116,6 +116,22 @@ fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u
     })
 }
 
+/// Keep enumeration order for equally suitable devices, but avoid software rendering when possible.
+fn preferred_gpu(devices: &[(vk::PhysicalDeviceType, bool)]) -> Option<usize> {
+    devices
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, graphics))| *graphics)
+        .min_by_key(|(_, (kind, _))| match *kind {
+            vk::PhysicalDeviceType::DISCRETE_GPU => 0,
+            vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
+            vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
+            vk::PhysicalDeviceType::CPU => 4,
+            _ => 3,
+        })
+        .map(|(i, _)| i)
+}
+
 struct DeviceState {
     device: ash::Device,
     gpu: vk::PhysicalDevice,
@@ -243,11 +259,12 @@ impl HwVulkanContext {
         if let Some(create) = create {
             let mut context = RetroVulkanContext::default();
             let features = vk::PhysicalDeviceFeatures::default();
-            let created = unsafe {
+            let preferred = self.preferred_physical_device()?;
+            let mut attempt = |gpu| unsafe {
                 create(
                     &mut context,
                     self.instance.handle(),
-                    vk::PhysicalDevice::null(),
+                    gpu,
                     self.surface,
                     self._entry.static_fn().get_instance_proc_addr,
                     std::ptr::null(),
@@ -257,6 +274,14 @@ impl HwVulkanContext {
                     &features,
                 )
             };
+            let mut created = attempt(preferred);
+            if !created {
+                // libretro guarantees that false leaves no devices or queues initialized.
+                tracing::warn!(
+                    "core rejected preferred Vulkan GPU; retrying with the core's choice"
+                );
+                created = attempt(vk::PhysicalDevice::null());
+            }
             if !created || context.device == vk::Device::null() {
                 anyhow::bail!("the core could not create its Vulkan device");
             }
@@ -265,10 +290,27 @@ impl HwVulkanContext {
         self.create_own_device()
     }
 
+    fn preferred_physical_device(&self) -> anyhow::Result<vk::PhysicalDevice> {
+        let devices = unsafe { self.instance.enumerate_physical_devices() }?;
+        let capabilities: Vec<_> = devices
+            .iter()
+            .map(|&gpu| unsafe {
+                let properties = self.instance.get_physical_device_properties(gpu);
+                let graphics = self
+                    .instance
+                    .get_physical_device_queue_family_properties(gpu)
+                    .iter()
+                    .any(|f| f.queue_count > 0 && f.queue_flags.contains(vk::QueueFlags::GRAPHICS));
+                (properties.device_type, graphics)
+            })
+            .collect();
+        preferred_gpu(&capabilities)
+            .map(|i| devices[i])
+            .ok_or_else(|| anyhow::anyhow!("no Vulkan device with a graphics queue"))
+    }
+
     fn create_own_device(&self) -> anyhow::Result<RetroVulkanContext> {
-        let gpu = *unsafe { self.instance.enumerate_physical_devices() }?
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("no Vulkan device"))?;
+        let gpu = self.preferred_physical_device()?;
         let family = unsafe {
             self.instance
                 .get_physical_device_queue_family_properties(gpu)
@@ -304,6 +346,18 @@ impl HwVulkanContext {
     }
 
     fn state_for(&self, context: &RetroVulkanContext) -> anyhow::Result<DeviceState> {
+        let properties = unsafe { self.instance.get_physical_device_properties(context.gpu) };
+        tracing::info!(
+            gpu = %unsafe { CStr::from_ptr(properties.device_name.as_ptr()) }.to_string_lossy(),
+            kind = ?properties.device_type,
+            vendor_id = properties.vendor_id,
+            device_id = properties.device_id,
+            driver_version = properties.driver_version,
+            api = %format!("{}.{}.{}", vk::api_version_major(properties.api_version),
+                vk::api_version_minor(properties.api_version), vk::api_version_patch(properties.api_version)),
+            queue_family = context.queue_family_index,
+            "Vulkan device selected"
+        );
         let device = unsafe { ash::Device::load(self.instance.fp_v1_0(), context.device) };
         let pool = unsafe {
             device.create_command_pool(
@@ -817,6 +871,24 @@ mod tests {
         assert_eq!(readback_memory(&[F::HOST_VISIBLE], 1), Some((0, false)));
     }
 
+    #[test]
+    fn gpu_selection_prefers_hardware_with_graphics_and_keeps_ties_stable() {
+        use vk::PhysicalDeviceType as T;
+        assert_eq!(
+            preferred_gpu(&[
+                (T::CPU, true),
+                (T::INTEGRATED_GPU, true),
+                (T::DISCRETE_GPU, false),
+                (T::DISCRETE_GPU, true),
+                (T::DISCRETE_GPU, true)
+            ]),
+            Some(3)
+        );
+        assert_eq!(preferred_gpu(&[(T::CPU, true)]), Some(0));
+        assert_eq!(preferred_gpu(&[(T::DISCRETE_GPU, false)]), None);
+        assert_eq!(preferred_gpu(&[]), None);
+    }
+
     fn one(format: vk::Format, raw: &[u8]) -> [u8; 4] {
         let out = to_bgra(format, raw).expect("supported format");
         out.try_into().expect("one pixel")
@@ -1059,6 +1131,53 @@ mod tests {
             // Dolphin presents only through a swapchain on this surface.
             assert_ne!(SURFACE.load(Ordering::SeqCst), 0);
         }
+    }
+
+    #[test]
+    fn a_rejected_preferred_gpu_falls_back_to_the_core_choice() {
+        use vk::Handle;
+        static ATTEMPTS: std::sync::Mutex<Vec<bool>> = std::sync::Mutex::new(Vec::new());
+        unsafe extern "C" fn create(
+            context: *mut RetroVulkanContext,
+            _instance: vk::Instance,
+            gpu: vk::PhysicalDevice,
+            _surface: vk::SurfaceKHR,
+            _get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+            _extensions: *const *const c_char,
+            _num_extensions: c_uint,
+            _layers: *const *const c_char,
+            _num_layers: c_uint,
+            _features: *const vk::PhysicalDeviceFeatures,
+        ) -> bool {
+            ATTEMPTS
+                .lock()
+                .unwrap()
+                .push(gpu == vk::PhysicalDevice::null());
+            if gpu != vk::PhysicalDevice::null() {
+                return false;
+            }
+            unsafe {
+                (*context).device = vk::Device::from_raw(1);
+            }
+            true
+        }
+        let Some((_guard, ctx)) = context() else {
+            return;
+        };
+        if ctx.preferred_physical_device().is_err() {
+            return;
+        }
+        ATTEMPTS.lock().unwrap().clear();
+        let negotiation = Negotiation {
+            interface_type: RETRO_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_VULKAN,
+            interface_version: NEGOTIATION_VERSION,
+            get_application_info: None,
+            create_device: Some(create),
+            destroy_device: None,
+        };
+        assert!(unsafe { ctx.set_negotiation_interface(&raw const negotiation as *const c_void) });
+        assert!(ctx.create_device().is_ok());
+        assert_eq!(*ATTEMPTS.lock().unwrap(), vec![false, true]);
     }
 
     #[test]
