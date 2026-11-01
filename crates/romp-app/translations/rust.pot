@@ -739,7 +739,7 @@ msgid "Couldn't delete the save state: {}."
 msgstr ""
 
 #: crates/romp-app/src/bios.rs
-msgid "This game needs BIOS files that are not available locally: {}. Add them to this platform's firmware in RomM and check that they can be downloaded."
+msgid "This game needs BIOS files RomP couldn't get from your server: {}. Add them to this platform's firmware in RomM."
 msgstr ""
 
 #: crates/romp-app/src/console_settings.rs
