@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub const WINDOW_KEY: &str = "window";
 pub const VIEW_KEY: &str = "last_view";
+pub const SIDEBAR_KEY: &str = "sidebar";
 const MIN_SIZE: u32 = 200;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,6 +102,37 @@ impl LastView {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Sidebar {
+    pub width: f32,
+    pub collapsed: bool,
+}
+
+impl Default for Sidebar {
+    fn default() -> Self {
+        Self {
+            width: 248.0,
+            collapsed: false,
+        }
+    }
+}
+
+impl Sidebar {
+    pub fn from_json(text: Option<&str>) -> Self {
+        let sidebar: Self = text
+            .and_then(|t| serde_json::from_str(t).ok())
+            .unwrap_or_default();
+        Self {
+            width: sidebar.width.clamp(200.0, 400.0),
+            ..sidebar
+        }
+    }
+
+    pub fn to_json(self) -> String {
+        serde_json::to_string(&self).expect("sidebar serializes")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,5 +221,24 @@ mod tests {
         let older = LastView::from_json(Some(r#"{"selected":"all","game":null}"#)).unwrap();
         assert_eq!(older.top_game, None);
         assert_eq!(LastView::from_json(Some("{")), None);
+    }
+
+    #[test]
+    fn the_sidebar_comes_back_as_it_was_left() {
+        let left = Sidebar {
+            width: 320.0,
+            collapsed: true,
+        };
+        assert_eq!(Sidebar::from_json(Some(&left.to_json())), left);
+        assert_eq!(Sidebar::from_json(None), Sidebar::default());
+        assert_eq!(Sidebar::from_json(Some("{")), Sidebar::default());
+    }
+
+    #[test]
+    fn a_saved_sidebar_width_stays_in_range() {
+        let wide = Sidebar::from_json(Some(r#"{"width":900,"collapsed":false}"#));
+        assert_eq!(wide.width, 400.0);
+        let thin = Sidebar::from_json(Some(r#"{"width":10,"collapsed":false}"#));
+        assert_eq!(thin.width, 200.0);
     }
 }

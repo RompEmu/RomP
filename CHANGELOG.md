@@ -7,6 +7,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Added
 
 - The first time a new version of RomP opens, it shows what's new in it, with a link to the full changelog. It can be turned off there, and opened again from the About window.
+- The sidebar can be resized by dragging its edge, and dragged most of the way in, it collapses to its icons. RomP remembers both.
 
 ### Fixed
 

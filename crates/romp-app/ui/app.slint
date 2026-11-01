@@ -678,7 +678,12 @@ component Library inherits Rectangle {
     callback open-about();
     in property <bool> page-open;
     public function focus-search() { search-field.focus(); }
-    in property <bool> compact;
+    // A narrow window always shows the sidebar as a rail of icons; a wider one as the player left it.
+    in property <bool> narrow;
+    in-out property <length> sidebar-width: 248px;
+    in-out property <bool> sidebar-collapsed;
+    property <bool> compact: root.narrow || root.sidebar-collapsed;
+    property <bool> resizing;
     in property <image> user-avatar;
     in property <bool> has-user-avatar;
     in property <string> user-initial;
@@ -760,9 +765,9 @@ component Library inherits Rectangle {
     }
 
     Row {
-        Rectangle {
-            width: root.compact ? 64px : 248px;
-            animate width { duration: 150ms; easing: ease-out; }
+        sidebar-pane := Rectangle {
+            width: root.compact ? 64px : root.sidebar-width;
+            animate width { duration: root.resizing ? 0ms : 150ms; easing: ease-out; }
             background: Theme.sidebar;
             Rectangle {
                 x: Locale.rtl ? 0 : parent.width - 1px;
@@ -982,6 +987,22 @@ component Library inherits Rectangle {
                     IconButton { icon: @image-url("icons/settings.svg"); tooltip: @tr("Settings"); clicked => { root.open-settings(); } }
                 }
 
+            }
+            // Dragged past halfway to the rail, the sidebar snaps to it, and back out of it the same way.
+            if !root.narrow: TouchArea {
+                x: Locale.rtl ? 0 : parent.width - self.width;
+                width: 6px;
+                mouse-cursor: ew-resize;
+                changed pressed => { root.resizing = self.pressed; }
+                moved => {
+                    if self.pressed {
+                        let wanted = sidebar-pane.width + (Locale.rtl ? self.pressed-x - self.mouse-x : self.mouse-x - self.pressed-x);
+                        root.sidebar-collapsed = wanted < (64px + 200px) / 2;
+                        if !root.sidebar-collapsed {
+                            root.sidebar-width = clamp(wanted, 200px, 400px);
+                        }
+                    }
+                }
             }
         }
         Rectangle {
@@ -1212,9 +1233,9 @@ component Library inherits Rectangle {
         }
         TouchArea { clicked => { root.notifications-open = false; } }
         Rectangle {
-            x: Locale.rtl ? parent.width - self.width - (root.compact ? 72px : 256px) : (root.compact ? 72px : 256px);
+            x: Locale.rtl ? parent.width - self.width - sidebar-pane.width - 8px : sidebar-pane.width + 8px;
             y: parent.height - self.height - 12px;
-            width: min(360px, parent.width - (root.compact ? 88px : 272px));
+            width: min(360px, parent.width - sidebar-pane.width - 24px);
             height: min(460px, parent.height - 24px);
             border-radius: Theme.radius-large;
             background: Theme.surface-raised;
@@ -2765,6 +2786,8 @@ export component AppWindow inherits Window {
     in property <bool> first-run;
     property <bool> in-library: root.screen >= 2 && root.screen <= 4;
     property <bool> narrow;
+    in-out property <length> sidebar-width <=> library.sidebar-width;
+    in-out property <bool> sidebar-collapsed <=> library.sidebar-collapsed;
     changed width => { self.narrow = self.width < 1000px; }
     init => { self.narrow = self.width < 1000px; }
 
@@ -3058,7 +3081,7 @@ export component AppWindow inherits Window {
     }
     library := Library {
         visible: root.in-library;
-        compact: root.narrow;
+        narrow: root.narrow;
         page-open: root.screen == 3 || root.screen == 4;
         user-label: root.user-label;
         sidebar: root.sidebar;

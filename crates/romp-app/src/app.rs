@@ -18,7 +18,7 @@ use crate::cores::Cores;
 use crate::covers::Covers;
 use crate::credentials::{Keychain, SignIns, TokenStore};
 use crate::grid::{row_count, row_range, CoverSlots, RecentRows, RECENT_ROWS};
-use crate::restore::{LastView, Observed, Placement, VIEW_KEY, WINDOW_KEY};
+use crate::restore::{LastView, Observed, Placement, Sidebar, SIDEBAR_KEY, VIEW_KEY, WINDOW_KEY};
 use crate::romm::client::{check_version, server_candidates, Client, Error};
 use crate::romm::pairing::{PollStep, Poller};
 use crate::romm::types::{DeviceAuth, PollOutcome, User};
@@ -205,6 +205,9 @@ pub fn run() -> anyhow::Result<()> {
         .set_color_scheme(prefs.color_scheme());
     let placement = Placement::from_json(shared.store.lock().unwrap().get(WINDOW_KEY).as_deref());
     let last_view = LastView::from_json(shared.store.lock().unwrap().get(VIEW_KEY).as_deref());
+    let sidebar = Sidebar::from_json(shared.store.lock().unwrap().get(SIDEBAR_KEY).as_deref());
+    ui.set_sidebar_width(sidebar.width);
+    ui.set_sidebar_collapsed(sidebar.collapsed);
     let mappings = crate::mapping::Mappings::from_json(
         shared.store.lock().unwrap().get("mappings").as_deref(),
     );
@@ -649,6 +652,11 @@ impl Controller {
         if let Some(placement) = Placement::update(previous, &observed) {
             store.set(WINDOW_KEY, &placement.to_json());
         }
+        let sidebar = Sidebar {
+            width: ui.get_sidebar_width(),
+            collapsed: ui.get_sidebar_collapsed(),
+        };
+        store.set(SIDEBAR_KEY, &sidebar.to_json());
         if self.client.borrow().is_some() {
             let view = LastView {
                 selected: self.selected.borrow().clone(),
