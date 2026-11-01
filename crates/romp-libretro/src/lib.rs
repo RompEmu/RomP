@@ -49,6 +49,11 @@ pub trait HwContextProvider {
     fn make_current(&self);
     fn readback_bgra(&self, width: u32, height: u32) -> Vec<u8>;
 
+    /// GPU wait and CPU conversion within the last readback, consumed once when available.
+    fn take_readback_timing(&self) -> Option<(std::time::Duration, std::time::Duration)> {
+        None
+    }
+
     fn preferred_context_type(&self) -> u32 {
         RETRO_HW_CONTEXT_OPENGL_CORE
     }

@@ -427,6 +427,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             stats.record(
                 run_time,
                 readback_started.elapsed(),
+                hw_ctx.as_ref().and_then(|ctx| ctx.take_readback_timing()),
                 audio_frames,
                 audio_fill,
             );
