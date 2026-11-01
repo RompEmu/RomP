@@ -21,3 +21,7 @@ updates:
         update-types: [minor, patch]
       crates-breaking:
         update-types: [major]
+    ignore:
+      # glow moves with librashader, whose breaking update fails CI until glow is bumped alongside it.
+      - dependency-name: glow
+        update-types: ["version-update:semver-major"]
