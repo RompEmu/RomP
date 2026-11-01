@@ -8,6 +8,8 @@ pub struct FrameTimes {
     pub core: Duration,
     pub resume: Duration,
     pub readback: Duration,
+    /// GPU wait and CPU conversion are details within readback, not additional loop stages.
+    pub readback_timing: Option<(Duration, Duration)>,
     pub publish: Duration,
     pub audio: Duration,
     pub saves: Duration,
@@ -20,7 +22,7 @@ const STAGES: [&str; 10] = [
     "controls",
     "core",
     "resume",
-    "GPU readback",
+    "frame copy",
     "frame publish",
     "audio",
     "saves",
@@ -35,6 +37,11 @@ pub struct FrameStats {
     times: [Duration; 10],
     maxima: [Duration; 10],
     loop_max: Duration,
+    readback_frames: u32,
+    gpu_wait: Duration,
+    gpu_wait_max: Duration,
+    cpu_convert: Duration,
+    cpu_convert_max: Duration,
     audio_frames: u64,
     fill: f64,
     fill_min: f32,
@@ -49,6 +56,11 @@ impl FrameStats {
             times: [Duration::ZERO; 10],
             maxima: [Duration::ZERO; 10],
             loop_max: Duration::ZERO,
+            readback_frames: 0,
+            gpu_wait: Duration::ZERO,
+            gpu_wait_max: Duration::ZERO,
+            cpu_convert: Duration::ZERO,
+            cpu_convert_max: Duration::ZERO,
             audio_frames: 0,
             fill: 0.0,
             fill_min: 1.0,
@@ -57,6 +69,13 @@ impl FrameStats {
 
     /// Call only for running iterations: time spent paused must not dilute FPS or audio rate.
     pub fn record(&mut self, times: FrameTimes, audio_frames: u64, fill: f32) {
+        if let Some((gpu_wait, cpu_convert)) = times.readback_timing {
+            self.readback_frames += 1;
+            self.gpu_wait += gpu_wait;
+            self.gpu_wait_max = self.gpu_wait_max.max(gpu_wait);
+            self.cpu_convert += cpu_convert;
+            self.cpu_convert_max = self.cpu_convert_max.max(cpu_convert);
+        }
         let mut stages = [
             times.sleep,
             times.controls,
@@ -92,11 +111,21 @@ impl FrameStats {
             .iter()
             .enumerate()
             .map(|(i, name)| {
-                format!(
+                let mut stage = format!(
                     "{name} {:.1}/{:.1}",
                     ms(self.times[i]) / frames,
                     ms(self.maxima[i])
-                )
+                );
+                if i == 4 && self.readback_frames > 0 {
+                    stage.push_str(&format!(
+                        " (GPU wait {:.1}/{:.1}, CPU convert {:.1}/{:.1})",
+                        ms(self.gpu_wait) / frames,
+                        ms(self.gpu_wait_max),
+                        ms(self.cpu_convert) / frames,
+                        ms(self.cpu_convert_max)
+                    ));
+                }
+                stage
             })
             .collect::<Vec<_>>()
             .join(", ");
@@ -127,6 +156,7 @@ mod tests {
                     total: Duration::from_millis(500),
                     core: Duration::from_millis(2),
                     readback: Duration::from_millis(250),
+                    readback_timing: Some((Duration::from_millis(100), Duration::from_millis(20))),
                     saves: Duration::from_millis(100),
                     sleep: Duration::from_millis(10),
                     ..Default::default()
@@ -137,6 +167,10 @@ mod tests {
         }
         let line = stats.report().unwrap();
         assert!(line.starts_with("2.0 fps; loop 500.0/500.0"), "{line}");
+        assert!(
+            line.contains("frame copy 250.0/250.0 (GPU wait 100.0/100.0, CPU convert 20.0/20.0)"),
+            "{line}"
+        );
         assert!(line.contains("saves 100.0/100.0"), "{line}");
         assert!(line.contains("other 138.0/138.0"), "{line}");
         assert!(line.contains("audio 2000 Hz"), "{line}");
@@ -166,5 +200,45 @@ mod tests {
             0.5,
         );
         assert!(stats.report().unwrap().starts_with("1.0 fps;"));
+    }
+
+    #[test]
+    fn readback_details_share_the_frame_window_and_reset() {
+        let mut stats = FrameStats::new(Duration::from_secs(1));
+        stats.record(
+            FrameTimes {
+                total: Duration::from_millis(500),
+                readback: Duration::from_millis(10),
+                readback_timing: Some((Duration::from_millis(5), Duration::from_millis(2))),
+                ..Default::default()
+            },
+            0,
+            0.0,
+        );
+        assert_eq!(stats.report(), None);
+        stats.record(
+            FrameTimes {
+                total: Duration::from_millis(500),
+                ..Default::default()
+            },
+            0,
+            0.0,
+        );
+        let line = stats.report().unwrap();
+        assert!(
+            line.contains("frame copy 5.0/10.0 (GPU wait 2.5/5.0, CPU convert 1.0/2.0)"),
+            "{line}"
+        );
+        assert_eq!(stats.readback_frames, 0);
+        stats.record(
+            FrameTimes {
+                total: Duration::from_secs(1),
+                ..Default::default()
+            },
+            0,
+            0.0,
+        );
+        let line = stats.report().unwrap();
+        assert!(!line.contains("GPU wait"), "{line}");
     }
 }

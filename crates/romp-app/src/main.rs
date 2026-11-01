@@ -100,7 +100,6 @@ fn main() -> anyhow::Result<()> {
         }))
         .init();
     tracing::info!(
-        revision = env!("ROMP_BUILD_REVISION"),
         "RomP {} on {} {}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,

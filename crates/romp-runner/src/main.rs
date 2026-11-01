@@ -410,6 +410,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                         hw_gl::hw_frame_size(frontend.hw_frame_width, frontend.hw_frame_height)
                     };
                     let pixels = ctx.readback_bgra(w, h);
+                    times.readback_timing = ctx.take_readback_timing();
                     let publish_started = Instant::now();
                     frames.write(
                         &pixels,
