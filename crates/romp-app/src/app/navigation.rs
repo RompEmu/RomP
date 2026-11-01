@@ -397,27 +397,43 @@ mod tests {
         ui.on_back_to_library(move || count.set(count.get() + 1));
         let count = favorites.clone();
         ui.on_toggle_favorite(move || count.set(count.get() + 1));
+        let seek = |target: &str| {
+            let mut visited = Vec::new();
+            for _ in 0..64 {
+                let focused = ui.global::<crate::ControllerFocus>().get_target();
+                if focused == target {
+                    return;
+                }
+                if visited.last() != Some(&focused) {
+                    visited.push(focused);
+                }
+                navigate_controls(ui.window(), DOWN);
+                draw();
+            }
+            panic!(
+                "controller could not reach {target} after 64 Down presses (screen={}, dialog={}, scroll={}, visited={visited:?})",
+                ui.get_screen(), ui.get_dialog_open(), ui.get_game_scroll_y()
+            );
+        };
         ui.set_screen(SCREEN_GAME);
         draw();
         navigate_controls(ui.window(), A);
         assert_eq!(plays.get(), 1, "initial confirm retains the primary action");
-        for _ in 0..3 {
-            navigate_controls(ui.window(), DOWN);
-        }
+        seek("Play");
         navigate_controls(ui.window(), A);
         assert_eq!(plays.get(), 2, "confirm activates focused Play");
-        navigate_controls(ui.window(), DOWN);
+        seek("Delete");
         navigate_controls(ui.window(), A);
         assert_eq!(deletes.get(), 1, "Delete receives confirm instead of Play");
         assert_eq!(plays.get(), 2);
-        navigate_controls(ui.window(), DOWN);
+        seek("Favorite");
         navigate_controls(ui.window(), A);
         assert_eq!(favorites.get(), 1);
-        navigate_controls(ui.window(), DOWN);
+        seek("Collections");
         navigate_controls(ui.window(), A);
         navigate_controls(ui.window(), B);
         assert_eq!(backs.get(), 0, "Back closes the collections popup first");
-        navigate_controls(ui.window(), DOWN);
+        seek("Screenshot");
         draw();
         assert!(
             ui.get_game_scroll_y() < -200.0,
@@ -468,25 +484,25 @@ mod tests {
         draw();
         ui.set_screen(SCREEN_GAME);
         draw();
-        for _ in 0..7 {
-            navigate_controls(ui.window(), DOWN);
-        }
+        seek("Status");
         navigate_controls(ui.window(), A);
-        navigate_controls(ui.window(), DOWN);
+        seek("Status option");
         navigate_controls(ui.window(), A);
         assert_eq!(statuses.get(), 1, "controller can change the play status");
         navigate_controls(ui.window(), B);
         assert_eq!(backs.get(), 0, "Back closes the play-status popup first");
+        draw();
+        assert_ne!(
+            ui.global::<crate::ControllerFocus>().get_target(),
+            "Status option"
+        );
         assert_eq!(plays.get(), 2);
 
         ui.set_screen(SCREEN_SETTINGS);
         ui.set_settings_section(0);
         ui.set_pref_ui_scale(2);
         draw();
-        // Two breadcrumb controls, six tabs, then three switches, volume and scale.
-        for _ in 0..13 {
-            navigate_controls(ui.window(), DOWN);
-        }
+        seek("Scale");
         navigate_controls(ui.window(), LEFT);
         assert_eq!(
             ui.get_pref_ui_scale(),
@@ -507,7 +523,7 @@ mod tests {
         navigate_controls(ui.window(), A);
         assert_eq!(cancelled.get(), 1, "confirmation starts on Cancel");
         assert_eq!(confirmed.get(), 0);
-        navigate_controls(ui.window(), DOWN);
+        seek("Confirm");
         navigate_controls(ui.window(), A);
         assert_eq!(
             confirmed.get(),
@@ -516,6 +532,10 @@ mod tests {
         );
         ui.set_dialog_open(false);
         draw();
+        assert_ne!(
+            ui.global::<crate::ControllerFocus>().get_target(),
+            "Confirm"
+        );
         ui.set_dialog_asks_name(true);
         ui.set_dialog_value("".into());
         ui.set_dialog_open(true);
@@ -528,8 +548,11 @@ mod tests {
             "Backtab leaves an empty name field for Cancel"
         );
         assert_eq!(confirmed.get(), 1, "disabled Confirm remains unreachable");
+        seek("Cancel");
         navigate_controls(ui.window(), DOWN);
+        assert_eq!(ui.global::<crate::ControllerFocus>().get_target(), "Name");
         navigate_controls(ui.window(), DOWN);
+        assert_eq!(ui.global::<crate::ControllerFocus>().get_target(), "Cancel");
         navigate_controls(ui.window(), A);
         assert_eq!(
             cancelled.get(),

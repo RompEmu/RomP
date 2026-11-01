@@ -1,3 +1,12 @@
+// Observes native focus for controller traversal tests without changing it.
+export global ControllerFocus {
+    out property <string> target;
+    public function observe(name: string, focused: bool) {
+        if focused { target = name; }
+        else if target == name { target = ""; }
+    }
+}
+
 import { ListView, Locale, Row, ScrollView, Theme } from "theme.slint";
 import { FocusRing, KeyActivator } from "focus.slint";
 import { AchievementItem, AchievementRow } from "achievements.slint";
@@ -1400,13 +1409,16 @@ component GamePage inherits FocusScope {
     in property <int> achievements-hidden;
     callback show-all-achievements();
     in property <[Shot]> shots;
+    changed shots => { ControllerFocus.observe(ControllerFocus.target, false); }
     in property <[GameCard]> similar;
     in property <float> similar-shelf: 230;
     in property <image> cover;
     in property <float> cover-aspect: 0.71;
     in property <bool> has-cover;
     in property <bool> downloaded;
+    changed downloaded => { ControllerFocus.observe(ControllerFocus.target, false); }
     in property <bool> busy;
+    changed busy => { ControllerFocus.observe(ControllerFocus.target, false); }
     in property <bool> playable;
     in property <bool> can-download;
     in property <float> progress;
@@ -1422,6 +1434,7 @@ component GamePage inherits FocusScope {
     callback delete();
     callback open-game(int);
     in property <bool> show-collections;
+    changed show-collections => { ControllerFocus.observe(ControllerFocus.target, false); }
     in property <bool> can-edit-collections;
     in property <bool> favorite;
     in property <[Membership]> memberships;
@@ -1429,9 +1442,11 @@ component GamePage inherits FocusScope {
     callback toggle-membership(string, bool);
     callback new-collection();
     in property <bool> show-status;
+    changed show-status => { ControllerFocus.observe(ControllerFocus.target, false); }
     in property <bool> can-edit-status;
     in property <string> status-label;
     in property <[StatusOption]> status-options;
+    changed status-options => { ControllerFocus.observe(ControllerFocus.target, false); }
     callback toggle-status(int, bool);
 
     in-out property <length> scroll-y <=> page.content-y;
@@ -1552,9 +1567,10 @@ component GamePage inherits FocusScope {
                             }
                             if root.busy: ProgressIndicator { width: 220px; progress: root.progress; }
                             if root.busy: Button { text: @tr("Cancel"); clicked => { root.cancel(); } }
-                            if root.downloaded && !root.busy: Button { text: @tr("Play"); primary: true; clicked => { root.play(); } }
-                            if root.downloaded && !root.busy: Button { text: @tr("Delete download"); clicked => { root.delete(); } }
+                            if root.downloaded && !root.busy: Button { text: @tr("Play"); primary: true; changed has-focus => { ControllerFocus.observe("Play", self.has-focus); } clicked => { root.play(); } }
+                            if root.downloaded && !root.busy: Button { text: @tr("Delete download"); changed has-focus => { ControllerFocus.observe("Delete", self.has-focus); } clicked => { root.delete(); } }
                             if root.show-collections: Button {
+                                changed has-focus => { ControllerFocus.observe("Favorite", self.has-focus); }
                                 text: root.favorite ? @tr("♥ In favorites") : @tr("♡ Add to favorites");
                                 enabled: root.can-edit-collections;
                                 clicked => { root.toggle-favorite(); }
@@ -1563,6 +1579,7 @@ component GamePage inherits FocusScope {
                                 width: collections-button.preferred-width;
                                 height: collections-button.preferred-height;
                                 collections-button := Button {
+                                    changed has-focus => { ControllerFocus.observe("Collections", self.has-focus); }
                                     width: parent.width;
                                     height: parent.height;
                                     text: @tr("Collections…");
@@ -1611,6 +1628,7 @@ component GamePage inherits FocusScope {
                             if root.show-status: Rectangle {
                                 width: status-button.preferred-width;
                                 status-button := Button {
+                                    changed has-focus => { ControllerFocus.observe("Status", self.has-focus); }
                                     width: parent.width;
                                     height: parent.height;
                                     text: root.status-label;
@@ -1639,6 +1657,7 @@ component GamePage inherits FocusScope {
                                                 spacing: 6px;
                                                 if i == 2: Rectangle { height: 1px; background: Theme.surface-selected; }
                                                 CheckBox {
+                                                    changed has-focus => { ControllerFocus.observe("Status option", self.has-focus); }
                                                     text: option.label;
                                                     checked: option.checked;
                                                     toggled => { root.toggle-status(i, self.checked); }
@@ -1733,7 +1752,7 @@ component GamePage inherits FocusScope {
                                 accessible-label: @tr("Screenshot {}", i + 1);
                                 accessible-action-default => { root.viewing = i; }
                                 shot-touch := TouchArea { clicked => { root.viewing = i; } }
-                                shot-keys := KeyActivator { activate => { root.viewing = i; } }
+                                shot-keys := KeyActivator { changed has-focus => { if i == 0 { ControllerFocus.observe("Screenshot", self.has-focus); } } activate => { root.viewing = i; } }
                                 if shot-touch.has-hover: Rectangle { background: Theme.hover; }
                                 if shot-keys.has-focus: FocusRing { border-radius: parent.border-radius; }
                             }
@@ -2114,6 +2133,7 @@ component SettingsPage inherits FocusScope {
                                 detail: @tr("Makes text and controls in this window larger.");
                                 ComboBox {
                                     width: 120px;
+                                    changed has-focus => { ControllerFocus.observe("Scale", self.has-focus); }
                                     model: ["1×", "1.5×", "2×"];
                                     current-index <=> root.ui-scale;
                                     selected => { root.prefs-changed(); }
@@ -2501,6 +2521,7 @@ component Dialog inherits Rectangle {
                 Text { horizontal-alignment: Locale.start; text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
                 if root.message != "": Text { horizontal-alignment: Locale.start; text: root.message; color: Theme.text-secondary; wrap: word-wrap; }
                 name-field := LineEdit {
+                    changed has-focus => { ControllerFocus.observe("Name", self.has-focus); }
                     visible: root.asks-name;
                     text <=> root.value;
                     accepted => { if root.value != "" { root.accepted(root.value); } }
@@ -2509,8 +2530,9 @@ component Dialog inherits Rectangle {
                 Row {
                     alignment: end;
                     spacing: 10px;
-                    cancel-button := Button { text: @tr("Cancel"); clicked => { root.cancelled(); } }
+                    cancel-button := Button { changed has-focus => { ControllerFocus.observe("Cancel", self.has-focus); } text: @tr("Cancel"); clicked => { root.cancelled(); } }
                     confirm-button := Button {
+                        changed has-focus => { ControllerFocus.observe("Confirm", self.has-focus); }
                         text: root.confirm-label;
                         primary: !root.destructive;
                         enabled: !root.asks-name || root.value != "";
@@ -2702,7 +2724,7 @@ export component AppWindow inherits Window {
     min-height: 400px;
 
     in-out property <int> screen;
-    changed screen => { root.setup-scroll-y = 0px; }
+    changed screen => { ControllerFocus.observe(ControllerFocus.target, false); root.setup-scroll-y = 0px; }
     in-out property <length> setup-scroll-y;
     in-out property <length> game-scroll-y;
     in property <bool> first-run;
@@ -2907,6 +2929,7 @@ export component AppWindow inherits Window {
     in property <float> grid-focus-bottom;
     in property <[PadHint]> pad-hints;
     in property <bool> dialog-open;
+    changed dialog-open => { ControllerFocus.observe(ControllerFocus.target, false); }
     in property <string> dialog-title;
     in property <string> dialog-message;
     in property <bool> dialog-asks-name;
