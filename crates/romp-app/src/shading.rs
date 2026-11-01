@@ -204,6 +204,24 @@ impl Shading {
 
     pub fn setup(&mut self, get_proc_address: &dyn Fn(&std::ffi::CStr) -> *const std::ffi::c_void) {
         let gl = unsafe { glow::Context::from_loader_function_cstr(|name| get_proc_address(name)) };
+        let version = gl.version();
+        let texture_storage = if version.is_embedded {
+            version.major >= 3
+        } else {
+            (version.major, version.minor) >= (4, 2)
+                || gl.supported_extensions().contains("GL_ARB_texture_storage")
+        };
+        let glsl = unsafe { gl.get_parameter_string(glow::SHADING_LANGUAGE_VERSION) };
+        tracing::info!(
+            version = %unsafe { gl.get_parameter_string(glow::VERSION) },
+            glsl = %glsl,
+            vendor = %unsafe { gl.get_parameter_string(glow::VENDOR) },
+            renderer = %unsafe { gl.get_parameter_string(glow::RENDERER) },
+            texture_storage,
+            max_texture_size = unsafe { gl.get_parameter_i32(glow::MAX_TEXTURE_SIZE) },
+            max_texture_units = unsafe { gl.get_parameter_i32(glow::MAX_TEXTURE_IMAGE_UNITS) },
+            "game window OpenGL capabilities"
+        );
         self.gl = Some(Arc::new(gl));
     }
 
@@ -425,6 +443,82 @@ impl Shading {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unsupported_context_keeps_plain_frame_available() {
+        let mut shading = Shading::default();
+        shading.set_stages(vec![Stage {
+            preset: "unused.slangp".into(),
+            params: vec![],
+            to_screen: false,
+        }]);
+        shading.set_frame(&[1, 2, 3, 255], 1, 1, 1.0);
+        shading.set_unavailable();
+        assert!(!shading.active());
+        assert!(!shading.settling());
+        assert!(shading.draw((100, 100)).is_none());
+        assert_eq!(shading.frame(), Some((&[1, 2, 3, 255][..], 1, 1)));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires an OpenGL window; run with xvfb-run"]
+    fn bundled_shimmerless_loads_with_default_options_on_opengl() {
+        use slint::ComponentHandle;
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        slint::BackendSelector::new()
+            .backend_name("winit".into())
+            .renderer_name("femtovg".into())
+            .require_opengl()
+            .select()
+            .unwrap();
+        let window = crate::GameWindow::new().unwrap();
+        let completed = Rc::new(Cell::new(false));
+        let success = completed.clone();
+        let mut shading = Shading::default();
+        shading.set_stages(vec![Stage {
+            preset: Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("shaders/pixel-art-scaling/sharp-shimmerless.slangp"),
+            params: vec![],
+            to_screen: false,
+        }]);
+        shading.set_frame(&[255, 0, 0, 255], 1, 1, 1.0);
+        window
+            .window()
+            .set_rendering_notifier(move |state, api| match state {
+                slint::RenderingState::RenderingSetup => {
+                    let slint::GraphicsAPI::NativeOpenGL { get_proc_address } = api else {
+                        panic!("test requires native OpenGL");
+                    };
+                    shading.setup(get_proc_address);
+                    let gl = shading.gl.as_ref().unwrap();
+                    eprintln!(
+                        "OpenGL {}, GLSL {}, renderer {}",
+                        unsafe { gl.get_parameter_string(glow::VERSION) },
+                        unsafe { gl.get_parameter_string(glow::SHADING_LANGUAGE_VERSION) },
+                        unsafe { gl.get_parameter_string(glow::RENDERER) }
+                    );
+                }
+                slint::RenderingState::BeforeRendering if !success.get() => {
+                    assert!(
+                        shading.draw((64, 64)).is_some(),
+                        "default filter chain must draw"
+                    );
+                    success.set(true);
+                    slint::quit_event_loop().unwrap();
+                }
+                slint::RenderingState::RenderingTeardown => shading.teardown(),
+                _ => {}
+            })
+            .unwrap();
+        slint::Timer::single_shot(std::time::Duration::from_secs(20), || {
+            slint::quit_event_loop().unwrap();
+        });
+        window.run().unwrap();
+        assert!(completed.get(), "OpenGL rendering callback did not run");
+    }
 
     #[test]
     fn the_game_keeps_its_shape() {
