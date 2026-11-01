@@ -1,5 +1,5 @@
 use ash::vk;
-use parking_lot::lock_api::{GuardNoSend, RawMutex as _};
+use parking_lot::lock_api::RawMutex as _;
 use parking_lot::{Mutex, RawMutex};
 use romp_libretro::{HwContextProvider, RETRO_HW_CONTEXT_VULKAN};
 use std::cell::{OnceCell, RefCell};
@@ -755,7 +755,7 @@ unsafe extern "C" fn lock_queue(handle: *mut c_void) {
 
 unsafe extern "C" fn unlock_queue(handle: *mut c_void) {
     // SAFETY: the core pairs every unlock with its own earlier lock_queue, and parking_lot's guard holds no state.
-    unsafe { context(handle).queue_lock.unlock(GuardNoSend::new()) };
+    unsafe { context(handle).queue_lock.unlock(Default::default()) };
 }
 
 unsafe extern "C" fn set_signal_semaphore(handle: *mut c_void, semaphore: vk::Semaphore) {
