@@ -1,5 +1,5 @@
 use ash::vk;
-use parking_lot::lock_api::RawMutex as _;
+use parking_lot::lock_api::{GuardNoSend, RawMutex as _};
 use parking_lot::{Mutex, RawMutex};
 use romp_libretro::{HwContextProvider, RETRO_HW_CONTEXT_VULKAN};
 use std::cell::{OnceCell, RefCell};
@@ -549,10 +549,10 @@ impl HwVulkanContext {
             .wait_dst_stage_mask(&stages)
             .signal_semaphores(&signal);
         let gpu_started = Instant::now();
-        self.queue_lock.lock();
+        let guard = self.queue_lock.lock();
         let submitted = unsafe { device.queue_submit(state.queue, &[submit], state.fence) };
         // SAFETY: locked just above on this thread.
-        unsafe { self.queue_lock.unlock() };
+        unsafe { self.queue_lock.unlock(guard) };
         submitted?;
         unsafe {
             device.wait_for_fences(&[state.fence], true, u64::MAX)?;
@@ -750,12 +750,12 @@ unsafe extern "C" fn set_command_buffers(
 unsafe extern "C" fn wait_sync_index(_handle: *mut c_void) {}
 
 unsafe extern "C" fn lock_queue(handle: *mut c_void) {
-    unsafe { context(handle) }.queue_lock.lock();
+    let _ = unsafe { context(handle) }.queue_lock.lock();
 }
 
 unsafe extern "C" fn unlock_queue(handle: *mut c_void) {
-    // SAFETY: the core pairs every unlock with its own earlier lock_queue.
-    unsafe { context(handle).queue_lock.unlock() };
+    // SAFETY: the core pairs every unlock with its own earlier lock_queue, and parking_lot's guard holds no state.
+    unsafe { context(handle).queue_lock.unlock(GuardNoSend::new()) };
 }
 
 unsafe extern "C" fn set_signal_semaphore(handle: *mut c_void, semaphore: vk::Semaphore) {
