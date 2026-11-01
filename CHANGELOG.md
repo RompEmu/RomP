@@ -11,6 +11,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Fixed
 
 - On Intel integrated graphics, games drawn through Vulkan copy each frame back from memory the CPU reads quickly, instead of memory it reads slowly, which could make them crawl ([#34](https://github.com/RompEmu/RomP/issues/34)). RomP also no longer picks a software renderer when a real GPU is there. By @aaronflorey in [#28](https://github.com/RompEmu/RomP/pull/28), their first contribution.
+- RomP keeps the RomM and RetroAchievements sign-ins in one keychain item and reads it once, so when macOS asks for the keychain password, it asks once instead of twice. Sign-ins move over the first time the new version opens.
 
 ### Security
 

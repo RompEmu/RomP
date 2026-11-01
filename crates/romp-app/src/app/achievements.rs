@@ -1,6 +1,5 @@
 use super::{on_ui, Controller};
 use crate::achievements::{self, popups::Launch, Account};
-use crate::credentials::{Keychain, TokenStore};
 use crate::store::GameDetail;
 use crate::AchievementRow;
 use romp_proto::msg::AchievementInfo;
@@ -12,7 +11,7 @@ const HARDCORE_KEY: &str = "ra_hardcore";
 impl Controller {
     pub(super) fn ra_account(&self) -> Option<Account> {
         let username = self.shared.store.lock().unwrap().get(USER_KEY)?;
-        let token = Keychain::retro_achievements().load(&username)?;
+        let token = self.shared.ra_tokens.load(&username)?;
         Some(Account { username, token })
     }
 
@@ -143,7 +142,9 @@ impl Controller {
         ui.set_ra_password_input("".into());
         let signed_in = result.is_ok();
         match result.and_then(|account| {
-            Keychain::retro_achievements().save(&account.username, &account.token)?;
+            self.shared
+                .ra_tokens
+                .save(&account.username, &account.token)?;
             self.shared
                 .store
                 .lock()
@@ -163,7 +164,7 @@ impl Controller {
 
     pub(super) fn ra_sign_out(&self) {
         if let Some(account) = self.ra_account() {
-            Keychain::retro_achievements().delete(&account.username);
+            self.shared.ra_tokens.delete(&account.username);
         }
         self.shared.store.lock().unwrap().remove(USER_KEY);
         if let Some(ui) = self.ui() {
