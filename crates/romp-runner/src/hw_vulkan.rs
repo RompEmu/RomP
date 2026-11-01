@@ -124,58 +124,8 @@ fn preferred_gpu(devices: &[(vk::PhysicalDeviceType, bool)]) -> Option<usize> {
         .iter()
         .enumerate()
         .filter(|(_, (_, graphics))| *graphics)
-        .min_by_key(|(_, (kind, _))| match *kind {
-            vk::PhysicalDeviceType::DISCRETE_GPU => 0,
-            vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
-            vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
-            vk::PhysicalDeviceType::CPU => 4,
-            _ => 3,
-        })
+        .min_by_key(|(_, (kind, _))| *kind == vk::PhysicalDeviceType::CPU)
         .map(|(i, _)| i)
-}
-
-struct ReadbackStats {
-    started: Instant,
-    frames: u32,
-    gpu: Duration,
-    gpu_max: Duration,
-    cpu: Duration,
-    cpu_max: Duration,
-}
-
-impl Default for ReadbackStats {
-    fn default() -> Self {
-        Self {
-            started: Instant::now(),
-            frames: 0,
-            gpu: Duration::ZERO,
-            gpu_max: Duration::ZERO,
-            cpu: Duration::ZERO,
-            cpu_max: Duration::ZERO,
-        }
-    }
-}
-
-impl ReadbackStats {
-    fn record(&mut self, gpu: Duration, cpu: Duration) {
-        self.frames += 1;
-        self.gpu += gpu;
-        self.gpu_max = self.gpu_max.max(gpu);
-        self.cpu += cpu;
-        self.cpu_max = self.cpu_max.max(cpu);
-        if self.started.elapsed() >= Duration::from_secs(10) {
-            let avg = |d: Duration| d.as_secs_f64() * 1000.0 / f64::from(self.frames);
-            tracing::info!(
-                frames = self.frames,
-                gpu_wait_ms_avg = avg(self.gpu),
-                gpu_wait_ms_max = self.gpu_max.as_secs_f64() * 1000.0,
-                cpu_convert_ms_avg = avg(self.cpu),
-                cpu_convert_ms_max = self.cpu_max.as_secs_f64() * 1000.0,
-                "Vulkan readback timing"
-            );
-            *self = Self::default();
-        }
-    }
 }
 
 struct DeviceState {
@@ -187,7 +137,7 @@ struct DeviceState {
     fence: vk::Fence,
     readback: Option<Readback>,
     last_scanout: Option<(vk::Format, u32, u32)>,
-    timings: ReadbackStats,
+    readback_timing: Option<(Duration, Duration)>,
 }
 
 pub struct HwVulkanContext {
@@ -400,7 +350,6 @@ impl HwVulkanContext {
             kind = ?properties.device_type,
             vendor_id = properties.vendor_id,
             device_id = properties.device_id,
-            driver_version = properties.driver_version,
             api = %format!("{}.{}.{}", vk::api_version_major(properties.api_version),
                 vk::api_version_minor(properties.api_version), vk::api_version_patch(properties.api_version)),
             queue_family = context.queue_family_index,
@@ -432,7 +381,7 @@ impl HwVulkanContext {
             fence,
             readback: None,
             last_scanout: None,
-            timings: ReadbackStats::default(),
+            readback_timing: None,
         })
     }
 
@@ -622,7 +571,7 @@ impl HwVulkanContext {
         let raw = unsafe { std::slice::from_raw_parts(mapped, size as usize) };
         let pixels = to_bgra(image.format, raw)
             .ok_or_else(|| anyhow::anyhow!("unsupported scanout format"))?;
-        state.timings.record(gpu_time, cpu_started.elapsed());
+        state.readback_timing = Some((gpu_time, cpu_started.elapsed()));
         Ok(pixels)
     }
 
@@ -829,6 +778,9 @@ impl HwContextProvider for HwVulkanContext {
     fn make_current(&self) {}
 
     fn readback_bgra(&self, width: u32, height: u32) -> Vec<u8> {
+        if let Some(state) = self.state.borrow_mut().as_mut() {
+            state.readback_timing = None;
+        }
         let image = self.pending.lock().image;
         let Some(image) = image else {
             return vec![0; width as usize * height as usize * 4];
@@ -841,6 +793,10 @@ impl HwContextProvider for HwVulkanContext {
             }
             vec![0; width as usize * height as usize * 4]
         })
+    }
+
+    fn take_readback_timing(&self) -> Option<(Duration, Duration)> {
+        self.state.borrow_mut().as_mut()?.readback_timing.take()
     }
 
     fn preferred_context_type(&self) -> u32 {
@@ -972,27 +928,33 @@ mod tests {
                 (T::DISCRETE_GPU, true),
                 (T::DISCRETE_GPU, true)
             ]),
-            Some(3)
+            Some(1)
         );
+        for kinds in [
+            [T::INTEGRATED_GPU, T::DISCRETE_GPU],
+            [T::DISCRETE_GPU, T::INTEGRATED_GPU],
+            [T::VIRTUAL_GPU, T::OTHER],
+            [T::OTHER, T::DISCRETE_GPU],
+            [T::CPU, T::CPU],
+        ] {
+            assert_eq!(preferred_gpu(&kinds.map(|kind| (kind, true))), Some(0));
+        }
         assert_eq!(preferred_gpu(&[(T::CPU, true)]), Some(0));
         assert_eq!(preferred_gpu(&[(T::DISCRETE_GPU, false)]), None);
         assert_eq!(preferred_gpu(&[]), None);
     }
 
     #[test]
-    fn readback_timings_accumulate_and_reset_once_per_window() {
-        let mut stats = ReadbackStats::default();
-        stats.record(Duration::from_millis(5), Duration::from_millis(2));
-        stats.record(Duration::from_millis(3), Duration::from_millis(4));
-        assert_eq!(stats.frames, 2);
-        assert_eq!(stats.gpu, Duration::from_millis(8));
-        assert_eq!(stats.gpu_max, Duration::from_millis(5));
-        assert_eq!(stats.cpu, Duration::from_millis(6));
-        assert_eq!(stats.cpu_max, Duration::from_millis(4));
-        stats.started = Instant::now() - Duration::from_secs(11);
-        stats.record(Duration::ZERO, Duration::ZERO);
-        assert_eq!(stats.frames, 0);
-        assert_eq!(stats.gpu, Duration::ZERO);
+    fn intel_anv_uses_cached_device_local_memory_when_allowed() {
+        use vk::MemoryPropertyFlags as F;
+        let types = [
+            F::DEVICE_LOCAL,
+            F::DEVICE_LOCAL | F::HOST_VISIBLE | F::HOST_COHERENT,
+            F::DEVICE_LOCAL | F::HOST_VISIBLE | F::HOST_COHERENT | F::HOST_CACHED,
+        ];
+        assert_eq!(readback_memory(&types, 0b111), Some((2, true)));
+        assert_eq!(readback_memory(&types, 0b011), Some((1, true)));
+        assert_eq!(readback_memory(&types, 0b001), None);
     }
 
     fn one(format: vk::Format, raw: &[u8]) -> [u8; 4] {
@@ -1187,6 +1149,8 @@ mod tests {
         };
         unsafe { (iface.set_image)(iface.handle, &frame, 0, std::ptr::null(), 0) };
         let pixels = ctx.readback_bgra(4, 2);
+        assert!(ctx.take_readback_timing().is_some());
+        assert_eq!(ctx.take_readback_timing(), None);
         assert_eq!(pixels.len(), 4 * 2 * 4);
         assert!(
             pixels.chunks(4).all(|p| p == [0, 0, 255, 255]),
@@ -1200,6 +1164,7 @@ mod tests {
             return;
         };
         assert!(ctx.readback_bgra(2, 2).iter().all(|&b| b == 0));
+        assert_eq!(ctx.take_readback_timing(), None);
     }
 
     #[test]
