@@ -1530,6 +1530,7 @@ pub(crate) mod tests {
         );
         let fw = Firmware {
             id: 81,
+            platform_id: Some(32),
             file_name: "scph5501.bin".into(),
             sha1_hash: None,
         };

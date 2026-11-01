@@ -333,6 +333,8 @@ pub struct RaAchievement {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Firmware {
     pub id: i64,
+    #[serde(default)]
+    pub platform_id: Option<i64>,
     pub file_name: String,
     pub sha1_hash: Option<String>,
 }
