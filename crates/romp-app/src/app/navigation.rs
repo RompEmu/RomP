@@ -52,9 +52,11 @@ impl Controller {
     fn update_pad_hints(&self, family: Option<Family>) {
         let Some(ui) = self.ui() else { return };
         let hints = match family {
-            Some(family) if !ui.get_dialog_open() && !ui.get_remap_open() => {
-                hints(ui.get_screen(), family)
-            }
+            Some(family) if !ui.get_dialog_open() && !ui.get_remap_open() => hints(
+                ui.get_screen(),
+                family,
+                ui.get_game_versions().row_count() > 1,
+            ),
             _ => Vec::new(),
         };
         if *self.pad_hints.borrow() == hints {
@@ -129,6 +131,12 @@ impl Controller {
             (SCREEN_GAME, X) => {
                 if ui.get_can_edit_collections() {
                     self.toggle_favorite();
+                }
+            }
+            (SCREEN_GAME, L | R) => {
+                let count = ui.get_game_versions().row_count();
+                if let Some(index) = version_step(button, ui.get_game_version_index(), count) {
+                    self.choose_version(index);
                 }
             }
             (SCREEN_GAME | SCREEN_SETTINGS, B) => self.back_to_library(),
@@ -208,10 +216,19 @@ fn tab_step(button: u32, rtl: bool) -> i32 {
     }
 }
 
+/// The version LB or RB moves to from `index`, staying put at either end of the list.
+fn version_step(button: u32, index: i32, count: usize) -> Option<usize> {
+    if count < 2 {
+        return None;
+    }
+    let step = if button == L { -1 } else { 1 };
+    Some((index + step).clamp(0, count as i32 - 1) as usize)
+}
+
 /// The buttons in a hint and what pressing them does.
 pub(super) type Hint = (Vec<Badge>, &'static str);
 
-fn hints(screen: i32, family: Family) -> Vec<Hint> {
+fn hints(screen: i32, family: Family, versions: bool) -> Vec<Hint> {
     let key = |button: Button| badge(family, button);
     let shoulders = vec![key(Button::LeftTrigger), key(Button::RightTrigger)];
     match screen {
@@ -225,14 +242,18 @@ fn hints(screen: i32, family: Family) -> Vec<Hint> {
             (vec![key(Button::West)], gettext_noop!("Surprise me")),
             (vec![key(Button::Start)], gettext_noop!("Settings")),
         ],
-        SCREEN_GAME => vec![
-            (
+        SCREEN_GAME => [
+            Some((
                 vec![key(family.confirm())],
                 gettext_noop!("Play or download"),
-            ),
-            (vec![key(Button::North)], gettext_noop!("Favorite")),
-            (vec![key(family.back())], gettext_noop!("Back")),
-        ],
+            )),
+            Some((vec![key(Button::North)], gettext_noop!("Favorite"))),
+            versions.then_some((shoulders, gettext_noop!("Change version"))),
+            Some((vec![key(family.back())], gettext_noop!("Back"))),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
         SCREEN_SETTINGS => vec![
             (shoulders, gettext_noop!("Change section")),
             (vec![key(family.back())], gettext_noop!("Back")),
@@ -261,21 +282,38 @@ mod tests {
 
     #[test]
     fn hints_name_the_buttons_of_the_controller_in_use() {
-        let library = hints(SCREEN_LIBRARY, Family::Xbox);
+        let library = hints(SCREEN_LIBRARY, Family::Xbox, false);
         assert_eq!(library[1], (vec![Badge::Text("A")], "Open"));
         assert_eq!(
             library[2],
             (vec![Badge::Text("LB"), Badge::Text("RB")], "Change list")
         );
         assert_eq!(library[3], (vec![Badge::Text("X")], "Surprise me"));
-        let game = hints(SCREEN_GAME, Family::Ps5);
+        let game = hints(SCREEN_GAME, Family::Ps5, false);
         assert_eq!(
             game[0],
             (vec![Badge::Shape(Shape::Cross)], "Play or download")
         );
         assert_eq!(game[2], (vec![Badge::Shape(Shape::Circle)], "Back"));
-        let settings = hints(SCREEN_SETTINGS, Family::Nintendo);
+        assert_eq!(game.len(), 3);
+        let versioned = hints(SCREEN_GAME, Family::Xbox, true);
+        assert_eq!(
+            versioned[2],
+            (vec![Badge::Text("LB"), Badge::Text("RB")], "Change version")
+        );
+        assert_eq!(versioned[3], (vec![Badge::Text("B")], "Back"));
+        let settings = hints(SCREEN_SETTINGS, Family::Nintendo, false);
         assert_eq!(settings[1], (vec![Badge::Text("B")], "Back"));
+    }
+
+    #[test]
+    fn shoulder_buttons_step_through_versions_and_stop_at_the_ends() {
+        assert_eq!(version_step(L, 1, 3), Some(0));
+        assert_eq!(version_step(R, 1, 3), Some(2));
+        assert_eq!(version_step(L, 0, 3), Some(0));
+        assert_eq!(version_step(R, 2, 3), Some(2));
+        assert_eq!(version_step(R, 0, 1), None);
+        assert_eq!(version_step(R, 0, 0), None);
     }
 
     #[test]
