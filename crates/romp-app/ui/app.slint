@@ -584,8 +584,8 @@ component Card inherits Rectangle {
                     border-radius: 10px;
                     background: Theme.scrim;
                     accessible-role: text;
-                    accessible-label: @tr("{} versions", root.game.versions);
-                    versions-text := Text { horizontal-alignment: center; text: @tr("{} versions", root.game.versions); color: Theme.text-strong; font-size: Theme.font-caption; font-weight: 600; }
+                    accessible-label: @tr("{n} version" | "{n} versions" % root.game.versions);
+                    versions-text := Text { horizontal-alignment: center; text: @tr("{n} version" | "{n} versions" % root.game.versions); color: Theme.text-strong; font-size: Theme.font-caption; font-weight: 600; }
                 }
                 if touch.has-hover: Rectangle { background: Theme.hover; }
                 if root.game.focused || keys.has-focus: Rectangle {
