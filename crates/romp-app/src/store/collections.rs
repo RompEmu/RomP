@@ -1,4 +1,4 @@
-use super::{Store, GROUP_DOWNLOADED};
+use super::{Store, SHOWN};
 use rusqlite::params;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,10 +86,12 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(&format!(
-                "SELECT c.key, c.kind, c.remote_id, c.name, c.owner,
-                        (SELECT COUNT(DISTINCT g.group_id) FROM collection_roms m
-                           JOIN games g ON g.id = m.rom_id
-                         WHERE m.key = c.key AND (?1 = 0 OR {GROUP_DOWNLOADED}))
+                "WITH {SHOWN}
+                 SELECT c.key, c.kind, c.remote_id, c.name, c.owner,
+                        (SELECT COALESCE(SUM(s.entries), 0) FROM shown s
+                         WHERE s.group_id IN (SELECT g.group_id FROM collection_roms m
+                                                JOIN games g ON g.id = m.rom_id
+                                              WHERE m.key = c.key))
                  FROM collections c ORDER BY c.kind, c.name COLLATE NOCASE, c.position",
             ))
             .expect("prepare");

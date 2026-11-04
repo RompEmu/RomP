@@ -123,8 +123,12 @@ pub struct Store {
 }
 
 /// Whether any version of `g`'s game is downloaded, for counts under "downloaded only".
-const GROUP_DOWNLOADED: &str =
-    "EXISTS (SELECT 1 FROM games d WHERE d.group_id = g.group_id AND d.local_path IS NOT NULL)";
+/// How many entries each group puts in the game list: every RomM pick, or one row when it has
+/// none; under "downloaded only" (`?1`), one when any version is downloaded.
+const SHOWN: &str = "shown AS (
+   SELECT group_id,
+          CASE WHEN ?1 THEN MAX(local_path IS NOT NULL) ELSE MAX(SUM(picked), 1) END AS entries
+   FROM games GROUP BY group_id)";
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -473,10 +477,11 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(&format!(
-                "SELECT p.id, p.slug, p.name, COUNT(DISTINCT g.group_id), p.aliases FROM platforms p
-                 JOIN games g ON g.platform_id = p.id
-                 WHERE ?1 = 0 OR {GROUP_DOWNLOADED}
-                 GROUP BY p.id ORDER BY p.name COLLATE NOCASE",
+                "WITH {SHOWN}
+                 SELECT p.id, p.slug, p.name, SUM(s.entries), p.aliases FROM platforms p
+                 JOIN (SELECT DISTINCT platform_id, group_id FROM games) g ON g.platform_id = p.id
+                 JOIN shown s ON s.group_id = g.group_id
+                 GROUP BY p.id HAVING SUM(s.entries) > 0 ORDER BY p.name COLLATE NOCASE",
             ))
             .expect("prepare");
         stmt.query_map([downloaded_only], |r| {
@@ -551,7 +556,8 @@ impl Store {
                  SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL,
                         g.group_favorite, COALESCE(p.slug, ''), g.versions
                  FROM ranked g LEFT JOIN platforms p ON p.id = g.platform_id
-                 WHERE g.n = 1 AND (?3 = 0 OR g.local_path IS NOT NULL)
+                 WHERE (g.n = 1 OR (?3 = 0 AND g.picked = 1))
+                   AND (?3 = 0 OR g.local_path IS NOT NULL)
                  ORDER BY {order}",
             ))
             .expect("prepare");
@@ -679,8 +685,8 @@ impl Store {
         self.conn
             .query_row(
                 &format!(
-                    "SELECT COUNT(DISTINCT g.group_id) FROM games g WHERE g.last_played IS NOT NULL
-                       AND (?1 = 0 OR {GROUP_DOWNLOADED})"
+                    "WITH {SHOWN} SELECT COALESCE(SUM(entries), 0) FROM shown
+                     WHERE group_id IN (SELECT group_id FROM games WHERE last_played IS NOT NULL)"
                 ),
                 [downloaded_only],
                 |r| r.get(0),
@@ -786,9 +792,9 @@ impl Store {
         self.conn
             .query_row(
                 &format!(
-                    "SELECT COUNT(DISTINCT g.group_id) FROM recommendations r
-                       JOIN games g ON g.id = r.rom_id
-                     WHERE ?1 = 0 OR {GROUP_DOWNLOADED}"
+                    "WITH {SHOWN} SELECT COALESCE(SUM(entries), 0) FROM shown
+                     WHERE group_id IN (SELECT g.group_id FROM recommendations r
+                                          JOIN games g ON g.id = r.rom_id)"
                 ),
                 [downloaded_only],
                 |r| r.get(0),
@@ -862,9 +868,12 @@ impl Store {
         self.conn
             .query_row(
                 &format!(
-                    "SELECT COUNT(DISTINCT CASE WHEN g.now_playing = 1 THEN g.group_id END),
-                            COUNT(DISTINCT CASE WHEN g.backlogged = 1 THEN g.group_id END)
-                     FROM games g WHERE ?1 = 0 OR {GROUP_DOWNLOADED}"
+                    "WITH {SHOWN}
+                     SELECT COALESCE(SUM(CASE WHEN group_id IN (SELECT group_id FROM games
+                                                WHERE now_playing = 1) THEN entries END), 0),
+                            COALESCE(SUM(CASE WHEN group_id IN (SELECT group_id FROM games
+                                                WHERE backlogged = 1) THEN entries END), 0)
+                     FROM shown"
                 ),
                 [downloaded_only],
                 |r| Ok((r.get(0)?, r.get(1)?)),
@@ -1798,6 +1807,49 @@ mod tests {
         let mut s = with_versions();
         s.set_picks(&[40]);
         assert_eq!(ids(&s, GameFilter::default()), [30, 40]);
+    }
+
+    #[test]
+    fn two_picks_in_one_group_both_show() {
+        let mut s = with_versions();
+        s.set_picks(&[30, 31, 40]);
+        assert_eq!(ids(&s, GameFilter::default()), [30, 31, 40]);
+        let counts: Vec<_> = s
+            .platforms(false)
+            .into_iter()
+            .map(|p| (p.id, p.count))
+            .collect();
+        assert_eq!(counts, [(2, 1), (1, 2)]);
+        s.mark_played(32, 1_000);
+        s.set_play_status(
+            32,
+            PlayStatus {
+                backlogged: true,
+                ..PlayStatus::default()
+            },
+        );
+        s.replace_collections(&[CollectionRecord {
+            key: "c:5".into(),
+            kind: CollectionKind::Mine,
+            remote_id: "5".into(),
+            name: "Couch".into(),
+            owner: None,
+            rom_ids: vec![32],
+        }]);
+        s.replace_recommendations(&[(32, "Because".into())]);
+        assert_eq!(ids(&s, scoped(Scope::Recent)), [30, 31]);
+        assert_eq!(s.recent_count(false), 2);
+        assert_eq!(s.recommended_count(false), 2);
+        assert_eq!(s.status_counts(false), (0, 2));
+        assert_eq!(s.collection("c:5").unwrap().count, 2);
+        s.set_local_path(31, Some("/roms/ff7-usa.chd"));
+        let downloaded = GameFilter {
+            downloaded_only: true,
+            ..GameFilter::default()
+        };
+        assert_eq!(ids(&s, downloaded), [31]);
+        assert_eq!(s.recent_count(true), 1);
+        assert_eq!(s.platforms(true)[0].count, 1);
     }
 
     #[test]
