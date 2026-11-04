@@ -54,6 +54,7 @@ mod storage;
 mod store;
 mod sync;
 mod updates;
+mod versions;
 mod vulkan;
 mod whats_new;
 mod xemu;

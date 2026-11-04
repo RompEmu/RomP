@@ -3,6 +3,7 @@ mod collections;
 pub use collections::{CollectionItem, CollectionKind, CollectionRecord};
 
 use crate::romm::types::{Platform, PlayStatus, Progress, Rom, RomMetadata};
+use crate::versions;
 use rusqlite::{params, Connection};
 use std::path::Path;
 
@@ -27,6 +28,12 @@ pub struct GameItem {
     pub favorite: bool,
     /// How many ROMs are versions of this game, itself included.
     pub versions: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Version {
+    pub id: i64,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -598,6 +605,63 @@ impl Store {
         .expect("query")
         .filter_map(Result::ok)
         .collect()
+    }
+
+    /// The versions of `id`'s game, the one the library shows first; empty when it has none.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by the version picker on the game page")
+    )]
+    pub fn versions(&self, id: i64) -> Vec<Version> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT g.id, COALESCE(g.fs_name, g.title) FROM games g
+                 WHERE g.group_id = (SELECT group_id FROM games WHERE id = ?1)",
+            )
+            .expect("prepare");
+        let rows: Vec<(i64, String)> = stmt
+            .query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .expect("query")
+            .filter_map(Result::ok)
+            .collect();
+        if rows.len() < 2 {
+            return Vec::new();
+        }
+        let tags: Vec<String> = rows.iter().map(|(_, name)| versions::label(name)).collect();
+        let pick = self.group_pick(id);
+        let mut list: Vec<Version> = rows
+            .iter()
+            .zip(&tags)
+            .map(|((id, name), label)| Version {
+                id: *id,
+                label: if tags.iter().filter(|t| *t == label).count() > 1 {
+                    versions::stem(name).to_string()
+                } else {
+                    label.clone()
+                },
+            })
+            .collect();
+        list.sort_by_cached_key(|v| (Some(v.id) != pick, v.label.to_lowercase(), v.id));
+        list
+    }
+
+    /// The version the library shows for `id`'s game, leaving "downloaded only" aside.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by the version picker on the game page")
+    )]
+    pub fn group_pick(&self, id: i64) -> Option<i64> {
+        self.conn
+            .query_row(
+                "SELECT g.id FROM games g
+                 WHERE g.group_id = (SELECT group_id FROM games WHERE id = ?1)
+                 ORDER BY g.picked DESC, g.last_played IS NULL, g.last_played DESC, g.id
+                 LIMIT 1",
+                [id],
+                |r| r.get(0),
+            )
+            .ok()
     }
 
     pub fn rebase_local_paths(&self, old: &str, new: &str) -> usize {
@@ -1806,6 +1870,46 @@ mod tests {
             .map(|p| (p.id, p.count))
             .collect();
         assert_eq!(counts, [(1, 1)]);
+    }
+
+    #[test]
+    fn a_removed_version_leaves_the_group() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        s.retain_games(&[30, 31, 40]);
+        assert_eq!(s.versions(31).len(), 2);
+        assert_eq!(item(&s, GameFilter::default(), 31).versions, 2);
+    }
+
+    #[test]
+    fn versions_list_the_pick_first_with_labels() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        let versions = s.versions(30);
+        let ids: Vec<_> = versions.iter().map(|v| v.id).collect();
+        let labels: Vec<_> = versions.iter().map(|v| v.label.as_str()).collect();
+        assert_eq!(ids, [31, 32, 30]);
+        assert_eq!(labels, ["USA", "Europe, Demo", "Japan"]);
+        assert!(s.versions(40).is_empty());
+    }
+
+    #[test]
+    fn versions_with_the_same_tags_are_told_apart_by_file_name() {
+        let mut s = Store::open_in_memory().unwrap();
+        versioned(&mut s, 50, 1, "Doom", "Doom (USA).zip", &[51]);
+        versioned(&mut s, 51, 1, "Doom", "Doom II (USA).zip", &[50]);
+        s.set_picks(&[50]);
+        let labels: Vec<_> = s.versions(50).into_iter().map(|v| v.label).collect();
+        assert_eq!(labels, ["Doom (USA)", "Doom II (USA)"]);
+    }
+
+    #[test]
+    fn group_pick_follows_the_pick() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        assert_eq!(s.group_pick(30), Some(31));
+        assert_eq!(s.group_pick(40), Some(40));
+        assert_eq!(s.group_pick(99), None);
     }
 
     #[test]
