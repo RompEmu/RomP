@@ -389,6 +389,11 @@ impl Controller {
                 with_controller(|c| c.toggle_status(index, on));
             }
         });
+        ui.on_choose_game_version(|index| {
+            if let Ok(index) = usize::try_from(index) {
+                with_controller(|c| c.choose_version(index));
+            }
+        });
         ui.on_dialog_accepted(|value| with_controller(|c| c.dialog_accepted(value.to_string())));
         ui.on_dialog_cancelled(|| with_controller(|c| c.close_dialog()));
         ui.on_search_edited(|text| with_controller(|c| c.set_search(text.to_string())));

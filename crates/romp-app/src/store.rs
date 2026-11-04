@@ -600,10 +600,6 @@ impl Store {
     }
 
     /// The versions of `id`'s game, the one the library shows first; empty when it has none.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by the version picker on the game page")
-    )]
     pub fn versions(&self, id: i64) -> Vec<Version> {
         let mut stmt = self
             .conn

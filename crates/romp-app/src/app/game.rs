@@ -14,7 +14,7 @@ use crate::saves::{self, SramOutcome};
 use crate::store::GameDetail;
 use crate::xemu::{self, Xemu};
 use crate::{GameCard, Shot};
-use slint::{Image, Model, ModelRc, VecModel};
+use slint::{Image, Model, ModelRc, SharedString, VecModel};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -28,6 +28,7 @@ pub(super) struct GameState {
     detail: GameDetail,
     pub(super) shots: Rc<VecModel<Shot>>,
     similar: Rc<VecModel<GameCard>>,
+    versions: Vec<i64>,
 }
 
 fn load_image(path: &Path) -> Option<Image> {
@@ -125,6 +126,7 @@ impl Controller {
             detail: detail.clone(),
             shots: shots.clone(),
             similar: similar.clone(),
+            versions: Vec::new(),
         });
         self.refresh_game_page(true);
         if let Some(ui) = self.ui() {
@@ -325,6 +327,7 @@ impl Controller {
         ui.set_game_playable(playable);
         self.refresh_collection_controls(detail.id);
         self.refresh_status_controls(detail.id);
+        self.refresh_version_controls(detail.id);
         ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
             ui.set_game_status(tr!("RomP can't play {} games yet.", detail.platform).into());
@@ -928,6 +931,35 @@ impl Controller {
                     .to_string(),
             );
         }
+    }
+
+    fn refresh_version_controls(&self, id: i64) {
+        let versions = self.shared.store.lock().unwrap().versions(id);
+        let index = versions.iter().position(|v| v.id == id).unwrap_or(0);
+        if let Some(ui) = self.ui() {
+            let labels: Vec<SharedString> =
+                versions.iter().map(|v| v.label.as_str().into()).collect();
+            ui.set_game_versions(ModelRc::new(VecModel::from(labels)));
+            ui.set_game_version_index(index as i32);
+        }
+        if let Some(state) = self.game.borrow_mut().as_mut() {
+            state.versions = versions.into_iter().map(|v| v.id).collect();
+        }
+    }
+
+    pub(super) fn choose_version(&self, index: usize) {
+        let Some(id) = self
+            .game
+            .borrow()
+            .as_ref()
+            .and_then(|g| g.versions.get(index).copied())
+        else {
+            return;
+        };
+        if self.current_game_id() == Some(id) {
+            return;
+        }
+        self.open_game(id);
     }
 
     pub(super) fn game_status(&self, id: i64, text: String) {

@@ -1440,6 +1440,9 @@ component GamePage inherits FocusScope {
     in property <string> status-label;
     in property <[StatusOption]> status-options;
     callback toggle-status(int, bool);
+    in property <[string]> versions;
+    in property <int> version-index;
+    callback choose-version(int);
 
     property <int> viewing: -1;
     property <bool> banner-from-shot: root.shots.length > 0 && root.shots[0].loaded;
@@ -1629,6 +1632,44 @@ component GamePage inherits FocusScope {
                                                     text: option.label;
                                                     checked: option.checked;
                                                     toggled => { root.toggle-status(i, self.checked); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if root.versions.length > 1: Rectangle {
+                                width: version-button.preferred-width;
+                                version-button := Button {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: root.versions[root.version-index];
+                                    clicked => { version-popup.show(); }
+                                }
+                                version-popup := PopupWindow {
+                                    y: parent.height + 4px;
+                                    width: 260px;
+                                    height: version-list.preferred-height;
+                                    close-policy: close-on-click-outside;
+                                    Rectangle {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        background: Theme.surface-raised;
+                                        border-radius: 8px;
+                                        border-width: 1px;
+                                        border-color: Theme.surface-selected;
+                                        drop-shadow-blur: 12px;
+                                        drop-shadow-color: Theme.shadow;
+                                        version-list := VerticalLayout {
+                                            width: parent.width;
+                                            padding: 12px;
+                                            spacing: 6px;
+                                            for label[i] in root.versions: Button {
+                                                text: label;
+                                                primary: i == root.version-index;
+                                                clicked => {
+                                                    version-popup.close();
+                                                    root.choose-version(i);
                                                 }
                                             }
                                         }
@@ -2988,6 +3029,9 @@ export component AppWindow inherits Window {
     in property <string> game-status-label;
     in property <[StatusOption]> game-status-options;
     callback toggle-status(int, bool);
+    in property <[string]> game-versions;
+    in property <int> game-version-index;
+    callback choose-game-version(int);
     in property <int> grid-focus-row: -1;
     in-out property <length> grid-scroll <=> library.scroll-y;
     in property <float> grid-focus-top;
@@ -3205,6 +3249,9 @@ export component AppWindow inherits Window {
             status-label: root.game-status-label;
             status-options: root.game-status-options;
             toggle-status(index, on) => { root.toggle-status(index, on); }
+            versions: root.game-versions;
+            version-index: root.game-version-index;
+            choose-version(index) => { root.choose-game-version(index); }
         }
         if root.screen == 4: SettingsPage {
             back-label: root.heading;
