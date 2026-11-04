@@ -984,7 +984,7 @@ impl Controller {
             on_ui(move |c| {
                 if let Err(e) = result {
                     if let Some(prev) = prev {
-                        c.shared.store.lock().unwrap().set_picked(prev);
+                        c.shared.store.lock().unwrap().undo_pick(id, prev);
                     }
                     c.reload_games();
                     if let Some(current) = c.current_game_id() {

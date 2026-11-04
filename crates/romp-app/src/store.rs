@@ -439,6 +439,13 @@ impl Store {
             .expect("set picked");
     }
 
+    /// Puts `prev` back as the pick when `failed` still is, so a pick made since stays.
+    pub fn undo_pick(&mut self, failed: i64, prev: i64) {
+        if self.group_pick(failed) == Some(failed) {
+            self.set_picked(prev);
+        }
+    }
+
     pub fn groups_consistent(&self) -> bool {
         self.pickless_groups().is_empty()
     }
@@ -1995,6 +2002,19 @@ mod tests {
         assert_ne!(ids(&s, GameFilter::default()), before);
         s.set_picked(prev);
         assert_eq!(ids(&s, GameFilter::default()), before);
+    }
+
+    #[test]
+    fn undoing_a_pick_leaves_a_newer_one_alone() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        s.set_picked(32);
+        s.undo_pick(32, 31);
+        assert_eq!(s.group_pick(30), Some(31));
+        s.set_picked(32);
+        s.set_picked(30);
+        s.undo_pick(32, 31);
+        assert_eq!(s.group_pick(30), Some(30));
     }
 
     #[test]
