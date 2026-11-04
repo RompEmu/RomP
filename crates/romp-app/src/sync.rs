@@ -187,6 +187,12 @@ pub async fn sync_library(
     }
 
     refresh_picks(client, store, cancel).await?;
+    if since.is_some() && !store.lock().unwrap().groups_consistent() {
+        let full = fetch_pages(client, store, page_size, None, cancel, &mut report).await?;
+        newest = newest.max(full);
+        refresh_picks(client, store, cancel).await?;
+    }
+
     if let Some(cursor) = started.map(cursor_from).or(newest) {
         write(store, cancel, |s| s.set("last_sync_at", &cursor))?;
     }
@@ -264,7 +270,7 @@ mod tests {
         );
     }
     use crate::romm::client::tests::base_of;
-    use crate::romm::types::rom;
+    use crate::romm::types::{rom, SiblingRom};
     use crate::store::GameFilter;
     use serde_json::{json, Value};
     use wiremock::matchers::{method, path, query_param, query_param_is_missing};
@@ -569,6 +575,47 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ids(&store), [2]);
+    }
+
+    #[tokio::test]
+    async fn a_split_group_triggers_a_full_pass() {
+        let server = server_with(
+            json!([{"id": 1, "slug": "snes", "display_name": "SNES", "rom_count": 2}]),
+            json!([1, 2]),
+        )
+        .await;
+        mount_picks(&server, json!({"items": [], "rom_id_index": [1, 2]})).await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("updated_after", "2026-01-03T00:00:00+00:00"))
+            .respond_with(page(vec![]))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param_is_missing("updated_after"))
+            .respond_with(page(vec![
+                rom_json(1, "2026-01-01T00:00:00+00:00"),
+                rom_json(2, "2026-01-02T00:00:00+00:00"),
+            ]))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let store = store();
+        {
+            let mut s = store.lock().unwrap();
+            s.set("last_sync_at", "2026-01-03T00:00:00+00:00");
+            let mut a = rom(1, 1, "A", "x");
+            a.sibling_roms = vec![SiblingRom { id: 2 }];
+            let mut b = rom(2, 1, "B", "x");
+            b.sibling_roms = vec![SiblingRom { id: 1 }];
+            s.upsert_games(&[a, b]);
+            s.set_picks(&[1, 2]);
+        }
+        sync_library(&client(&server), &store, 500, &go())
+            .await
+            .unwrap();
+        assert_eq!(ids(&store), [1, 2]);
     }
 
     #[tokio::test]

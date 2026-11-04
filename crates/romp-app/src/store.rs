@@ -439,10 +439,6 @@ impl Store {
             .expect("set picked");
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by the game versions sync")
-    )]
     pub fn groups_consistent(&self) -> bool {
         self.conn
             .query_row(
