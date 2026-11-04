@@ -331,6 +331,41 @@ impl Client {
         .map(|_| ())
     }
 
+    /// The ROM id RomM shows for each game when versions are grouped, in its list order.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "wired up by the game versions UI")
+    )]
+    pub async fn picked_rom_ids(&self) -> Result<Vec<i64>, Error> {
+        #[derive(serde::Deserialize)]
+        struct Index {
+            #[serde(default)]
+            rom_id_index: Vec<i64>,
+        }
+        let query = [
+            ("group_by_meta_id", "true".to_string()),
+            ("with_rom_id_index", "true".to_string()),
+            ("limit", "1".to_string()),
+            ("with_char_index", "false".to_string()),
+            ("with_filter_values", "false".to_string()),
+        ];
+        let index: Index = self.get_json("/api/roms", &query).await?;
+        Ok(index.rom_id_index)
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "wired up by the game versions UI")
+    )]
+    pub async fn set_main_version(&self, id: i64) -> Result<(), Error> {
+        self.send(
+            self.request(reqwest::Method::PUT, &format!("/api/roms/{id}/props"))
+                .json(&serde_json::json!({ "is_main_sibling": true })),
+        )
+        .await
+        .map(|_| ())
+    }
+
     pub async fn mark_played(&self, id: i64) -> Result<(), Error> {
         self.send(
             self.request(reqwest::Method::PUT, &format!("/api/roms/{id}/props"))
@@ -1895,5 +1930,67 @@ pub(crate) mod tests {
             3
         );
         assert_eq!(client.download_state(3).await.unwrap(), b"STATE");
+    }
+
+    #[test]
+    fn rom_parses_sibling_ids() {
+        let mut json = serde_json::json!({
+            "id": 1, "platform_id": 2, "name": "X", "fs_name": "X.bin",
+            "summary": null, "updated_at": "t", "path_cover_small": null,
+            "path_cover_large": null, "fs_size_bytes": 1,
+            "sibling_roms": [{"id": 7, "name": "X", "fs_name_no_tags": "X",
+                "fs_name_no_ext": "X (Japan)", "is_main_sibling": false}]
+        });
+        let rom: crate::romm::types::Rom = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(rom.sibling_roms, [crate::romm::types::SiblingRom { id: 7 }]);
+        json.as_object_mut().unwrap().remove("sibling_roms");
+        let rom: crate::romm::types::Rom = serde_json::from_value(json).unwrap();
+        assert!(rom.sibling_roms.is_empty());
+    }
+
+    #[tokio::test]
+    async fn picked_rom_ids_asks_for_the_grouped_index() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("group_by_meta_id", "true"))
+            .and(query_param("with_rom_id_index", "true"))
+            .and(query_param("limit", "1"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"items": [], "rom_id_index": [3, 1, 2]})),
+            )
+            .mount(&server)
+            .await;
+        let client = Client::new(base_of(&server, "/"));
+        assert_eq!(client.picked_rom_ids().await.unwrap(), vec![3, 1, 2]);
+    }
+
+    #[tokio::test]
+    async fn picked_rom_ids_is_empty_without_an_index() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"items": []})),
+            )
+            .mount(&server)
+            .await;
+        let client = Client::new(base_of(&server, "/"));
+        assert_eq!(client.picked_rom_ids().await.unwrap(), Vec::<i64>::new());
+    }
+
+    #[tokio::test]
+    async fn set_main_version_puts_the_flag() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/api/roms/5/props"))
+            .and(body_json(serde_json::json!({"is_main_sibling": true})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = Client::new(base_of(&server, "/"));
+        client.set_main_version(5).await.unwrap();
     }
 }

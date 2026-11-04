@@ -193,6 +193,14 @@ pub struct Rom {
     pub created_at: Option<String>,
     #[serde(default)]
     pub rom_user: Option<RomUser>,
+    #[serde(default)]
+    pub sibling_roms: Vec<SiblingRom>,
+}
+
+/// Another version of the same game, as RomM lists it on a ROM.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct SiblingRom {
+    pub id: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -382,6 +390,7 @@ pub(crate) fn rom(id: i64, platform_id: i64, name: &str, updated_at: &str) -> Ro
         merged_screenshots: Vec::new(),
         created_at: None,
         rom_user: None,
+        sibling_roms: Vec::new(),
     }
 }
 
