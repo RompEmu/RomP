@@ -440,15 +440,22 @@ impl Store {
     }
 
     pub fn groups_consistent(&self) -> bool {
-        self.conn
-            .query_row(
-                "SELECT NOT EXISTS (
-                   SELECT 1 FROM games GROUP BY group_id
-                   HAVING COUNT(*) >= 2 AND SUM(picked) = 0)",
-                [],
-                |r| r.get(0),
+        self.pickless_groups().is_empty()
+    }
+
+    /// The groups of two or more versions that RomM picked none of, in order.
+    pub fn pickless_groups(&self) -> Vec<i64> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT group_id FROM games GROUP BY group_id
+                 HAVING COUNT(*) >= 2 AND SUM(picked) = 0 ORDER BY group_id",
             )
-            .expect("groups consistent")
+            .expect("prepare");
+        stmt.query_map([], |r| r.get(0))
+            .expect("query")
+            .filter_map(Result::ok)
+            .collect()
     }
 
     pub fn retain_games(&mut self, ids: &[i64]) -> usize {
@@ -1732,6 +1739,7 @@ mod tests {
         assert!(s.groups_consistent());
         s.set_picks(&[1]);
         assert!(!s.groups_consistent());
+        assert_eq!(s.pickless_groups(), [19]);
         s.set_picks(&[]);
         assert!(!s.groups_consistent());
     }

@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const PAGE_SIZE: i64 = 500;
 const CURSOR_MARGIN: Duration = Duration::from_secs(60);
+const VERSIONS_REPAIRED: &str = "versions_repaired";
 
 pub fn cursor_from(time: SystemTime) -> String {
     iso_utc(time.checked_sub(CURSOR_MARGIN).unwrap_or(UNIX_EPOCH))
@@ -142,19 +143,33 @@ async fn fetch_pages(
 }
 
 /// A failed or empty answer keeps the picks already here: the sync is still good without them.
+/// Says whether new picks were written.
 async fn refresh_picks(
     client: &Client,
     store: &Mutex<Store>,
     cancel: &AtomicBool,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     match client.picked_rom_ids().await {
-        Ok(picks) if !picks.is_empty() => write(store, cancel, |s| s.set_picks(&picks)),
-        Ok(_) => Ok(()),
+        Ok(picks) if !picks.is_empty() => {
+            write(store, cancel, |s| s.set_picks(&picks)).map(|_| true)
+        }
+        Ok(_) => Ok(false),
         Err(e) => {
             tracing::warn!("could not fetch RomM's version picks: {e}");
-            Ok(())
+            Ok(false)
         }
     }
+}
+
+/// The groups RomM picked none of, when a full pass hasn't already tried to mend them: a
+/// library whose groups RomM sees differently would otherwise refetch everything each sync.
+fn groups_to_repair(store: &Store) -> Option<String> {
+    if store.groups_consistent() {
+        return None;
+    }
+    let groups: Vec<String> = store.pickless_groups().iter().map(i64::to_string).collect();
+    let fingerprint = groups.join(",");
+    (store.get(VERSIONS_REPAIRED).as_deref() != Some(&fingerprint)).then_some(fingerprint)
 }
 
 pub async fn sync_library(
@@ -186,11 +201,13 @@ pub async fn sync_library(
         newest = newest.max(full);
     }
 
-    refresh_picks(client, store, cancel).await?;
-    if since.is_some() && !store.lock().unwrap().groups_consistent() {
+    let picked = refresh_picks(client, store, cancel).await?;
+    let repair = groups_to_repair(&store.lock().unwrap());
+    if let Some(groups) = repair.filter(|_| picked && since.is_some()) {
         let full = fetch_pages(client, store, page_size, None, cancel, &mut report).await?;
         newest = newest.max(full);
         refresh_picks(client, store, cancel).await?;
+        write(store, cancel, |s| s.set(VERSIONS_REPAIRED, &groups))?;
     }
 
     if let Some(cursor) = started.map(cursor_from).or(newest) {
@@ -616,6 +633,74 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ids(&store), [1, 2]);
+    }
+
+    fn with_a_pickless_group(store: &Mutex<Store>) {
+        let mut s = store.lock().unwrap();
+        s.set("last_sync_at", "2026-01-03T00:00:00+00:00");
+        let mut a = rom(1, 1, "A", "x");
+        a.sibling_roms = vec![SiblingRom { id: 2 }];
+        let mut b = rom(2, 1, "B", "x");
+        b.sibling_roms = vec![SiblingRom { id: 1 }];
+        s.upsert_games(&[a, b]);
+        s.set_picks(&[3]);
+    }
+
+    async fn mount_full_page(server: &MockServer, expected: u64) {
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param_is_missing("updated_after"))
+            .respond_with(page(vec![
+                rom_json(1, "2026-01-01T00:00:00+00:00"),
+                with_sibling(rom_json(2, "2026-01-02T00:00:00+00:00"), 1),
+            ]))
+            .expect(expected)
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .respond_with(page(vec![]))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn a_failing_picks_request_doesnt_refetch_everything() {
+        let server = server_with(
+            json!([{"id": 1, "slug": "snes", "display_name": "SNES", "rom_count": 2}]),
+            json!([1, 2]),
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms"))
+            .and(query_param("group_by_meta_id", "true"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+        mount_full_page(&server, 0).await;
+        let store = store();
+        with_a_pickless_group(&store);
+        sync_library(&client(&server), &store, 500, &go())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_repair_isnt_repeated_for_the_same_groups() {
+        let server = server_with(
+            json!([{"id": 1, "slug": "snes", "display_name": "SNES", "rom_count": 2}]),
+            json!([1, 2]),
+        )
+        .await;
+        mount_picks(&server, json!({"items": [], "rom_id_index": [3]})).await;
+        mount_full_page(&server, 1).await;
+        let store = store();
+        with_a_pickless_group(&store);
+        for _ in 0..2 {
+            sync_library(&client(&server), &store, 500, &go())
+                .await
+                .unwrap();
+        }
     }
 
     #[tokio::test]
