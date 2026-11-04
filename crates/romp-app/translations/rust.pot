@@ -209,6 +209,14 @@ msgid "Installing the PS3 system software…"
 msgstr ""
 
 #: crates/romp-app/src/app/game.rs
+msgid "You're offline, so this version doesn't become your main one."
+msgstr ""
+
+#: crates/romp-app/src/app/game.rs
+msgid "Couldn't make this your main version: {e}."
+msgstr ""
+
+#: crates/romp-app/src/app/game.rs
 msgid "Could not start the game: {e}"
 msgstr ""
 
