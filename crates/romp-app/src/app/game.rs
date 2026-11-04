@@ -15,6 +15,7 @@ use crate::store::GameDetail;
 use crate::xemu::{self, Xemu};
 use crate::{GameCard, Shot};
 use slint::{Image, Model, ModelRc, VecModel};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -213,7 +214,13 @@ impl Controller {
     fn show_similar(&self, id: i64, ids: Vec<i64>) {
         let games: Vec<GameDetail> = {
             let store = self.shared.store.lock().unwrap();
-            ids.iter().filter_map(|&i| store.game(i)).collect()
+            let own = store.group_pick(id).unwrap_or(id);
+            let mut seen = HashSet::new();
+            ids.iter()
+                .filter_map(|&i| store.group_pick(i))
+                .filter(|&pick| pick != own && seen.insert(pick))
+                .filter_map(|pick| store.game(pick))
+                .collect()
         };
         let mut wanted = Vec::new();
         let cards: Vec<GameCard> = games

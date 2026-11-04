@@ -639,10 +639,6 @@ impl Store {
     }
 
     /// The version the library shows for `id`'s game, leaving "downloaded only" aside.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by the version picker on the game page")
-    )]
     pub fn group_pick(&self, id: i64) -> Option<i64> {
         self.conn
             .query_row(
