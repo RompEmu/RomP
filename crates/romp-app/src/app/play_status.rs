@@ -59,7 +59,7 @@ fn label(status: PlayStatus) -> String {
 }
 
 impl Controller {
-    fn can_edit_status(&self) -> bool {
+    pub(super) fn can_edit_status(&self) -> bool {
         self.has_scope("roms.user.write") && !self.offline.get() && self.client.borrow().is_some()
     }
 

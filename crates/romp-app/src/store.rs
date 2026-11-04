@@ -425,10 +425,6 @@ impl Store {
         tx.commit().expect("commit");
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by choosing a version in the UI")
-    )]
     pub fn set_picked(&mut self, id: i64) {
         self.conn
             .execute(

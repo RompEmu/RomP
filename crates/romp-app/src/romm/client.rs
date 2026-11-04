@@ -349,10 +349,6 @@ impl Client {
         Ok(index.rom_id_index)
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "wired up by the game versions UI")
-    )]
     pub async fn set_main_version(&self, id: i64) -> Result<(), Error> {
         self.send(
             self.request(reqwest::Method::PUT, &format!("/api/roms/{id}/props"))

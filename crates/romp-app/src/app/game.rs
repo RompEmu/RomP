@@ -959,7 +959,38 @@ impl Controller {
         if self.current_game_id() == Some(id) {
             return;
         }
+        let client = self.client.borrow().clone();
+        let Some(client) = client.filter(|_| self.can_edit_status()) else {
+            self.open_game(id);
+            self.game_status(
+                id,
+                tr!("You're offline, so this version doesn't become your main one."),
+            );
+            return;
+        };
+        let prev = {
+            let mut store = self.shared.store.lock().unwrap();
+            let prev = store.group_pick(id);
+            store.set_picked(id);
+            prev
+        };
+        self.reload_games();
         self.open_game(id);
+        self.shared.rt.spawn(async move {
+            let result = client.set_main_version(id).await;
+            on_ui(move |c| {
+                if let Err(e) = result {
+                    if let Some(prev) = prev {
+                        c.shared.store.lock().unwrap().set_picked(prev);
+                    }
+                    c.reload_games();
+                    if let Some(current) = c.current_game_id() {
+                        c.refresh_version_controls(current);
+                    }
+                    c.game_status(id, tr!("Couldn't make this your main version: {e}.", e));
+                }
+            });
+        });
     }
 
     pub(super) fn game_status(&self, id: i64, text: String) {
