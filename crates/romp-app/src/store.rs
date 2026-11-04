@@ -1896,6 +1896,18 @@ mod tests {
     }
 
     #[test]
+    fn set_picked_then_restoring_the_previous_pick_round_trips() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        let before = ids(&s, GameFilter::default());
+        let prev = s.group_pick(30).unwrap();
+        s.set_picked(32);
+        assert_ne!(ids(&s, GameFilter::default()), before);
+        s.set_picked(prev);
+        assert_eq!(ids(&s, GameFilter::default()), before);
+    }
+
+    #[test]
     fn group_pick_follows_the_pick() {
         let mut s = with_versions();
         s.set_picks(&[31, 40]);
