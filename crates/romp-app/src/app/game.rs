@@ -245,6 +245,7 @@ impl Controller {
                     downloaded: g.local_path.is_some(),
                     focused: false,
                     favorite: false,
+                    versions: 1,
                     aspect: details::box_aspect(&g.platform_slug),
                 }
             })

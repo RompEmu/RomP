@@ -20,7 +20,7 @@ export struct KeyHint { keys: string, action: string }
 export struct PadKey { text: string, shape: string }
 export struct PadHint { keys: [PadKey], action: string }
 export struct RemapRow { name: string, binding: string, waiting: bool }
-export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool, aspect: float }
+export struct GameCard { id: int, title: string, platform: string, cover: image, has-cover: bool, downloaded: bool, focused: bool, favorite: bool, versions: int, aspect: float }
 export struct GameRow { cards: [GameCard], shelf: float }
 export struct Fact { label: string, value: string }
 export struct Shot { image: image, loaded: bool }
@@ -575,6 +575,17 @@ component Card inherits Rectangle {
                     border-radius: 11px;
                     background: Theme.success;
                     Text { horizontal-alignment: Locale.start; text: "✓"; color: Theme.text-strong; font-weight: 700; }
+                }
+                if root.game.versions > 1: Rectangle {
+                    x: Locale.rtl ? 8px : parent.width - self.width - 8px;
+                    y: parent.height - self.height - 8px;
+                    width: versions-text.preferred-width + 12px;
+                    height: 20px;
+                    border-radius: 10px;
+                    background: Theme.scrim;
+                    accessible-role: text;
+                    accessible-label: @tr("{} versions", root.game.versions);
+                    versions-text := Text { horizontal-alignment: center; text: @tr("{} versions", root.game.versions); color: Theme.text-strong; font-size: Theme.font-caption; font-weight: 600; }
                 }
                 if touch.has-hover: Rectangle { background: Theme.hover; }
                 if root.game.focused || keys.has-focus: Rectangle {

@@ -980,6 +980,7 @@ impl Controller {
                         downloaded: g.downloaded,
                         focused: focus == Some(start + j),
                         favorite: g.favorite,
+                        versions: g.versions as i32,
                         aspect: crate::details::box_aspect(&g.platform_slug),
                     })
                     .collect();
