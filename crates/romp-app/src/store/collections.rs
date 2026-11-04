@@ -143,6 +143,14 @@ impl Store {
             .collect()
     }
 
+    /// The versions of `rom_id`'s game that are in the collection.
+    pub fn group_members_in(&self, key: &str, rom_id: i64) -> Vec<i64> {
+        self.group_members(rom_id)
+            .into_iter()
+            .filter(|&id| self.memberships(id).iter().any(|k| k == key))
+            .collect()
+    }
+
     pub fn rename_collection(&mut self, key: &str, name: &str) {
         self.conn
             .execute(
@@ -181,7 +189,7 @@ fn insert(tx: &rusqlite::Transaction, r: &CollectionRecord, position: i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::romm::types::rom;
+    use crate::romm::types::{rom, Rom, SiblingRom};
     use crate::store::{GameFilter, Scope};
 
     fn record(key: &str, kind: CollectionKind, name: &str, rom_ids: &[i64]) -> CollectionRecord {
@@ -278,6 +286,30 @@ mod tests {
         s.delete_collection("c:4");
         assert!(s.collection("c:4").is_none());
         assert_eq!(s.memberships(1), ["v:Zz"]);
+    }
+
+    #[test]
+    fn group_members_in_a_collection_are_only_the_real_members() {
+        let mut s = seeded();
+        s.upsert_games(&[
+            Rom {
+                sibling_roms: vec![SiblingRom { id: 11 }, SiblingRom { id: 12 }],
+                ..rom(10, 1, "D", "t")
+            },
+            Rom {
+                sibling_roms: vec![SiblingRom { id: 10 }, SiblingRom { id: 12 }],
+                ..rom(11, 1, "D", "t")
+            },
+            Rom {
+                sibling_roms: vec![SiblingRom { id: 10 }, SiblingRom { id: 11 }],
+                ..rom(12, 1, "D", "t")
+            },
+        ]);
+        s.set_member("c:1", 11, true);
+        assert_eq!(s.group_members_in("c:1", 10), [11]);
+        assert_eq!(s.group_members_in("c:1", 3), [3]);
+        assert!(s.group_members_in("c:1", 1).is_empty());
+        assert!(s.group_members_in("c:4", 12).is_empty());
     }
 
     #[test]

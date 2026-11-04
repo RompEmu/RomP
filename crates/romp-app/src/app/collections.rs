@@ -468,15 +468,18 @@ impl Controller {
         let show = self.has_scope("collections.read");
         ui.set_show_collections(show);
         ui.set_can_edit_collections(self.can_edit_collections());
-        let (collections, member_of) = {
+        let (collections, member_of, favorite) = {
             let store = self.shared.store.lock().unwrap();
-            (store.collections(false), store.memberships(rom_id))
+            let favorite = store
+                .favorites()
+                .is_some_and(|f| !store.group_members_in(&f.key, rom_id).is_empty());
+            (
+                store.collections(false),
+                store.memberships(rom_id),
+                favorite,
+            )
         };
-        ui.set_game_favorite(
-            collections
-                .iter()
-                .any(|c| c.kind == CollectionKind::Favorites && member_of.contains(&c.key)),
-        );
+        ui.set_game_favorite(favorite);
         let memberships: Vec<Membership> = collections
             .iter()
             .filter(|c| c.kind == CollectionKind::Mine)
