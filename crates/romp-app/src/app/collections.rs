@@ -519,19 +519,18 @@ impl Controller {
         match favorites {
             Some(favorites) => {
                 // The heart shows when any version is a favourite, so clearing it clears them all.
-                let members = self.shared.store.lock().unwrap().group_members(rom_id);
-                let favorited = {
-                    let store = self.shared.store.lock().unwrap();
-                    members
-                        .iter()
-                        .any(|&id| store.memberships(id).contains(&favorites.key))
-                };
-                if favorited {
-                    for id in members {
+                let favorited = self
+                    .shared
+                    .store
+                    .lock()
+                    .unwrap()
+                    .group_members_in(&favorites.key, rom_id);
+                if favorited.is_empty() {
+                    self.set_membership(favorites, rom_id, true);
+                } else {
+                    for id in favorited {
                         self.set_membership(favorites.clone(), id, false);
                     }
-                } else {
-                    self.set_membership(favorites, rom_id, true);
                 }
             }
             None => self.create_collection("Favorites".into(), true, Some(rom_id)),
