@@ -595,6 +595,27 @@ impl Store {
         .collect()
     }
 
+    /// Every id in `id`'s group, `id` alone when it has no versions.
+    pub fn group_members(&self, id: i64) -> Vec<i64> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT g.id FROM games g
+                 WHERE g.group_id = (SELECT group_id FROM games WHERE id = ?1)",
+            )
+            .expect("prepare");
+        let ids: Vec<i64> = stmt
+            .query_map([id], |r| r.get(0))
+            .expect("query")
+            .filter_map(Result::ok)
+            .collect();
+        if ids.is_empty() {
+            vec![id]
+        } else {
+            ids
+        }
+    }
+
     /// The versions of `id`'s game, the one the library shows first; empty when it has none.
     pub fn versions(&self, id: i64) -> Vec<Version> {
         let mut stmt = self
@@ -1818,6 +1839,25 @@ mod tests {
         assert_eq!(s.status_counts(false), (1, 0));
         assert_eq!(s.recent_count(false), 1);
         assert_eq!(s.collection("c:5").unwrap().count, 1);
+    }
+
+    #[test]
+    fn unfavoriting_clears_every_version() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        s.replace_collections(&[CollectionRecord {
+            key: "c:1".into(),
+            kind: CollectionKind::Favorites,
+            remote_id: "1".into(),
+            name: "Favorites".into(),
+            owner: None,
+            rom_ids: vec![30],
+        }]);
+        assert!(item(&s, GameFilter::default(), 31).favorite);
+        for member in s.group_members(31) {
+            s.set_member("c:1", member, false);
+        }
+        assert!(!item(&s, GameFilter::default(), 31).favorite);
     }
 
     #[test]
