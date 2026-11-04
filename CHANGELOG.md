@@ -4,6 +4,8 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-04
+
 ### Added
 
 - The first time a new version of RomP opens, it shows what's new in it, with a link to the full changelog. It can be turned off there, and opened again from the About window.
@@ -340,7 +342,8 @@ First release, for macOS and Linux.
 - Two windows for Nintendo DS screens, and rotated screens for vertical arcade games.
 - Interface sizes of 1x, 1.5x and 2x, and the window, last view and scroll position remembered between runs.
 
-[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/RompEmu/RomP/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/RompEmu/RomP/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/RompEmu/RomP/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/RompEmu/RomP/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/RompEmu/RomP/compare/v0.18.0...v0.18.1
