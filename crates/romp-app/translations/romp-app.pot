@@ -129,8 +129,10 @@ msgid "favorite"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
-msgid "{} versions"
-msgstr ""
+msgid "{n} version"
+msgid_plural "{n} versions"
+msgstr[0] ""
+msgstr[1] ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Downloaded"

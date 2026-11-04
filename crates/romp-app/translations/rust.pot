@@ -718,6 +718,10 @@ msgstr ""
 msgid "Favorite"
 msgstr ""
 
+#: crates/romp-app/src/app/navigation.rs
+msgid "Change version"
+msgstr ""
+
 #: crates/romp-app/src/app/navigation.rs crates/romp-app/src/pad_labels.rs
 msgid "Back"
 msgstr ""
