@@ -444,7 +444,7 @@ impl Store {
             .query_row(
                 "SELECT NOT EXISTS (
                    SELECT 1 FROM games GROUP BY group_id
-                   HAVING COUNT(*) >= 2 AND SUM(picked) != 1)",
+                   HAVING COUNT(*) >= 2 AND SUM(picked) = 0)",
                 [],
                 |r| r.get(0),
             )
@@ -1723,14 +1723,16 @@ mod tests {
     }
 
     #[test]
-    fn picks_mark_one_row_per_group() {
+    fn groups_are_consistent_while_each_has_a_pick() {
         let mut s = grouped();
         s.set_picks(&[21]);
         assert_eq!(picked_ids(&s), [21]);
         assert!(s.groups_consistent());
-        s.set_picks(&[]);
-        assert!(!s.groups_consistent());
         s.set_picks(&[20, 21]);
+        assert!(s.groups_consistent());
+        s.set_picks(&[1]);
+        assert!(!s.groups_consistent());
+        s.set_picks(&[]);
         assert!(!s.groups_consistent());
     }
 

@@ -578,13 +578,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_split_group_triggers_a_full_pass() {
+    async fn a_group_without_a_pick_triggers_a_full_pass() {
         let server = server_with(
             json!([{"id": 1, "slug": "snes", "display_name": "SNES", "rom_count": 2}]),
             json!([1, 2]),
         )
         .await;
-        mount_picks(&server, json!({"items": [], "rom_id_index": [1, 2]})).await;
+        mount_picks(&server, json!({"items": [], "rom_id_index": [3]})).await;
         Mock::given(method("GET"))
             .and(path("/api/roms"))
             .and(query_param("updated_after", "2026-01-03T00:00:00+00:00"))
@@ -610,7 +610,7 @@ mod tests {
             let mut b = rom(2, 1, "B", "x");
             b.sibling_roms = vec![SiblingRom { id: 1 }];
             s.upsert_games(&[a, b]);
-            s.set_picks(&[1, 2]);
+            s.set_picks(&[3]);
         }
         sync_library(&client(&server), &store, 500, &go())
             .await
