@@ -25,6 +25,8 @@ pub struct GameItem {
     pub cover: Option<String>,
     pub downloaded: bool,
     pub favorite: bool,
+    /// How many ROMs are versions of this game, itself included.
+    pub versions: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -508,29 +510,49 @@ impl Store {
             filter.sort
         };
         let order = match sort {
-            _ if filter.scope == Scope::ForYou => "r.rank",
+            _ if filter.scope == Scope::ForYou => "g.group_rank",
             SortOrder::Name => "g.title COLLATE NOCASE, g.id",
-            SortOrder::Added => "g.added_at IS NULL, g.added_at DESC, g.title COLLATE NOCASE, g.id",
+            SortOrder::Added => {
+                "g.group_added IS NULL, g.group_added DESC, g.title COLLATE NOCASE, g.id"
+            }
             SortOrder::LastPlayed => {
-                "g.last_played IS NULL, g.last_played DESC, g.title COLLATE NOCASE, g.id"
+                "g.group_played IS NULL, g.group_played DESC, g.title COLLATE NOCASE, g.id"
             }
         };
         let mut stmt = self
             .conn
             .prepare(&format!(
-                "SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL,
-                        EXISTS (SELECT 1 FROM collection_roms m JOIN collections c ON c.key = m.key
-                                WHERE m.rom_id = g.id AND c.kind = 0),
-                        COALESCE(p.slug, '')
-                 FROM games g LEFT JOIN platforms p ON p.id = g.platform_id
-                   LEFT JOIN recommendations r ON r.rom_id = g.id
-                 WHERE (?1 IS NULL OR g.platform_id = ?1) AND g.title LIKE ?2 ESCAPE '\\'
-                   AND (?3 = 0 OR g.local_path IS NOT NULL)
-                   AND (?4 IS NULL OR g.id IN (SELECT rom_id FROM collection_roms WHERE key = ?4))
-                   AND (?5 = 0 OR g.last_played IS NOT NULL)
-                   AND (?6 = 0 OR r.rom_id IS NOT NULL)
-                   AND (?7 = 0 OR g.now_playing = 1)
-                   AND (?8 = 0 OR g.backlogged = 1)
+                "WITH members AS (
+                   SELECT DISTINCT g.group_id FROM games g
+                     LEFT JOIN recommendations r ON r.rom_id = g.id
+                   WHERE (?1 IS NULL OR g.platform_id = ?1)
+                     AND (g.title LIKE ?2 ESCAPE '\\' OR g.fs_name LIKE ?2 ESCAPE '\\')
+                     AND (?4 IS NULL OR g.id IN (SELECT rom_id FROM collection_roms WHERE key = ?4))
+                     AND (?5 = 0 OR g.last_played IS NOT NULL)
+                     AND (?6 = 0 OR r.rom_id IS NOT NULL)
+                     AND (?7 = 0 OR g.now_playing = 1)
+                     AND (?8 = 0 OR g.backlogged = 1)
+                 ),
+                 ranked AS (
+                   SELECT g.*,
+                          ROW_NUMBER() OVER (PARTITION BY g.group_id
+                            ORDER BY (?3 AND g.local_path IS NULL), g.picked DESC,
+                                     g.last_played IS NULL, g.last_played DESC, g.id) AS n,
+                          MAX(g.last_played) OVER grp AS group_played,
+                          MIN(g.added_at) OVER grp AS group_added,
+                          MIN(r.rank) OVER grp AS group_rank,
+                          MAX(EXISTS (SELECT 1 FROM collection_roms m
+                                        JOIN collections c ON c.key = m.key
+                                      WHERE m.rom_id = g.id AND c.kind = 0)) OVER grp AS group_favorite,
+                          COUNT(*) OVER grp AS versions
+                   FROM games g LEFT JOIN recommendations r ON r.rom_id = g.id
+                   WHERE g.group_id IN (SELECT group_id FROM members)
+                   WINDOW grp AS (PARTITION BY g.group_id)
+                 )
+                 SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL,
+                        g.group_favorite, COALESCE(p.slug, ''), g.versions
+                 FROM ranked g LEFT JOIN platforms p ON p.id = g.platform_id
+                 WHERE g.n = 1 AND (?3 = 0 OR g.local_path IS NOT NULL)
                  ORDER BY {order}",
             ))
             .expect("prepare");
@@ -565,6 +587,7 @@ impl Store {
                     downloaded: r.get(4)?,
                     favorite: r.get(5)?,
                     platform_slug: r.get(6)?,
+                    versions: r.get(7)?,
                 })
             },
         )
@@ -1631,6 +1654,90 @@ mod tests {
         s.set_picks(&[21]);
         s.set_picked(20);
         assert_eq!(picked_ids(&s), [20]);
+    }
+
+    fn versioned(
+        s: &mut Store,
+        id: i64,
+        platform: i64,
+        title: &str,
+        fs_name: &str,
+        siblings: &[i64],
+    ) {
+        s.upsert_games(&[Rom {
+            fs_name: fs_name.into(),
+            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+            ..rom(id, platform, title, "t")
+        }]);
+    }
+
+    fn with_versions() -> Store {
+        let mut s = Store::open_in_memory().unwrap();
+        s.replace_platforms(&[platform(1, "PlayStation"), platform(2, "Game Boy")]);
+        let ff = "Final Fantasy VII";
+        versioned(
+            &mut s,
+            30,
+            1,
+            ff,
+            "Final Fantasy VII (Japan).chd",
+            &[31, 32],
+        );
+        versioned(&mut s, 31, 1, ff, "Final Fantasy VII (USA).chd", &[30, 32]);
+        versioned(
+            &mut s,
+            32,
+            1,
+            ff,
+            "Final Fantasy VII (Europe) (Demo).chd",
+            &[30, 31],
+        );
+        versioned(&mut s, 40, 2, "Tetris", "g40.gb", &[]);
+        s
+    }
+
+    fn item(s: &Store, f: GameFilter, id: i64) -> GameItem {
+        s.games(&f).into_iter().find(|g| g.id == id).unwrap()
+    }
+
+    #[test]
+    fn a_game_with_versions_shows_once_as_the_pick() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        assert_eq!(ids(&s, GameFilter::default()), [31, 40]);
+        assert_eq!(item(&s, GameFilter::default(), 31).versions, 3);
+        assert_eq!(item(&s, GameFilter::default(), 40).versions, 1);
+    }
+
+    #[test]
+    fn a_group_without_a_pick_shows_once() {
+        let mut s = with_versions();
+        s.set_picks(&[40]);
+        assert_eq!(ids(&s, GameFilter::default()), [30, 40]);
+    }
+
+    #[test]
+    fn search_finds_a_game_by_another_versions_file_name() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        let search = |text: &str| GameFilter {
+            search: text.into(),
+            ..GameFilter::default()
+        };
+        assert_eq!(ids(&s, search("Demo")), [31]);
+        assert_eq!(ids(&s, search("Japan")), [31]);
+        assert_eq!(ids(&s, search("g40")), Vec::<i64>::new());
+    }
+
+    #[test]
+    fn sorting_by_last_played_uses_the_latest_version() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        let day = 86_400;
+        let now = 100 * day;
+        s.mark_played(30, now - day);
+        s.mark_played(40, now - 7 * day);
+        assert_eq!(sorted(&s, Scope::All, SortOrder::LastPlayed), [31, 40]);
     }
 
     #[test]
