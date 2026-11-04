@@ -408,10 +408,6 @@ impl Store {
         tx.commit().expect("commit");
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by the game versions sync")
-    )]
     pub fn set_picks(&mut self, ids: &[i64]) {
         let tx = self.conn.transaction().expect("tx");
         tx.execute(

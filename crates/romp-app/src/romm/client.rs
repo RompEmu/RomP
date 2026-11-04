@@ -332,10 +332,6 @@ impl Client {
     }
 
     /// The ROM id RomM shows for each game when versions are grouped, in its list order.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "wired up by the game versions UI")
-    )]
     pub async fn picked_rom_ids(&self) -> Result<Vec<i64>, Error> {
         #[derive(serde::Deserialize)]
         struct Index {
