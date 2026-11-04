@@ -1,10 +1,16 @@
-use std::path::Path;
-
+/// `fs_name` without its extension. Multi-file games are folders with none, so a dot
+/// followed by anything but a short alphanumeric suffix belongs to the name.
 pub fn stem(fs_name: &str) -> &str {
-    Path::new(fs_name)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(fs_name)
+    match fs_name.rsplit_once('.') {
+        Some((stem, ext))
+            if !stem.is_empty()
+                && (1..=5).contains(&ext.len())
+                && ext.bytes().all(|b| b.is_ascii_alphanumeric()) =>
+        {
+            stem
+        }
+        _ => fs_name,
+    }
 }
 
 /// The tags in a No-Intro or Redump style name, like "USA, Disc 1", or the name itself.
@@ -21,7 +27,10 @@ pub fn label(fs_name: &str) -> String {
         let Some(len) = rest[open + 1..].find(close) else {
             break;
         };
-        tags.push(rest[open + 1..open + 1 + len].trim());
+        let tag = rest[open + 1..open + 1 + len].trim();
+        if !tag.is_empty() {
+            tags.push(tag);
+        }
         rest = &rest[open + 1 + len + 1..];
     }
     if tags.is_empty() {
@@ -40,5 +49,17 @@ mod tests {
         assert_eq!(label("Final Fantasy VII (USA) (Disc 1).chd"), "USA, Disc 1");
         assert_eq!(label("Tetris (World) (Rev 1) [!].gb"), "World, Rev 1, !");
         assert_eq!(label("Tetris.gb"), "Tetris");
+    }
+
+    #[test]
+    fn folder_names_keep_their_dots() {
+        assert_eq!(label("Dr. Mario (USA)"), "USA");
+        assert_eq!(label("Dr. Mario"), "Dr. Mario");
+        assert_eq!(label("FF VII (USA) (v1.1)"), "USA, v1.1");
+    }
+
+    #[test]
+    fn empty_tags_are_skipped() {
+        assert_eq!(label("Foo () (USA).zip"), "USA");
     }
 }
