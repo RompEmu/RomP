@@ -280,6 +280,19 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 13 {
+            conn.execute_batch(
+                "BEGIN;
+                 ALTER TABLE games ADD COLUMN group_id INTEGER;
+                 ALTER TABLE games ADD COLUMN fs_name TEXT;
+                 ALTER TABLE games ADD COLUMN picked INTEGER NOT NULL DEFAULT 0;
+                 UPDATE games SET group_id = id;
+                 CREATE INDEX games_group ON games(group_id);
+                 DELETE FROM kv WHERE key = 'last_sync_at';
+                 PRAGMA user_version = 13;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -329,17 +342,26 @@ impl Store {
     pub fn upsert_games(&mut self, roms: &[Rom]) {
         let tx = self.conn.transaction().expect("tx");
         for r in roms {
+            let group_id = r
+                .sibling_roms
+                .iter()
+                .map(|s| s.id)
+                .chain([r.id])
+                .min()
+                .unwrap_or(r.id);
+            let fs_name = (!r.sibling_roms.is_empty()).then_some(r.fs_name.as_str());
             tx.execute(
                 "INSERT INTO games
                  (id, platform_id, title, summary, updated_at, cover_small, cover_large, size_bytes,
-                  meta, screenshots, added_at, last_played)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                  meta, screenshots, added_at, last_played, group_id, fs_name)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                  ON CONFLICT(id) DO UPDATE SET
                    platform_id = excluded.platform_id, title = excluded.title,
                    summary = excluded.summary, updated_at = excluded.updated_at,
                    cover_small = excluded.cover_small, cover_large = excluded.cover_large,
                    size_bytes = excluded.size_bytes, meta = excluded.meta,
                    screenshots = excluded.screenshots, added_at = excluded.added_at,
+                   group_id = excluded.group_id, fs_name = excluded.fs_name,
                    last_played = NULLIF(MAX(COALESCE(last_played, 0),
                                             COALESCE(excluded.last_played, 0)), 0)",
                 params![
@@ -356,12 +378,72 @@ impl Store {
                         .and_then(|m| serde_json::to_string(m).ok()),
                     serde_json::to_string(&r.merged_screenshots).ok(),
                     r.added_at(),
-                    r.last_played()
+                    r.last_played(),
+                    group_id,
+                    fs_name
                 ],
             )
             .expect("upsert game");
+            for sibling in &r.sibling_roms {
+                tx.execute(
+                    "UPDATE games SET group_id = ?1 WHERE id = ?2",
+                    [group_id, sibling.id],
+                )
+                .expect("regroup sibling");
+            }
         }
         tx.commit().expect("commit");
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by the game versions sync")
+    )]
+    pub fn set_picks(&mut self, ids: &[i64]) {
+        let tx = self.conn.transaction().expect("tx");
+        tx.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS keep (id INTEGER PRIMARY KEY)",
+            [],
+        )
+        .expect("temp table");
+        tx.execute("DELETE FROM keep", []).expect("clear keep");
+        for id in ids {
+            tx.execute("INSERT OR IGNORE INTO keep (id) VALUES (?1)", [id])
+                .expect("keep id");
+        }
+        tx.execute("UPDATE games SET picked = id IN (SELECT id FROM keep)", [])
+            .expect("set picks");
+        tx.commit().expect("commit");
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by choosing a version in the UI")
+    )]
+    pub fn set_picked(&mut self, id: i64) {
+        self.conn
+            .execute(
+                "UPDATE games SET picked = (id = ?1)
+                 WHERE group_id = (SELECT group_id FROM games WHERE id = ?1)",
+                [id],
+            )
+            .expect("set picked");
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by the game versions sync")
+    )]
+    pub fn groups_consistent(&self) -> bool {
+        self.conn
+            .query_row(
+                "SELECT NOT EXISTS (
+                   SELECT 1 FROM games GROUP BY group_id
+                   HAVING COUNT(*) >= 2 AND SUM(picked) != 1)",
+                [],
+                |r| r.get(0),
+            )
+            .expect("groups consistent")
     }
 
     pub fn retain_games(&mut self, ids: &[i64]) -> usize {
@@ -901,6 +983,7 @@ impl Store {
 mod tests {
     use super::*;
     use crate::romm::types::rom;
+    use crate::romm::types::SiblingRom;
 
     fn platform(id: i64, name: &str) -> Platform {
         Platform {
@@ -1461,6 +1544,95 @@ mod tests {
         assert!(plain.screenshots.is_empty());
     }
 
+    fn group_of(s: &Store, id: i64) -> i64 {
+        s.conn
+            .query_row("SELECT group_id FROM games WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap()
+    }
+
+    fn picked_ids(s: &Store) -> Vec<i64> {
+        let mut stmt = s
+            .conn
+            .prepare("SELECT id FROM games WHERE picked = 1 ORDER BY id")
+            .unwrap();
+        stmt.query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    fn grouped() -> Store {
+        let mut s = seeded();
+        let with = |id, siblings: &[i64]| Rom {
+            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+            ..rom(id, 1, "Game", "t")
+        };
+        s.upsert_games(&[with(20, &[])]);
+        s.upsert_games(&[with(21, &[20])]);
+        s.upsert_games(&[with(19, &[20, 21])]);
+        s
+    }
+
+    #[test]
+    fn v12_database_migrates_to_v13_and_forgets_the_sync_cursor() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v12.db");
+        {
+            let mut s = Store::open(&path).unwrap();
+            s.set("last_sync_at", "t");
+            s.upsert_games(&[rom(5, 1, "A", "t")]);
+            s.conn
+                .execute_batch(
+                    "DROP INDEX games_group; ALTER TABLE games DROP COLUMN group_id;
+                     ALTER TABLE games DROP COLUMN fs_name; ALTER TABLE games DROP COLUMN picked;
+                     PRAGMA user_version = 12;",
+                )
+                .unwrap();
+        }
+        let s = Store::open(&path).unwrap();
+        assert_eq!(s.get("last_sync_at"), None);
+        assert_eq!(group_of(&s, 5), 5);
+    }
+
+    #[test]
+    fn siblings_share_the_lowest_id() {
+        let mut s = seeded();
+        let with = |id, siblings: &[i64]| Rom {
+            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+            ..rom(id, 1, "Game", "t")
+        };
+        s.upsert_games(&[with(20, &[])]);
+        s.upsert_games(&[with(21, &[20])]);
+        assert_eq!((group_of(&s, 20), group_of(&s, 21)), (20, 20));
+        s.upsert_games(&[with(19, &[20, 21])]);
+        assert_eq!(
+            [group_of(&s, 19), group_of(&s, 20), group_of(&s, 21)],
+            [19, 19, 19]
+        );
+    }
+
+    #[test]
+    fn picks_mark_one_row_per_group() {
+        let mut s = grouped();
+        s.set_picks(&[21]);
+        assert_eq!(picked_ids(&s), [21]);
+        assert!(s.groups_consistent());
+        s.set_picks(&[]);
+        assert!(!s.groups_consistent());
+        s.set_picks(&[20, 21]);
+        assert!(!s.groups_consistent());
+    }
+
+    #[test]
+    fn set_picked_moves_the_pick_within_the_group() {
+        let mut s = grouped();
+        s.set_picks(&[21]);
+        s.set_picked(20);
+        assert_eq!(picked_ids(&s), [20]);
+    }
+
     #[test]
     fn v2_database_migrates_to_v3_and_forgets_the_sync_cursor() {
         let dir = tempfile::tempdir().unwrap();
@@ -1475,7 +1647,10 @@ mod tests {
                      ALTER TABLE platforms DROP COLUMN category;
                      ALTER TABLE platforms DROP COLUMN aliases;
                      ALTER TABLE games DROP COLUMN now_playing; ALTER TABLE games DROP COLUMN backlogged;
-                     ALTER TABLE games DROP COLUMN progress; PRAGMA user_version = 2;",
+                     ALTER TABLE games DROP COLUMN progress;
+                     DROP INDEX games_group; ALTER TABLE games DROP COLUMN group_id;
+                     ALTER TABLE games DROP COLUMN fs_name; ALTER TABLE games DROP COLUMN picked;
+                     PRAGMA user_version = 2;",
                 )
                 .unwrap();
         }
