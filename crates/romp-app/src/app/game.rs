@@ -962,10 +962,12 @@ impl Controller {
         let client = self.client.borrow().clone();
         let Some(client) = client.filter(|_| self.can_edit_status()) else {
             self.open_game(id);
-            self.game_status(
-                id,
-                tr!("You're offline, so this version doesn't become your main one."),
-            );
+            if self.offline.get() {
+                self.game_status(
+                    id,
+                    tr!("You're offline, so this version doesn't become your main one."),
+                );
+            }
             return;
         };
         let prev = {
