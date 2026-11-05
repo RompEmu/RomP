@@ -664,6 +664,10 @@ msgid "Consoles appear here once your library has games for them."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Controls for"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Button labels"
 msgstr ""
 

@@ -423,11 +423,19 @@ msgid "Automatic"
 msgstr ""
 
 #: crates/romp-app/src/app/settings.rs
+msgid "All consoles"
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
 msgid "Esc always opens the game menu. Choose a different key."
 msgstr ""
 
 #: crates/romp-app/src/app/settings.rs
 msgid "{0} now uses {1}."
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "{0} is a shortcut key. Choose a different key."
 msgstr ""
 
 #: crates/romp-app/src/app/settings.rs
@@ -806,6 +814,50 @@ msgstr ""
 msgid "On"
 msgstr ""
 
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/mapping.rs
+msgid "Up"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/mapping.rs
+msgid "Down"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/mapping.rs
+msgid "Left"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/mapping.rs
+msgid "Right"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
+msgid "Select"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
+msgid "Start"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs
+msgid "Mode"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
+msgid "Cross"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
+msgid "Circle"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
+msgid "Square"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
+msgid "Triangle"
+msgstr ""
+
 #: crates/romp-app/src/cores.rs
 msgid "Could not reach the download server"
 msgstr ""
@@ -1102,30 +1154,6 @@ msgstr ""
 msgid "Dithering"
 msgstr ""
 
-#: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
-msgid "Start"
-msgstr ""
-
-#: crates/romp-app/src/mapping.rs crates/romp-app/src/pad_labels.rs
-msgid "Select"
-msgstr ""
-
-#: crates/romp-app/src/mapping.rs
-msgid "Up"
-msgstr ""
-
-#: crates/romp-app/src/mapping.rs
-msgid "Down"
-msgstr ""
-
-#: crates/romp-app/src/mapping.rs
-msgid "Left"
-msgstr ""
-
-#: crates/romp-app/src/mapping.rs
-msgid "Right"
-msgstr ""
-
 #: crates/romp-app/src/mapping.rs
 msgid "Pause"
 msgstr ""
@@ -1220,22 +1248,6 @@ msgstr ""
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Xbox button"
-msgstr ""
-
-#: crates/romp-app/src/pad_labels.rs
-msgid "Cross"
-msgstr ""
-
-#: crates/romp-app/src/pad_labels.rs
-msgid "Circle"
-msgstr ""
-
-#: crates/romp-app/src/pad_labels.rs
-msgid "Square"
-msgstr ""
-
-#: crates/romp-app/src/pad_labels.rs
-msgid "Triangle"
 msgstr ""
 
 #: crates/romp-app/src/pad_labels.rs
