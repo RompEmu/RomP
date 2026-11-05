@@ -9,6 +9,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 - A game with several versions in RomM (regions, revisions, demos, translations) shows once in the library, grouped the way RomM's own gallery groups it and as the version RomM picks, with the number of versions on its tile. Its page lists the versions RomM lists for it in a dropdown, and choosing one makes it your main version in RomM too, so the website and your other devices show it. Saves, states and play history stay with each version. ([#39](https://github.com/RompEmu/RomP/issues/39))
 - A multi-file game that isn't a set of discs, such as a folder of hacks of one game, has a menu on its page to choose which file it starts with. RomP downloads only that file, and each file keeps its own saves and save states, synced to their own slot in RomM. Discs still play together, from one save.
 
+### Fixed
+
+- On Windows with an NVIDIA graphics card, GameCube and Wii games show their picture, instead of a black screen with sound. Where Vulkan can't give them a surface to draw to, they run with OpenGL instead. ([#42](https://github.com/RompEmu/RomP/issues/42))
+
 ## [0.21.0] - 2026-11-04
 
 ### Added
