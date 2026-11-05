@@ -253,6 +253,11 @@ impl HwVulkanContext {
         } else {
             vk::SurfaceKHR::null()
         };
+        if surface == vk::SurfaceKHR::null() {
+            tracing::warn!(
+                "no Vulkan surface: cores that present through one, such as Dolphin, show no picture"
+            );
+        }
         Ok(Self {
             _entry: entry,
             instance,
