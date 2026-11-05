@@ -400,6 +400,32 @@ component Avatar inherits Rectangle {
     }
 }
 
+component VersionRow inherits Rectangle {
+    in property <string> text;
+    in property <bool> current;
+    callback clicked();
+    min-height: 32px;
+    border-radius: Theme.radius;
+    background: touch.pressed ? Theme.pressed : root.current ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: 100ms; }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    touch := TouchArea { clicked => { root.clicked(); } }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        Text {
+            horizontal-alignment: Locale.start;
+            vertical-alignment: center;
+            text: root.text;
+            overflow: elide;
+            font-weight: root.current ? 600 : 400;
+            color: Theme.text-strong;
+        }
+    }
+}
+
 component SidebarItem inherits Rectangle {
     in property <string> label;
     in property <string> initial;
@@ -1659,7 +1685,7 @@ component GamePage inherits FocusScope {
                                 }
                                 version-popup := PopupWindow {
                                     y: parent.height + 4px;
-                                    width: 260px;
+                                    width: clamp(version-list.preferred-width, 260px, 420px);
                                     height: version-list.preferred-height;
                                     close-policy: close-on-click-outside;
                                     Rectangle {
@@ -1674,10 +1700,10 @@ component GamePage inherits FocusScope {
                                         version-list := VerticalLayout {
                                             width: parent.width;
                                             padding: 12px;
-                                            spacing: 6px;
-                                            for label[i] in root.versions: Button {
+                                            spacing: 2px;
+                                            for label[i] in root.versions: VersionRow {
                                                 text: label;
-                                                primary: i == root.version-index;
+                                                current: i == root.version-index;
                                                 clicked => {
                                                     root.choose-version(i);
                                                     version-popup.close();
