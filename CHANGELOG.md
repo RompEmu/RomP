@@ -8,6 +8,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - A game with several versions in RomM (regions, revisions, demos, translations) shows once in the library, as the version RomM picks, with the number of versions on its tile. Its page lists the others, and choosing one makes it your main version in RomM too, so the website and your other devices show it. Saves, states and play history stay with each version. ([#39](https://github.com/RompEmu/RomP/issues/39))
 
+### Fixed
+
+- On Windows with an NVIDIA graphics card, GameCube and Wii games show their picture, instead of a black screen with sound. Where Vulkan can't give them a surface to draw to, they run with OpenGL instead. ([#42](https://github.com/RompEmu/RomP/issues/42))
+
 ## [0.21.0] - 2026-11-04
 
 ### Added
