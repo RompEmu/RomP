@@ -322,15 +322,12 @@ impl Mappings {
 
     /// The mappings in effect while `console` runs. Shortcuts and labels stay
     /// global, so only the read-only result of this ever differs per console.
-    // Nothing calls this until the runtime switches to it in a later change.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn for_console(&self, console: &str) -> Mappings {
         self.resolve(console, true)
     }
 
     /// `with_changes` off gives the all-consoles layout without what `console`
     /// saved, which is what a console's own reset falls back to.
-    #[cfg_attr(not(test), expect(dead_code))]
     fn resolve(&self, console: &str, with_changes: bool) -> Mappings {
         let mut out = self.clone();
         out.swaps = builtin_swaps(console);
