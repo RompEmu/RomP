@@ -185,12 +185,36 @@ pub fn library_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
-/// Whether a Vulkan device can be created here.
-pub fn probe() -> bool {
-    HwVulkanContext::create(&library_path())
-        .and_then(|ctx| ctx.create_own_device().map(|_| ()))
-        .map_err(|e| tracing::info!("no Vulkan: {e}"))
-        .is_ok()
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Probe {
+    Unavailable,
+    NoSurface,
+    Ready,
+}
+
+impl Probe {
+    /// What the app reads back from the probe process.
+    pub fn exit_code(self) -> i32 {
+        match self {
+            Probe::Ready => 0,
+            Probe::Unavailable => 1,
+            Probe::NoSurface => 2,
+        }
+    }
+}
+
+/// Whether a Vulkan device can be created here, and whether cores also get a surface.
+pub fn probe() -> Probe {
+    let ctx = HwVulkanContext::create(&library_path())
+        .and_then(|ctx| ctx.create_own_device().map(|_| ctx));
+    match ctx {
+        Err(e) => {
+            tracing::info!("no Vulkan: {e}");
+            Probe::Unavailable
+        }
+        Ok(ctx) if ctx.surface == vk::SurfaceKHR::null() => Probe::NoSurface,
+        Ok(_) => Probe::Ready,
+    }
 }
 
 impl HwVulkanContext {

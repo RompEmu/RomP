@@ -89,7 +89,7 @@ fn main() -> anyhow::Result<()> {
         )
         .init();
     if std::env::args().nth(1).as_deref() == Some("--probe-vulkan") {
-        std::process::exit(if hw_vulkan::probe() { 0 } else { 1 });
+        std::process::exit(hw_vulkan::probe().exit_code());
     }
     let args = Args::parse();
     lr::set_core_log_min(core_log_min(std::env::var("RUST_LOG").ok().as_deref()));
