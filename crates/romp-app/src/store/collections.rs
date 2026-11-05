@@ -86,13 +86,15 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(&format!(
-                "WITH {SHOWN}
-                 SELECT c.key, c.kind, c.remote_id, c.name, c.owner,
-                        (SELECT COALESCE(SUM(s.entries), 0) FROM shown s
-                         WHERE s.group_id IN (SELECT g.group_id FROM collection_roms m
-                                                JOIN games g ON g.id = m.rom_id
-                                              WHERE m.key = c.key))
-                 FROM collections c ORDER BY c.kind, c.name COLLATE NOCASE, c.position",
+                "WITH {SHOWN},
+                 member_groups AS (SELECT DISTINCT m.key, g.group_id FROM collection_roms m
+                                     JOIN games g ON g.id = m.rom_id)
+                 SELECT c.key, c.kind, c.remote_id, c.name, c.owner, COALESCE(SUM(s.entries), 0)
+                 FROM collections c
+                 LEFT JOIN member_groups x ON x.key = c.key
+                 LEFT JOIN shown s ON s.group_id = x.group_id
+                 GROUP BY c.key
+                 ORDER BY c.kind, c.name COLLATE NOCASE, c.position",
             ))
             .expect("prepare");
         stmt.query_map([downloaded_only], |r| {
