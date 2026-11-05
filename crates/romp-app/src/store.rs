@@ -551,6 +551,11 @@ impl Store {
                      AND (?7 = 0 OR g.now_playing = 1)
                      AND (?8 = 0 OR g.backlogged = 1)
                  ),
+                 favorites AS (
+                   SELECT DISTINCT m.rom_id FROM collection_roms m
+                     JOIN collections c ON c.key = m.key
+                   WHERE c.kind = 0
+                 ),
                  ranked AS (
                    SELECT g.*,
                           ROW_NUMBER() OVER (PARTITION BY g.group_id
@@ -559,11 +564,10 @@ impl Store {
                           MAX(g.last_played) OVER grp AS group_played,
                           MIN(g.added_at) OVER grp AS group_added,
                           MIN(r.rank) OVER grp AS group_rank,
-                          MAX(EXISTS (SELECT 1 FROM collection_roms m
-                                        JOIN collections c ON c.key = m.key
-                                      WHERE m.rom_id = g.id AND c.kind = 0)) OVER grp AS group_favorite,
+                          MAX(f.rom_id IS NOT NULL) OVER grp AS group_favorite,
                           COUNT(*) OVER grp AS versions
                    FROM games g LEFT JOIN recommendations r ON r.rom_id = g.id
+                     LEFT JOIN favorites f ON f.rom_id = g.id
                    WHERE g.group_id IN (SELECT group_id FROM members)
                    WINDOW grp AS (PARTITION BY g.group_id)
                  )
