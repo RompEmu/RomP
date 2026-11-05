@@ -300,8 +300,9 @@ pub struct Mappings {
 }
 
 /// Buttons that trade default places on a console, because its core reads the
-/// ones on the top and left of the pad for what the game uses most. Dolphin
-/// feeds the Wiimote's 1 and 2 from X and Y.
+/// ones on the top and left of the pad for what the game uses most. In plain
+/// Wiimote mode dolphin_libretro reads the Wiimote's 1 and 2 from X and Y
+/// (Input.cpp); in sideways mode it uses B and A for them instead.
 fn builtin_swaps(console: &str) -> &'static [(u32, u32)] {
     match console {
         "wii" => &[(X, B), (Y, A)],
@@ -347,21 +348,35 @@ impl Mappings {
 
     /// The button this one trades default places with, or itself.
     fn partner(&self, button: u32) -> u32 {
-        self.swaps
-            .iter()
-            .find_map(|&(a, b)| match button {
-                _ if button == a => Some(b),
-                _ if button == b => Some(a),
-                _ => None,
-            })
-            .unwrap_or(button)
+        for &(a, b) in self.swaps {
+            if button == a {
+                return b;
+            }
+            if button == b {
+                return a;
+            }
+        }
+        button
+    }
+
+    /// The button whose default place `button` takes, unless the user has
+    /// touched its pair: then both fall back to the plain defaults, because a
+    /// saved entry on one of them may have been handed the other's built-in
+    /// place and keeping the swap would put two buttons on one key.
+    fn default_source(&self, button: u32, saved: impl Fn(u32) -> bool) -> u32 {
+        let partner = self.partner(button);
+        if saved(button) || saved(partner) {
+            button
+        } else {
+            partner
+        }
     }
 
     pub fn key_for(&self, button: u32) -> String {
-        self.keyboard
-            .get(name(button))
-            .cloned()
-            .unwrap_or_else(|| default_key(self.partner(button)))
+        self.keyboard.get(name(button)).cloned().unwrap_or_else(|| {
+            let saved = |b| self.keyboard.contains_key(name(b));
+            default_key(self.default_source(button, saved))
+        })
     }
 
     pub fn button_for_key(&self, text: &str) -> Option<u32> {
@@ -433,6 +448,28 @@ impl Mappings {
         Assigned::Set
     }
 
+    /// Writes the swapped defaults down so an edit sees every button's real
+    /// place and its swapping keeps them apart.
+    fn spell_out(&mut self, model: Option<&str>) {
+        // Read every place before writing any: a written entry would switch its
+        // pair back to the plain defaults mid-way.
+        let places: Vec<(&str, String)> = BUTTONS
+            .iter()
+            .map(|(b, n)| match model {
+                None => (*n, self.key_for(*b)),
+                Some(model) => (*n, physical_name(self.pad_button(model, *b))),
+            })
+            .collect();
+        let target = match model {
+            None => &mut self.keyboard,
+            Some(model) => self.pads.entry(model.into()).or_default(),
+        };
+        for (n, place) in places {
+            target.insert(n.into(), place);
+        }
+        self.swaps = &[];
+    }
+
     /// Edits run on the console's own layout so swaps stay inside it, and only
     /// what differs from the all-consoles layout is kept, so every other button
     /// still follows later changes to that layout.
@@ -446,6 +483,7 @@ impl Mappings {
             return Assigned::Taken(hotkey_label(hotkey).into());
         }
         let mut edited = self.for_console(console);
+        edited.spell_out(None);
         let outcome = edited.set_key(button, text);
         self.keep_console_keyboard(console, &edited);
         outcome
@@ -460,6 +498,7 @@ impl Mappings {
         physical: Button,
     ) {
         let mut edited = self.for_console(console);
+        edited.spell_out(Some(model));
         edited.set_pad_button(model, button, physical);
         self.keep_console_pad(console, model, &edited);
     }
@@ -486,6 +525,9 @@ impl Mappings {
             .iter()
             .map(|(b, _)| *b)
             .filter(|b| edited.key_for(*b) != base.key_for(*b))
+            // A pair is saved whole, since one saved member makes the other
+            // fall back to the plain default.
+            .flat_map(|b| [b, base.partner(b)])
             .map(|b| (name(b).to_string(), edited.key_for(b)))
             .collect();
         self.consoles.entry(console.into()).or_default().keyboard = changed;
@@ -498,6 +540,7 @@ impl Mappings {
             .iter()
             .map(|(b, _)| *b)
             .filter(|b| edited.pad_button(model, *b) != base.pad_button(model, *b))
+            .flat_map(|b| [b, base.partner(b)])
             .map(|b| {
                 (
                     name(b).to_string(),
@@ -549,7 +592,14 @@ impl Mappings {
             .get(model)
             .and_then(|m| m.get(name(button)))
             .and_then(|p| physical_named(p))
-            .unwrap_or_else(|| default_physical(self.partner(button)))
+            .unwrap_or_else(|| {
+                let saved = |b| {
+                    self.pads
+                        .get(model)
+                        .is_some_and(|m| m.contains_key(name(b)))
+                };
+                default_physical(self.default_source(button, saved))
+            })
     }
 
     pub fn set_pad_button(&mut self, model: &str, button: u32, physical: Button) {
@@ -1030,5 +1080,57 @@ mod tests {
         m.set_console_key("wii", A, "k");
         m.reset_console_keyboard("wii");
         assert_eq!(m.for_console("wii").key_for(A), default_key(Y));
+    }
+
+    fn all_distinct<T: Ord>(values: impl Iterator<Item = T>) -> bool {
+        let values: Vec<T> = values.collect();
+        let unique: std::collections::BTreeSet<&T> = values.iter().collect();
+        unique.len() == values.len()
+    }
+
+    fn no_clashes(m: &Mappings) -> bool {
+        all_distinct(
+            BUTTONS
+                .iter()
+                .map(|(b, _)| physical_name(m.pad_button("pad", *b))),
+        ) && all_distinct(
+            BUTTONS
+                .iter()
+                .map(|(b, _)| m.key_for(*b))
+                .filter(|k| !k.is_empty()),
+        )
+    }
+
+    #[test]
+    fn a_partial_remap_for_everything_never_doubles_up_a_wii_button() {
+        let mut m = Mappings::default();
+        m.set_pad_button("pad", X, Button::LeftTrigger);
+        m.set_key(X, "k");
+        assert!(no_clashes(&m.for_console("wii")));
+        let mut m = Mappings::default();
+        m.set_pad_button("pad", B, Button::Start);
+        m.set_key(B, "k");
+        assert!(no_clashes(&m.for_console("wii")));
+    }
+
+    #[test]
+    fn a_wii_edit_never_doubles_up_a_button_and_leaves_others_alone() {
+        let mut m = Mappings::default();
+        m.set_console_pad_button("wii", "pad", X, Button::LeftTrigger);
+        m.set_console_key("wii", X, "k");
+        let wii = m.for_console("wii");
+        assert!(no_clashes(&wii));
+        assert_eq!(wii.pad_button("pad", X), Button::LeftTrigger);
+        assert_eq!(wii.key_for(X), "k");
+        assert_eq!(m.pad_button("pad", X), default_physical(X));
+        assert_eq!(m.for_console("ngc").key_for(X), default_key(X));
+    }
+
+    #[test]
+    fn setting_a_wii_button_to_its_built_in_place_stores_nothing() {
+        let mut m = Mappings::default();
+        m.set_console_pad_button("wii", "pad", X, default_physical(B));
+        m.set_console_key("wii", X, &default_key(B));
+        assert!(!m.to_json().contains("wii"), "{}", m.to_json());
     }
 }
