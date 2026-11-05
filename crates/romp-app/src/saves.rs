@@ -666,14 +666,23 @@ pub async fn resolve_sram(
 }
 
 pub fn games_with_saves(server_saves: &Path) -> Vec<i64> {
+    let has_state = |dir: &Path| {
+        STATE_SLOTS
+            .iter()
+            .any(|slot| dir.join(format!("{slot}.state")).exists())
+    };
     let has_save = |dir: &Path| {
         dir.join(SRAM_FILE).exists()
             || dir.join(ARMSX2_CARD).exists()
             || !memory_cards(dir).is_empty()
             || !newest_ending(dir, DOS_SAVE).is_empty()
-            || STATE_SLOTS
-                .iter()
-                .any(|slot| dir.join(format!("{slot}.state")).exists())
+            || has_state(dir)
+            || std::fs::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .any(|e| has_state(&e.path()))
     };
     std::fs::read_dir(server_saves)
         .into_iter()
@@ -739,9 +748,18 @@ pub async fn sync_states(
     let remote = client.states(game.rom_id).await?;
     let io_err = |e: io::Error| Error::Decode(format!("could not write a save state: {e}"));
     let mut report = StateReport::default();
+    let has_legacy = STATE_SLOTS
+        .iter()
+        .any(|s| game.dir.join(format!("{s}.state")).exists());
+    let state_dir = if game.dir.join(&game.emulator).exists() || !has_legacy {
+        game.dir.join(&game.emulator)
+    } else {
+        game.dir.clone()
+    };
+    let _ = std::fs::create_dir_all(&state_dir);
     for slot in STATE_SLOTS {
         let file = format!("{slot}.state");
-        let path = game.dir.join(&file);
+        let path = state_dir.join(&file);
         let name = state_remote_name(slot, &game.emulator, core_version);
         let server = remote.iter().find(|r| r.file_name == name);
         let local = std::fs::read(&path).ok();
@@ -786,12 +804,12 @@ pub async fn sync_states(
         let recorded = if upload {
             if let Some(srv) = server.filter(|_| remote_changed) {
                 let bytes = client.download_state(srv.id).await?;
-                backup_bytes(&game.dir, &format!("server-{file}"), &bytes).map_err(io_err)?;
+                backup_bytes(&state_dir, &format!("server-{file}"), &bytes).map_err(io_err)?;
             }
             let bytes = local.expect("local state to upload");
             let md5 = md5_hex(&bytes);
             let picture_name = format!("{slot}.png");
-            let picture = std::fs::read(game.dir.join(&picture_name))
+            let picture = std::fs::read(state_dir.join(&picture_name))
                 .ok()
                 .map(|png| (picture_name, png));
             let saved = client
@@ -806,9 +824,9 @@ pub async fn sync_states(
         } else {
             let srv = server.expect("remote state to download");
             let bytes = client.download_state(srv.id).await?;
-            backup(&game.dir, &file).map_err(io_err)?;
+            backup(&state_dir, &file).map_err(io_err)?;
             replace_file(&path, &bytes).map_err(io_err)?;
-            let picture_path = game.dir.join(format!("{slot}.png"));
+            let picture_path = state_dir.join(format!("{slot}.png"));
             let picture = match &srv.screenshot {
                 Some(shot) => client.download_screenshot(shot.id).await.ok(),
                 None => None,
@@ -1861,7 +1879,7 @@ mod tests {
                 .unwrap();
             assert_eq!(report.downloaded, 1);
             assert_eq!(
-                std::fs::read(dir.path().join("slot-2.state")).unwrap(),
+                std::fs::read(dir.path().join("snes9x").join("slot-2.state")).unwrap(),
                 b"REMOTE"
             );
         }
@@ -1921,16 +1939,17 @@ mod tests {
                 .mount(&server)
                 .await;
             let dir = tempfile::tempdir().unwrap();
-            std::fs::write(dir.path().join("slot-3.png"), b"OLD").unwrap();
+            std::fs::create_dir_all(dir.path().join("snes9x")).unwrap();
+            std::fs::write(dir.path().join("snes9x").join("slot-3.png"), b"OLD").unwrap();
             sync_states(&client(&server), &store(), &game(dir.path()), "1.63")
                 .await
                 .unwrap();
             assert_eq!(
-                std::fs::read(dir.path().join("slot-2.png")).unwrap(),
+                std::fs::read(dir.path().join("snes9x").join("slot-2.png")).unwrap(),
                 b"PNG"
             );
             assert!(
-                !dir.path().join("slot-3.png").exists(),
+                !dir.path().join("snes9x").join("slot-3.png").exists(),
                 "a picture of an older state would show the wrong moment"
             );
         }
@@ -2003,7 +2022,7 @@ mod tests {
                 .unwrap();
             assert_eq!(report.downloaded, 1);
             assert_eq!(
-                std::fs::read(dir.path().join("slot-1.state")).unwrap(),
+                std::fs::read(dir.path().join("snes9x").join("slot-1.state")).unwrap(),
                 b"NEWER"
             );
         }

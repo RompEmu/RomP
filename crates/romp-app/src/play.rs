@@ -1321,7 +1321,7 @@ pub fn launch(
     let cfg = SessionConfig {
         title: opts.title.clone(),
         runner: paths::runner_exe()?,
-        core: opts.core,
+        core: opts.core.clone(),
         rom: opts.rom,
         system_dir: paths::system_dir(),
         save_dir: opts.save_dir.clone(),
@@ -1449,7 +1449,21 @@ pub fn launch(
             achievement_list: RefCell::default(),
             hardcore: Cell::new(hardcore),
             states,
-            save_dir: opts.save_dir.clone(),
+            save_dir: {
+                let core_id = opts
+                    .core
+                    .parent()
+                    .and_then(|p| p.file_name())
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let dir = if core_id.is_empty() {
+                    opts.save_dir.clone()
+                } else {
+                    opts.save_dir.join(&core_id)
+                };
+                let _ = std::fs::create_dir_all(&dir);
+                dir
+            },
             slots_open: Cell::new(false),
             slots_focus: Cell::new(1),
             slots_load: Cell::new(false),
@@ -1484,7 +1498,20 @@ pub fn launch(
         let mut first_poll = true;
         let resumed = opts.load_slot == Some(0);
         let launched = std::time::Instant::now();
-        let save_dir = opts.save_dir.clone();
+        let save_dir = {
+            let core_id = opts
+                .core
+                .parent()
+                .and_then(|p| p.file_name())
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            if core_id.is_empty() {
+                opts.save_dir.clone()
+            } else {
+                opts.save_dir.join(&core_id)
+            }
+        };
+        let _ = std::fs::create_dir_all(&save_dir);
         move || {
             let Some(game) = weak.upgrade() else { return };
             let ui = game.primary();

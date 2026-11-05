@@ -51,6 +51,10 @@ pub fn apply(params: &SandboxParams<'_>) -> anyhow::Result<()> {
     if let Some(rt) = std::env::var_os("XDG_RUNTIME_DIR") {
         rw.push(PathBuf::from(rt));
     }
+    // Cores that keep a cache in the system folder may write only inside their own subfolder.
+    if let Some(dir) = crate::sandbox::core_cache_dir(params.core_path, params.system_dir) {
+        rw.push(dir);
+    }
 
     let mut ruleset = Ruleset::default()
         .set_compatibility(CompatLevel::BestEffort)
