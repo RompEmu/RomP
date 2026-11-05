@@ -15,6 +15,7 @@ use crate::store::GameDetail;
 use crate::xemu::{self, Xemu};
 use crate::{GameCard, Shot};
 use slint::{Image, Model, ModelRc, SharedString, VecModel};
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -760,7 +761,7 @@ impl Controller {
             sharp: self.look_choice(xemu::PLATFORM).look == crate::looks::Look::Sharp,
             volume: prefs.volume,
             ui_scale: prefs.scale_factor(),
-            keyboard: xemu::keyboard_map(&self.mappings.borrow()),
+            keyboard: xemu::keyboard_map(&self.mappings.borrow().for_console(xemu::PLATFORM)),
             keyboard_port: xemu::keyboard_port(
                 self.players.borrow().player(crate::players::KEYBOARD),
                 pads,
@@ -881,7 +882,8 @@ impl Controller {
             self.players.borrow().player(crate::players::KEYBOARD),
             names.len(),
         );
-        let bindings = rpcs3::keyboard_bindings(&self.mappings.borrow());
+        let bindings =
+            rpcs3::keyboard_bindings(&self.mappings.borrow().for_console(rpcs3::PLATFORM));
         let input = rpcs3::input_yml(
             &rpcs3::pad_devices(&names),
             keyboard.map(|player| (player, bindings.as_slice())),
@@ -1111,7 +1113,9 @@ impl Controller {
             load_slot,
             auto_state: reliable,
             states,
-            mappings: self.mappings.clone(),
+            mappings: Rc::new(RefCell::new(
+                self.mappings.borrow().for_console(&detail.platform_slug),
+            )),
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
             mouse: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| crate::cores::uses_mouse(core.id)),
