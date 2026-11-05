@@ -470,8 +470,6 @@ impl Mappings {
     /// Edits run on the console's own layout so swaps stay inside it, and only
     /// what differs from the all-consoles layout is kept, so every other button
     /// still follows later changes to that layout.
-    // Nothing calls the console setters and resets until the controls page does.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn set_console_key(&mut self, console: &str, button: u32, text: &str) -> Assigned {
         if is_reserved(text) {
             return Assigned::Reserved;
@@ -486,7 +484,6 @@ impl Mappings {
         outcome
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn set_console_pad_button(
         &mut self,
         console: &str,
@@ -500,7 +497,6 @@ impl Mappings {
         self.keep_console_pad(console, model, &edited);
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn reset_console_keyboard(&mut self, console: &str) {
         if let Some(layout) = self.consoles.get_mut(console) {
             layout.keyboard.clear();
@@ -508,7 +504,6 @@ impl Mappings {
         self.drop_empty_console(console);
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn reset_console_pad(&mut self, console: &str, model: &str) {
         if let Some(layout) = self.consoles.get_mut(console) {
             layout.pads.remove(model);
