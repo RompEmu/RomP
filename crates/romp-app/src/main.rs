@@ -7,6 +7,7 @@ mod awake;
 mod bios;
 mod collections;
 mod console_settings;
+mod controllers;
 mod cores;
 mod covers;
 mod credentials;
