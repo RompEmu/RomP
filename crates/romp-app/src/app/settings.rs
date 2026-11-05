@@ -480,6 +480,7 @@ impl Controller {
         if device == SHORTCUTS && mapping::is_modifier(&text) {
             return;
         }
+        let console = self.remap_console.borrow().clone();
         let outcome = {
             let mut mappings = self.mappings.borrow_mut();
             if device == SHORTCUTS {
@@ -489,6 +490,9 @@ impl Controller {
                     mappings.set_hotkey(hotkey, &mapping::combo(mods, &text)),
                     previous,
                 )
+            } else if let Some(slug) = console.as_deref() {
+                let previous = mappings.for_console(slug).key_for(button);
+                (mappings.set_console_key(slug, button, &text), previous)
             } else {
                 let previous = mappings.key_for(button);
                 (mappings.set_key(button, &text), previous)
@@ -505,10 +509,13 @@ impl Controller {
                 translate(&other),
                 mapping::combo_label(&previous)
             )),
+            (Assigned::Taken(label), _) => {
+                return self.show_remap(Some(&tr!(
+                    "{0} is a shortcut key. Choose a different key.",
+                    translate(&label)
+                )));
+            }
             (Assigned::Set, _) => None,
-            // Only per-console keys are refused for a shortcut, and this page
-            // edits the all-consoles keys.
-            (Assigned::Taken(_), _) => unreachable!("global keys swap with shortcuts"),
         };
         self.remap_waiting.set(None);
         self.save_mappings();
@@ -533,9 +540,13 @@ impl Controller {
         else {
             return;
         };
-        self.mappings
-            .borrow_mut()
-            .set_pad_button(&model, button, physical);
+        let console = self.remap_console.borrow().clone();
+        let mut mappings = self.mappings.borrow_mut();
+        match console.as_deref() {
+            Some(slug) => mappings.set_console_pad_button(slug, &model, button, physical),
+            None => mappings.set_pad_button(&model, button, physical),
+        }
+        drop(mappings);
         self.remap_waiting.set(None);
         self.save_mappings();
         self.show_remap(None);
@@ -545,15 +556,23 @@ impl Controller {
         let Some(device) = self.remap_device.borrow().clone() else {
             return;
         };
+        let console = self.remap_console.borrow().clone();
+        let mut mappings = self.mappings.borrow_mut();
         if device == SHORTCUTS {
-            self.mappings.borrow_mut().reset_hotkeys();
+            mappings.reset_hotkeys();
         } else if device == KEYBOARD {
-            self.mappings.borrow_mut().reset_keyboard();
+            match console.as_deref() {
+                Some(slug) => mappings.reset_console_keyboard(slug),
+                None => mappings.reset_keyboard(),
+            }
         } else {
-            self.mappings
-                .borrow_mut()
-                .reset_pad(mapping::model_of(&device));
+            let model = mapping::model_of(&device);
+            match console.as_deref() {
+                Some(slug) => mappings.reset_console_pad(slug, model),
+                None => mappings.reset_pad(model),
+            }
         }
+        drop(mappings);
         self.remap_waiting.set(None);
         self.save_mappings();
         self.show_key_hints();
