@@ -274,6 +274,14 @@ pub fn key_label(text: &str) -> String {
         .map_or_else(|| text.to_uppercase(), |(_, n)| (*n).to_string())
 }
 
+/// What one console changed on top of the all-consoles layout.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+struct Layout {
+    keyboard: BTreeMap<String, String>,
+    pads: BTreeMap<String, BTreeMap<String, String>>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Mappings {
@@ -283,6 +291,7 @@ pub struct Mappings {
     labels: BTreeMap<String, String>,
     pub nintendo_labels: bool,
     pub stick_dpad: bool,
+    consoles: BTreeMap<String, Layout>,
 }
 
 impl Mappings {
@@ -293,6 +302,31 @@ impl Mappings {
 
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).expect("mappings serialize")
+    }
+
+    /// The mappings in effect while `console` runs. Shortcuts and labels stay
+    /// global, so only the read-only result of this ever differs per console.
+    // Nothing calls this until the runtime switches to it in a later change.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn for_console(&self, console: &str) -> Mappings {
+        self.resolve(console, true)
+    }
+
+    /// `with_changes` off gives the all-consoles layout without what `console`
+    /// saved, which is what a console's own reset falls back to.
+    #[cfg_attr(not(test), expect(dead_code))]
+    fn resolve(&self, console: &str, with_changes: bool) -> Mappings {
+        let mut out = self.clone();
+        if let Some(layout) = self.consoles.get(console).filter(|_| with_changes) {
+            out.keyboard.extend(layout.keyboard.clone());
+            for (model, entries) in &layout.pads {
+                out.pads
+                    .entry(model.clone())
+                    .or_default()
+                    .extend(entries.clone());
+            }
+        }
+        out
     }
 
     pub fn key_for(&self, button: u32) -> String {
@@ -491,6 +525,40 @@ mod tests {
 
     fn key(k: Key) -> String {
         key_char(k)
+    }
+
+    #[test]
+    fn settings_saved_before_consoles_existed_still_load() {
+        let m = Mappings::from_json(Some(r#"{"keyboard":{"A":"q"}}"#));
+        assert_eq!(m.key_for(A), "q");
+        assert_eq!(m.for_console("snes").key_for(A), "q");
+    }
+
+    #[test]
+    fn a_console_nobody_changed_follows_the_all_consoles_layout() {
+        let mut m = Mappings::default();
+        m.set_key(B, "i");
+        m.set_pad_button("pad", B, Button::LeftTrigger);
+        for console in ["nes", "anything-unknown"] {
+            let c = m.for_console(console);
+            assert_eq!(c.key_for(B), "i");
+            assert_eq!(c.pad_button("pad", B), Button::LeftTrigger);
+        }
+    }
+
+    #[test]
+    fn for_console_keeps_shortcuts_global() {
+        let mut m = Mappings::default();
+        m.set_hotkey(Hotkey::Pause, "o");
+        assert_eq!(m.for_console("nes").hotkey_key(Hotkey::Pause), "o");
+    }
+
+    #[test]
+    fn console_layouts_survive_a_save() {
+        let m = Mappings::from_json(Some(r#"{"consoles":{"nes":{"keyboard":{"A":"k"}}}}"#));
+        assert_eq!(m.for_console("nes").key_for(A), "k");
+        assert_eq!(m.for_console("snes").key_for(A), default_key(A));
+        assert_eq!(Mappings::from_json(Some(&m.to_json())), m);
     }
 
     #[test]
