@@ -223,7 +223,7 @@ test:
 	CARGO_INCREMENTAL=0 cargo test --workspace --locked
 
 deny:
-	cargo deny check
+	cargo deny check -D advisory-not-detected
 
 machete:
 	cargo machete
