@@ -8,6 +8,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - A game with several versions in RomM (regions, revisions, demos, translations) shows once in the library, grouped the way RomM's own gallery groups it and as the version RomM picks, with the number of versions on its tile. Its page lists the versions RomM lists for it in a dropdown, and choosing one makes it your main version in RomM too, so the website and your other devices show it. Saves, states and play history stay with each version. ([#39](https://github.com/RompEmu/RomP/issues/39))
 - A multi-file game that isn't a single set of discs, such as a folder of hacks of one game or of translations each with its own playlist (.m3u), has a menu on its page to choose which file or playlist it starts with, marking those already downloaded. RomP downloads only that one, with the discs a playlist names, and each keeps its own saves and save states, synced to their own slot in RomM. Discs of one playlist still play together, from one save. ([#39](https://github.com/RompEmu/RomP/issues/39)) Thanks to @Altalus for testing both of these and for the ideas.
+- Controller and keyboard buttons can be set separately for each console from Settings, and a console shows only the buttons its controller has.
 
 ### Fixed
 
