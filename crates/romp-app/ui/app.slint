@@ -1679,8 +1679,8 @@ component GamePage inherits FocusScope {
                                                 text: label;
                                                 primary: i == root.version-index;
                                                 clicked => {
-                                                    version-popup.close();
                                                     root.choose-version(i);
+                                                    version-popup.close();
                                                 }
                                             }
                                         }
