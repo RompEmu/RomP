@@ -7,6 +7,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Added
 
 - A game with several versions in RomM (regions, revisions, demos, translations) shows once in the library, as the version RomM picks, with the number of versions on its tile. Its page lists the others, and choosing one makes it your main version in RomM too, so the website and your other devices show it. Saves, states and play history stay with each version. ([#39](https://github.com/RompEmu/RomP/issues/39))
+- Controller and keyboard buttons can be set separately for each console from Settings, and a console shows only the buttons its controller has.
 
 ## [0.21.0] - 2026-11-04
 
