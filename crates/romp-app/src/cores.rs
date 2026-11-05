@@ -365,6 +365,10 @@ fn vulkan_options(core_id: &str) -> Option<&'static [(&'static str, &'static str
     if !crate::vulkan::available() {
         return None;
     }
+    // Dolphin shows a picture only through a Vulkan surface, and draws fine with OpenGL.
+    if core_id == "dolphin" && !crate::vulkan::presents() {
+        return None;
+    }
     VULKAN_CORES
         .iter()
         .find(|(id, _)| *id == core_id)
@@ -811,8 +815,8 @@ mod tests {
         let vulkan = crate::vulkan::available();
         assert!(uses_vulkan("armsx2"));
         assert!(!uses_vulkan("snes9x"));
+        assert_eq!(uses_vulkan("dolphin"), crate::vulkan::presents());
         for core in [
-            "dolphin",
             "flycast",
             "mednafen_psx_hw",
             "mupen64plus_next",
