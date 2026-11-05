@@ -17,8 +17,6 @@ const NES_PAD: [(u32, &str); 8] = [
 /// The buttons a console's controller has, under the names the console gives them, so
 /// the controls page does not offer buttons the console cannot read. A controller that
 /// came in versions lists the most buttons any version has.
-// Nothing calls this until the controls page does.
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn buttons(console: &str) -> Vec<(u32, &'static str)> {
     let dpad = [
         (UP, gettext_noop!("Up")),

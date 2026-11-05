@@ -2497,7 +2497,11 @@ component RemapDialog inherits Rectangle {
     in property <bool> labels-shown;
     in property <[string]> label-choices;
     in property <int> labels;
+    in property <bool> console-shown;
+    in property <[string]> consoles;
+    in property <int> console;
     callback labels-chosen(int);
+    callback console-chosen(int);
     callback pick(int);
     callback key(string, KeyboardModifiers);
     callback reset();
@@ -2532,6 +2536,15 @@ component RemapDialog inherits Rectangle {
                 spacing: 12px;
                 Text { horizontal-alignment: Locale.start; text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
                 Text { horizontal-alignment: Locale.start; text: root.hint; color: Theme.text-secondary; wrap: word-wrap; }
+                if root.console-shown: SettingRow {
+                    label: @tr("Controls for");
+                    ComboBox {
+                        width: 190px;
+                        model: root.consoles;
+                        current-index: root.console;
+                        selected => { root.console-chosen(self.current-index); }
+                    }
+                }
                 if root.labels-shown: SettingRow {
                     label: @tr("Button labels");
                     detail: @tr("For controllers that say they're another kind.");
@@ -3020,7 +3033,11 @@ export component AppWindow inherits Window {
     in property <bool> remap-labels-shown;
     in property <[string]> remap-label-choices;
     in property <int> remap-labels;
+    in property <bool> remap-console-shown;
+    in property <[string]> remap-consoles;
+    in property <int> remap-console;
     callback remap-labels-chosen(int);
+    callback remap-console-chosen(int);
     callback customize(string);
     callback remap-pick(int);
     callback remap-key(string, KeyboardModifiers);
@@ -3421,7 +3438,11 @@ export component AppWindow inherits Window {
         labels-shown: root.remap-labels-shown;
         label-choices: root.remap-label-choices;
         labels: root.remap-labels;
+        console-shown: root.remap-console-shown;
+        consoles: root.remap-consoles;
+        console: root.remap-console;
         labels-chosen(i) => { root.remap-labels-chosen(i); }
+        console-chosen(i) => { root.remap-console-chosen(i); }
         pick(i) => { root.remap-pick(i); }
         key(text, modifiers) => { root.remap-key(text, modifiers); }
         reset => { root.remap-reset(); }
