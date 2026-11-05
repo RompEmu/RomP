@@ -60,6 +60,8 @@ pub struct GameDetail {
     pub local_path: Option<String>,
     pub meta: RomMetadata,
     pub screenshots: Vec<String>,
+    /// The file name, when the game has other versions to tell it from.
+    pub version_file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -932,7 +934,9 @@ impl Store {
             .query_row(
                 "SELECT g.id, g.title, g.platform_id, COALESCE(p.slug, ''), COALESCE(p.name, ''),
                         g.summary, g.size_bytes, g.cover_small, g.cover_large, g.local_path,
-                        p.category, g.meta, g.screenshots
+                        p.category, g.meta, g.screenshots,
+                        CASE WHEN (SELECT COUNT(*) FROM games o WHERE o.group_id = g.group_id) > 1
+                             THEN g.fs_name END
                  FROM games g LEFT JOIN platforms p ON p.id = g.platform_id WHERE g.id = ?1",
                 [id],
                 |r| {
@@ -950,6 +954,7 @@ impl Store {
                         platform_category: r.get(10)?,
                         meta: json_column(r.get(11)?),
                         screenshots: json_column(r.get(12)?),
+                        version_file: r.get(13)?,
                     })
                 },
             )
@@ -2118,6 +2123,17 @@ mod tests {
         s.retain_games(&[30, 31, 40]);
         assert_eq!(s.versions(31).len(), 2);
         assert_eq!(item(&s, GameFilter::default(), 31).versions, 2);
+    }
+
+    #[test]
+    fn only_a_game_with_versions_names_its_file() {
+        let mut s = with_versions();
+        s.set_picks(&[31, 40]);
+        assert_eq!(
+            s.game(32).unwrap().version_file.as_deref(),
+            Some("Final Fantasy VII (Europe) (Demo).chd")
+        );
+        assert_eq!(s.game(40).unwrap().version_file, None);
     }
 
     #[test]
