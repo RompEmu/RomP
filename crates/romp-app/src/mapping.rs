@@ -231,6 +231,9 @@ pub enum Assigned {
     /// The key belonged to this button or hotkey, which now has the old key instead.
     Swapped(String),
     Reserved,
+    /// A shortcut already uses the key, and a console's buttons cannot take it
+    /// from the all-consoles shortcuts. Holds the shortcut's label.
+    Taken(String),
 }
 
 pub fn key_label(text: &str) -> String {
@@ -403,6 +406,97 @@ impl Mappings {
             return Assigned::Swapped(hotkey_label(other).into());
         }
         Assigned::Set
+    }
+
+    /// Edits run on the console's own layout so swaps stay inside it, and only
+    /// what differs from the all-consoles layout is kept, so every other button
+    /// still follows later changes to that layout.
+    // Nothing calls the console setters and resets until the controls page does.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn set_console_key(&mut self, console: &str, button: u32, text: &str) -> Assigned {
+        if is_reserved(text) {
+            return Assigned::Reserved;
+        }
+        if let Some(hotkey) = self.hotkey_for(&normalize_key(text)) {
+            return Assigned::Taken(hotkey_label(hotkey).into());
+        }
+        let mut edited = self.for_console(console);
+        let outcome = edited.set_key(button, text);
+        self.keep_console_keyboard(console, &edited);
+        outcome
+    }
+
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn set_console_pad_button(
+        &mut self,
+        console: &str,
+        model: &str,
+        button: u32,
+        physical: Button,
+    ) {
+        let mut edited = self.for_console(console);
+        edited.set_pad_button(model, button, physical);
+        self.keep_console_pad(console, model, &edited);
+    }
+
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn reset_console_keyboard(&mut self, console: &str) {
+        if let Some(layout) = self.consoles.get_mut(console) {
+            layout.keyboard.clear();
+        }
+        self.drop_empty_console(console);
+    }
+
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn reset_console_pad(&mut self, console: &str, model: &str) {
+        if let Some(layout) = self.consoles.get_mut(console) {
+            layout.pads.remove(model);
+        }
+        self.drop_empty_console(console);
+    }
+
+    fn keep_console_keyboard(&mut self, console: &str, edited: &Mappings) {
+        let base = self.resolve(console, false);
+        let changed = BUTTONS
+            .iter()
+            .map(|(b, _)| *b)
+            .filter(|b| edited.key_for(*b) != base.key_for(*b))
+            .map(|b| (name(b).to_string(), edited.key_for(b)))
+            .collect();
+        self.consoles.entry(console.into()).or_default().keyboard = changed;
+        self.drop_empty_console(console);
+    }
+
+    fn keep_console_pad(&mut self, console: &str, model: &str, edited: &Mappings) {
+        let base = self.resolve(console, false);
+        let changed: BTreeMap<String, String> = BUTTONS
+            .iter()
+            .map(|(b, _)| *b)
+            .filter(|b| edited.pad_button(model, *b) != base.pad_button(model, *b))
+            .map(|b| {
+                (
+                    name(b).to_string(),
+                    physical_name(edited.pad_button(model, b)),
+                )
+            })
+            .collect();
+        let layout = self.consoles.entry(console.into()).or_default();
+        if changed.is_empty() {
+            layout.pads.remove(model);
+        } else {
+            layout.pads.insert(model.into(), changed);
+        }
+        self.drop_empty_console(console);
+    }
+
+    fn drop_empty_console(&mut self, console: &str) {
+        if self
+            .consoles
+            .get(console)
+            .is_some_and(|l| *l == Layout::default())
+        {
+            self.consoles.remove(console);
+        }
     }
 
     fn keys_clash(&self) -> bool {
@@ -789,5 +883,79 @@ mod tests {
         assert_eq!(as_seen(RIGHT, true), LEFT);
         assert_eq!(as_seen(UP, true), UP);
         assert_eq!(as_seen(LEFT, false), LEFT);
+    }
+
+    #[test]
+    fn a_console_key_leaves_other_consoles_and_all_consoles_alone() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, "k");
+        assert_eq!(m.for_console("nes").key_for(A), "k");
+        assert_eq!(m.for_console("snes").key_for(A), default_key(A));
+        assert_eq!(m.key_for(A), default_key(A));
+    }
+
+    #[test]
+    fn a_console_key_swaps_inside_the_console() {
+        let mut m = Mappings::default();
+        assert_eq!(
+            m.set_console_key("nes", A, &default_key(B)),
+            Assigned::Swapped("B".into())
+        );
+        let nes = m.for_console("nes");
+        assert_eq!(nes.key_for(A), default_key(B));
+        assert_eq!(nes.key_for(B), default_key(A));
+        assert_eq!(m.key_for(B), default_key(B));
+    }
+
+    #[test]
+    fn buttons_a_console_never_touched_follow_later_changes() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, "k");
+        m.set_key(Y, "j");
+        assert_eq!(m.for_console("nes").key_for(Y), "j");
+    }
+
+    #[test]
+    fn a_console_cannot_take_a_shortcut_key() {
+        let mut m = Mappings::default();
+        let before = m.to_json();
+        assert_eq!(
+            m.set_console_key("nes", A, "p"),
+            Assigned::Taken("Pause".into())
+        );
+        assert_eq!(m.to_json(), before);
+        assert_eq!(
+            m.set_console_key("nes", A, &key(Key::Escape)),
+            Assigned::Reserved
+        );
+        assert_eq!(m.to_json(), before);
+    }
+
+    #[test]
+    fn a_console_pad_layout_is_per_console_and_model_and_swaps() {
+        let mut m = Mappings::default();
+        m.set_console_pad_button("snes", "pad", A, Button::RightTrigger);
+        let snes = m.for_console("snes");
+        assert_eq!(snes.pad_button("pad", A), Button::RightTrigger);
+        assert_eq!(snes.pad_button("pad", R), default_physical(A));
+        assert_eq!(
+            m.for_console("nes").pad_button("pad", A),
+            default_physical(A)
+        );
+        assert_eq!(m.pad_button("pad", A), default_physical(A));
+        assert_eq!(snes.pad_button("other", A), default_physical(A));
+    }
+
+    #[test]
+    fn resetting_a_console_returns_it_to_the_all_consoles_layout() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, &default_key(B));
+        m.set_console_pad_button("snes", "pad", A, Button::RightTrigger);
+        m.reset_console_keyboard("nes");
+        m.reset_console_pad("snes", "pad");
+        assert_eq!(m.for_console("nes"), m.resolve("nes", false));
+        assert_eq!(m.for_console("snes"), m.resolve("snes", false));
+        let json = m.to_json();
+        assert!(!json.contains("nes"), "{json}");
     }
 }

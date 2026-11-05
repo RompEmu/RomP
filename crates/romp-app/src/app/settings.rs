@@ -458,6 +458,9 @@ impl Controller {
                 mapping::combo_label(&previous)
             )),
             (Assigned::Set, _) => None,
+            // Only per-console keys are refused for a shortcut, and this page
+            // edits the all-consoles keys.
+            (Assigned::Taken(_), _) => unreachable!("global keys swap with shortcuts"),
         };
         self.remap_waiting.set(None);
         self.save_mappings();
