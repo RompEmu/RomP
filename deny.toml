@@ -7,6 +7,7 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant comes in through zbus 5, for the Linux keychain and an accessibility test helper; zbus 6 absorbs it, and they aren't on it yet" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names comes in through zbus 5, for the Linux keychain and an accessibility test helper; zbus 6 absorbs it, and they aren't on it yet" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive comes in through zbus 5, for the Linux keychain and an accessibility test helper; zbus 6 absorbs it, and they aren't on it yet" },
+    { id = "RUSTSEC-2026-0441", reason = "pin-utils comes in through spin_on, which Slint's build and macros use, and has no replacement there yet" },
 ]
 
 [licenses]
