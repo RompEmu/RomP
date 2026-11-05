@@ -36,7 +36,7 @@ fn load_image(path: &Path) -> Option<Image> {
     Image::load_from_path(path).ok()
 }
 
-fn playable(platform_slug: &str) -> bool {
+pub(super) fn playable(platform_slug: &str) -> bool {
     core_for_platform(platform_slug).is_some()
         || platform_slug == xemu::PLATFORM
         || (platform_slug == rpcs3::PLATFORM && rpcs3::available())
