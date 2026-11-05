@@ -341,21 +341,42 @@ pub fn is_computer(core_id: &str) -> bool {
     )
 }
 
+struct VulkanCore {
+    id: &'static str,
+    options: &'static [(&'static str, &'static str)],
+    /// Shows a picture only through a Vulkan surface, and draws fine with OpenGL without one.
+    needs_surface: bool,
+}
+
+const fn vulkan_core(
+    id: &'static str,
+    options: &'static [(&'static str, &'static str)],
+) -> VulkanCore {
+    VulkanCore {
+        id,
+        options,
+        needs_surface: false,
+    }
+}
+
 // These draw through Vulkan where this computer has a working Vulkan device, which on
 // macOS is the bundled MoltenVK.
-const VULKAN_CORES: [(&str, &[(&str, &str)]); 6] = [
-    ("dolphin", &[]),
-    ("flycast", &[]),
-    (
+const VULKAN_CORES: [VulkanCore; 6] = [
+    VulkanCore {
+        needs_surface: true,
+        ..vulkan_core("dolphin", &[])
+    },
+    vulkan_core("flycast", &[]),
+    vulkan_core(
         "mednafen_psx_hw",
         &[("beetle_psx_hw_renderer", "hardware_vk")],
     ),
-    (
+    vulkan_core(
         "mupen64plus_next",
         &[("mupen64plus-rdp-plugin", "parallel")],
     ),
-    ("ppsspp", &[("ppsspp_backend", "vulkan")]),
-    ("pcsx2", &[("pcsx2_renderer", "Vulkan")]),
+    vulkan_core("ppsspp", &[("ppsspp_backend", "vulkan")]),
+    vulkan_core("pcsx2", &[("pcsx2_renderer", "Vulkan")]),
 ];
 
 fn vulkan_options(core_id: &str) -> Option<&'static [(&'static str, &'static str)]> {
@@ -365,14 +386,11 @@ fn vulkan_options(core_id: &str) -> Option<&'static [(&'static str, &'static str
     if !crate::vulkan::available() {
         return None;
     }
-    // Dolphin shows a picture only through a Vulkan surface, and draws fine with OpenGL.
-    if core_id == "dolphin" && !crate::vulkan::presents() {
-        return None;
-    }
     VULKAN_CORES
         .iter()
-        .find(|(id, _)| *id == core_id)
-        .map(|(_, options)| *options)
+        .find(|core| core.id == core_id)
+        .filter(|core| !core.needs_surface || crate::vulkan::presents())
+        .map(|core| core.options)
 }
 
 pub fn uses_vulkan(core_id: &str) -> bool {
