@@ -318,6 +318,17 @@ impl Controller {
                 .map_or_else(|| tr!("Controller"), |p| p.name)
         };
         ui.set_remap_title(title.into());
+        *self.remap_console.borrow_mut() = None;
+        *self.remap_consoles.borrow_mut() = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .platforms(false)
+            .into_iter()
+            .filter(|p| super::game::playable(&p.slug))
+            .map(|p| (p.slug, p.name))
+            .collect();
         *self.remap_device.borrow_mut() = Some(device);
         self.remap_waiting.set(None);
         self.show_remap(None);
@@ -350,6 +361,7 @@ impl Controller {
                     .into(),
             );
             ui.set_remap_labels_shown(false);
+            ui.set_remap_console_shown(false);
             return;
         }
         let model = mapping::model_of(&device);
@@ -377,16 +389,35 @@ impl Controller {
                 .map_or(0, |i| i as i32 + 1),
         );
         ui.set_remap_labels_shown(!keyboard);
-        let rows: Vec<RemapRow> = BUTTONS
+        ui.set_remap_console_shown(true);
+        let console = self.remap_console.borrow().clone();
+        let consoles = self.remap_consoles.borrow();
+        let names: Vec<slint::SharedString> = std::iter::once(tr!("All consoles"))
+            .chain(consoles.iter().map(|(_, name)| name.clone()))
+            .map(slint::SharedString::from)
+            .collect();
+        ui.set_remap_consoles(ModelRc::new(VecModel::from(names)));
+        ui.set_remap_console(console.as_ref().map_or(0, |slug| {
+            consoles
+                .iter()
+                .position(|(s, _)| s == slug)
+                .map_or(0, |i| i as i32 + 1)
+        }));
+        let view = match &console {
+            Some(slug) => mappings.for_console(slug),
+            None => mappings.clone(),
+        };
+        let rows: Vec<RemapRow> = self
+            .remap_buttons()
             .iter()
             .map(|(button, name)| RemapRow {
                 name: translate(name).into(),
                 binding: if keyboard {
-                    mapping::key_label(&mappings.key_for(*button))
+                    mapping::key_label(&view.key_for(*button))
                 } else {
                     translate(crate::pad_labels::name(
                         family,
-                        mappings.pad_button(model, *button),
+                        view.pad_button(model, *button),
                     ))
                 }
                 .into(),
@@ -402,13 +433,30 @@ impl Controller {
         ui.set_remap_hint(hint.into());
     }
 
+    /// The buttons the pages list, so a tapped row index and the row shown agree.
+    fn remap_buttons(&self) -> Vec<(u32, &'static str)> {
+        match self.remap_console.borrow().as_deref() {
+            Some(slug) => crate::controllers::buttons(slug),
+            None => BUTTONS.to_vec(),
+        }
+    }
+
+    pub(super) fn remap_console_chosen(&self, index: i32) {
+        let slug = usize::try_from(index - 1)
+            .ok()
+            .and_then(|i| self.remap_consoles.borrow().get(i).map(|(s, _)| s.clone()));
+        *self.remap_console.borrow_mut() = slug;
+        self.remap_waiting.set(None);
+        self.show_remap(None);
+    }
+
     pub(super) fn remap_pick(&self, index: i32) {
         let shortcuts = self.remap_device.borrow().as_deref() == Some(SHORTCUTS);
         let button = usize::try_from(index).ok().and_then(|i| {
             if shortcuts {
                 (i < HOTKEYS.len()).then_some(i as u32)
             } else {
-                BUTTONS.get(i).map(|(b, _)| *b)
+                self.remap_buttons().get(i).map(|(b, _)| *b)
             }
         });
         self.remap_waiting.set(button);
@@ -529,6 +577,8 @@ impl Controller {
 
     pub(super) fn remap_close(&self) {
         self.remap_device.borrow_mut().take();
+        self.remap_console.borrow_mut().take();
+        self.remap_consoles.borrow_mut().clear();
         self.remap_waiting.set(None);
         if let Some(ui) = self.ui() {
             ui.set_remap_open(false);
