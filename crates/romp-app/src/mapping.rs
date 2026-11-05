@@ -295,6 +295,18 @@ pub struct Mappings {
     pub nintendo_labels: bool,
     pub stick_dpad: bool,
     consoles: BTreeMap<String, Layout>,
+    #[serde(skip)]
+    swaps: &'static [(u32, u32)],
+}
+
+/// Buttons that trade default places on a console, because its core reads the
+/// ones on the top and left of the pad for what the game uses most. Dolphin
+/// feeds the Wiimote's 1 and 2 from X and Y.
+fn builtin_swaps(console: &str) -> &'static [(u32, u32)] {
+    match console {
+        "wii" => &[(X, B), (Y, A)],
+        _ => &[],
+    }
 }
 
 impl Mappings {
@@ -320,6 +332,7 @@ impl Mappings {
     #[cfg_attr(not(test), expect(dead_code))]
     fn resolve(&self, console: &str, with_changes: bool) -> Mappings {
         let mut out = self.clone();
+        out.swaps = builtin_swaps(console);
         if let Some(layout) = self.consoles.get(console).filter(|_| with_changes) {
             out.keyboard.extend(layout.keyboard.clone());
             for (model, entries) in &layout.pads {
@@ -332,11 +345,23 @@ impl Mappings {
         out
     }
 
+    /// The button this one trades default places with, or itself.
+    fn partner(&self, button: u32) -> u32 {
+        self.swaps
+            .iter()
+            .find_map(|&(a, b)| match button {
+                _ if button == a => Some(b),
+                _ if button == b => Some(a),
+                _ => None,
+            })
+            .unwrap_or(button)
+    }
+
     pub fn key_for(&self, button: u32) -> String {
         self.keyboard
             .get(name(button))
             .cloned()
-            .unwrap_or_else(|| default_key(button))
+            .unwrap_or_else(|| default_key(self.partner(button)))
     }
 
     pub fn button_for_key(&self, text: &str) -> Option<u32> {
@@ -524,7 +549,7 @@ impl Mappings {
             .get(model)
             .and_then(|m| m.get(name(button)))
             .and_then(|p| physical_named(p))
-            .unwrap_or_else(|| default_physical(button))
+            .unwrap_or_else(|| default_physical(self.partner(button)))
     }
 
     pub fn set_pad_button(&mut self, model: &str, button: u32, physical: Button) {
@@ -957,5 +982,53 @@ mod tests {
         assert_eq!(m.for_console("snes"), m.resolve("snes", false));
         let json = m.to_json();
         assert!(!json.contains("nes"), "{json}");
+    }
+
+    #[test]
+    fn wii_puts_its_main_buttons_on_the_bottom_and_right() {
+        let m = Mappings::default();
+        let wii = m.for_console("wii");
+        assert_eq!(wii.pad_button("pad", X), default_physical(B));
+        assert_eq!(wii.pad_button("pad", Y), default_physical(A));
+        assert_eq!(wii.pad_button("pad", B), default_physical(X));
+        assert_eq!(wii.pad_button("pad", A), default_physical(Y));
+        assert_eq!(wii.key_for(X), default_key(B));
+        assert_eq!(wii.key_for(Y), default_key(A));
+        assert_eq!(wii.key_for(B), default_key(X));
+        assert_eq!(wii.key_for(A), default_key(Y));
+        for plain in [m.for_console("ngc"), m.clone()] {
+            assert_eq!(plain.pad_button("pad", X), default_physical(X));
+            assert_eq!(plain.key_for(A), default_key(A));
+        }
+    }
+
+    #[test]
+    fn a_layout_you_set_for_everything_beats_the_wii_default() {
+        let mut m = Mappings::default();
+        m.set_pad_button("pad", X, Button::LeftTrigger);
+        let wii = m.for_console("wii");
+        assert_eq!(wii.pad_button("pad", X), Button::LeftTrigger);
+        assert_eq!(wii.pad_button("pad", Y), default_physical(A));
+    }
+
+    #[test]
+    fn changing_one_wii_button_keeps_the_rest_of_the_wii_default() {
+        let mut m = Mappings::default();
+        m.set_console_pad_button("wii", "pad", L, Button::Mode);
+        let wii = m.for_console("wii");
+        assert_eq!(wii.pad_button("pad", L), Button::Mode);
+        assert_eq!(wii.pad_button("pad", X), default_physical(B));
+        m.reset_console_pad("wii", "pad");
+        let wii = m.for_console("wii");
+        assert_eq!(wii.pad_button("pad", L), default_physical(L));
+        assert_eq!(wii.pad_button("pad", X), default_physical(B));
+    }
+
+    #[test]
+    fn wii_reset_returns_to_the_wii_default_not_the_global_one() {
+        let mut m = Mappings::default();
+        m.set_console_key("wii", A, "k");
+        m.reset_console_keyboard("wii");
+        assert_eq!(m.for_console("wii").key_for(A), default_key(Y));
     }
 }
