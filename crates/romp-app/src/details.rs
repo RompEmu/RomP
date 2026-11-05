@@ -196,6 +196,10 @@ pub fn facts(detail: &GameDetail) -> Vec<(&'static str, String)> {
         meta.average_rating
             .filter(|r| *r > 0.0)
             .map(|r| (gettext_noop!("Rating"), format!("{} / 100", r.round()))),
+        detail
+            .version_file
+            .clone()
+            .map(|file| (gettext_noop!("Version"), file)),
         (detail.size_bytes > 0).then(|| (gettext_noop!("Size"), human_size(detail.size_bytes))),
     ]
     .into_iter()
@@ -248,6 +252,7 @@ mod tests {
             local_path: None,
             meta,
             screenshots: Vec::new(),
+            version_file: None,
         }
     }
 
@@ -322,6 +327,24 @@ mod tests {
             ..RomMetadata::default()
         });
         assert_eq!(facts(&d)[0], ("Company", "Sega".to_string()));
+    }
+
+    #[test]
+    fn a_game_with_versions_names_the_file_it_is() {
+        let d = GameDetail {
+            version_file: Some("Pokemon Black Version (DSi Enhanced).zip".into()),
+            ..detail(RomMetadata::default())
+        };
+        assert_eq!(
+            facts(&d),
+            [
+                (
+                    "Version",
+                    "Pokemon Black Version (DSi Enhanced).zip".to_string()
+                ),
+                ("Size", "4.2 MB".to_string()),
+            ]
+        );
     }
 
     #[test]

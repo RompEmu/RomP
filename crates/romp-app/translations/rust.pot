@@ -955,6 +955,10 @@ msgid "Rating"
 msgstr ""
 
 #: crates/romp-app/src/details.rs
+msgid "Version"
+msgstr ""
+
+#: crates/romp-app/src/details.rs
 msgid "Size"
 msgstr ""
 
