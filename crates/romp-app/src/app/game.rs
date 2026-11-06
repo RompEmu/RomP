@@ -981,7 +981,17 @@ impl Controller {
         self.open_game(id);
         self.shared.rt.spawn(async move {
             let result = client.set_main_version(id).await;
+            // RomM clears the old main version's siblings too, which can change what other cards
+            // show, so take its picks again rather than guessing.
+            let picks = match result {
+                Ok(()) => client.picked_rom_ids().await.ok(),
+                Err(_) => None,
+            };
             on_ui(move |c| {
+                if let Some(picks) = picks.filter(|p| !p.is_empty()) {
+                    c.shared.store.lock().unwrap().set_picks(&picks);
+                    c.reload_games();
+                }
                 if let Err(e) = result {
                     if let Some(prev) = prev {
                         c.shared.store.lock().unwrap().undo_pick(id, prev);
