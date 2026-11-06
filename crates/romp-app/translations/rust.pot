@@ -839,6 +839,14 @@ msgid "Start"
 msgstr ""
 
 #: crates/romp-app/src/controllers.rs
+msgid "Disk side"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs
+msgid "Eject disk"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs
 msgid "Mode"
 msgstr ""
 
