@@ -222,6 +222,29 @@ pub struct MatchIds {
     pub steam_id: Option<i64>,
 }
 
+impl MatchIds {
+    /// The card RomM's grouped gallery puts the ROM on: the first id it has, in RomM's order, on
+    /// its platform, or the ROM alone when it has none.
+    pub fn card(&self, platform_id: i64, rom_id: i64) -> String {
+        let numbers = [
+            ("igdb", self.igdb_id),
+            ("ss", self.ss_id),
+            ("moby", self.moby_id),
+            ("ra", self.ra_id),
+            ("hasheous", self.hasheous_id),
+            ("launchbox", self.launchbox_id),
+            ("tgdb", self.tgdb_id),
+        ];
+        let first = numbers
+            .into_iter()
+            .find_map(|(source, id)| Some((source, id?.to_string())))
+            .or_else(|| Some(("flashpoint", self.flashpoint_id.clone()?)))
+            .or_else(|| Some(("steam", self.steam_id?.to_string())))
+            .unwrap_or(("romm", rom_id.to_string()));
+        format!("{}-{platform_id}-{}", first.0, first.1)
+    }
+}
+
 /// Another version of the same game, as RomM lists it on a ROM.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SiblingRom {
@@ -423,6 +446,36 @@ pub(crate) fn rom(id: i64, platform_id: i64, name: &str, updated_at: &str) -> Ro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_card_is_the_first_match_in_romms_order() {
+        let ids = MatchIds {
+            ss_id: Some(4),
+            ra_id: Some(9),
+            ..MatchIds::default()
+        };
+        assert_eq!(ids.card(2, 100), "ss-2-4");
+        let ids = MatchIds {
+            igdb_id: Some(1),
+            ..ids
+        };
+        assert_eq!(ids.card(2, 100), "igdb-2-1");
+    }
+
+    #[test]
+    fn flashpoint_comes_before_steam() {
+        let ids = MatchIds {
+            flashpoint_id: Some("f".into()),
+            steam_id: Some(3),
+            ..MatchIds::default()
+        };
+        assert_eq!(ids.card(1, 7), "flashpoint-1-f");
+    }
+
+    #[test]
+    fn an_unmatched_rom_is_its_own_card() {
+        assert_eq!(MatchIds::default().card(1, 7), "romm-1-7");
+    }
 
     #[test]
     fn rom_metadata_and_screenshots_parse() {
