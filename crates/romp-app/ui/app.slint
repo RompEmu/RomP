@@ -2,7 +2,7 @@ import { Locale, Row, Theme } from "theme.slint";
 import { FocusRing, KeyActivator } from "focus.slint";
 import { AchievementItem, AchievementRow } from "achievements.slint";
 import { SlotCard, SlotPicture } from "slots.slint";
-import { Button, CheckBox, ComboBox, LineEdit, ListView, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, ListView, Palette, ProgressIndicator, ScrollView, Slider, Spinner, Switch } from "std-widgets.slint";
 
 export struct SidebarEntry { header: bool, key: string, name: string, initial: string, count: int, icon: image, has-icon: bool, tint: bool, glyph: string, expanded: bool, can-add: bool, editable: bool, note: bool }
 export struct NotificationRow { id: int, title: string, body: string, level: string, when: string, unread: bool }
@@ -1676,12 +1676,30 @@ component GamePage inherits FocusScope {
                                 }
                             }
                             if root.versions.length > 1: Rectangle {
-                                width: version-button.preferred-width;
-                                version-button := Button {
+                                width: version-label.preferred-width;
+                                Button {
                                     width: parent.width;
                                     height: parent.height;
-                                    text: root.versions[root.version-index];
+                                    accessible-label: root.versions[root.version-index];
                                     clicked => { version-popup.show(); }
+                                }
+                                version-label := HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    spacing: 8px;
+                                    Text {
+                                        vertical-alignment: center;
+                                        text: root.versions[root.version-index];
+                                        color: Palette.control-foreground;
+                                        accessible-role: none;
+                                    }
+                                    Path {
+                                        y: (parent.height - self.height) / 2;
+                                        width: 8px;
+                                        height: 5px;
+                                        commands: "M 0 0 L 8 0 L 4 5 Z";
+                                        fill: Palette.control-foreground;
+                                    }
                                 }
                                 version-popup := PopupWindow {
                                     y: parent.height + 4px;
