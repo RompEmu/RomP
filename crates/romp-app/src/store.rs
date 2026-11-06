@@ -349,6 +349,20 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 16 {
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE in_game_save_sync_new (rom_id INTEGER NOT NULL,
+                   variant TEXT NOT NULL DEFAULT '', md5 TEXT NOT NULL, synced_at INTEGER NOT NULL,
+                   PRIMARY KEY (rom_id, variant));
+                 INSERT INTO in_game_save_sync_new (rom_id, md5, synced_at)
+                   SELECT rom_id, md5, synced_at FROM in_game_save_sync;
+                 DROP TABLE in_game_save_sync;
+                 ALTER TABLE in_game_save_sync_new RENAME TO in_game_save_sync;
+                 PRAGMA user_version = 16;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -1054,11 +1068,13 @@ impl Store {
             .expect("delete state record");
     }
 
-    pub fn in_game_save_record(&self, rom_id: i64) -> Option<InGameSaveRecord> {
+    /// The in-game save last synced for a game, or for one of its files (`variant`, "" for the
+    /// game itself).
+    pub fn in_game_save_record(&self, rom_id: i64, variant: &str) -> Option<InGameSaveRecord> {
         self.conn
             .query_row(
-                "SELECT md5, synced_at FROM in_game_save_sync WHERE rom_id = ?1",
-                [rom_id],
+                "SELECT md5, synced_at FROM in_game_save_sync WHERE rom_id = ?1 AND variant = ?2",
+                params![rom_id, variant],
                 |r| {
                     Ok(InGameSaveRecord {
                         md5: r.get(0)?,
@@ -1069,12 +1085,20 @@ impl Store {
             .ok()
     }
 
-    pub fn set_in_game_save_record(&mut self, rom_id: i64, md5: &str, synced_at: i64) {
+    pub fn set_in_game_save_record(
+        &mut self,
+        rom_id: i64,
+        variant: &str,
+        md5: &str,
+        synced_at: i64,
+    ) {
         self.conn
             .execute(
-                "INSERT INTO in_game_save_sync (rom_id, md5, synced_at) VALUES (?1, ?2, ?3)
-                 ON CONFLICT(rom_id) DO UPDATE SET md5 = excluded.md5, synced_at = excluded.synced_at",
-                params![rom_id, md5, synced_at],
+                "INSERT INTO in_game_save_sync (rom_id, variant, md5, synced_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(rom_id, variant) DO UPDATE SET md5 = excluded.md5,
+                   synced_at = excluded.synced_at",
+                params![rom_id, variant, md5, synced_at],
             )
             .expect("write in-game save record");
     }
@@ -1679,19 +1703,19 @@ mod tests {
         let path = dir.path().join("c.db");
         {
             let mut s = Store::open(&path).unwrap();
-            assert_eq!(s.in_game_save_record(7), None);
-            s.set_in_game_save_record(7, "aaa", 100);
-            s.set_in_game_save_record(7, "bbb", 200);
+            assert_eq!(s.in_game_save_record(7, ""), None);
+            s.set_in_game_save_record(7, "", "aaa", 100);
+            s.set_in_game_save_record(7, "", "bbb", 200);
         }
         let s = Store::open(&path).unwrap();
         assert_eq!(
-            s.in_game_save_record(7),
+            s.in_game_save_record(7, ""),
             Some(InGameSaveRecord {
                 md5: "bbb".into(),
                 synced_at: 200
             })
         );
-        assert_eq!(s.in_game_save_record(8), None);
+        assert_eq!(s.in_game_save_record(8, ""), None);
     }
 
     #[test]
@@ -1859,6 +1883,29 @@ mod tests {
         assert_eq!(s.get("last_sync_at"), None);
         assert_eq!(s.get("versions_repaired"), None);
         assert_eq!(card_of(&s, 5), "romm-1-5");
+    }
+
+    #[test]
+    fn v15_database_keeps_its_save_records_for_each_game_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v15.db");
+        {
+            let s = Store::open(&path).unwrap();
+            s.conn
+                .execute_batch(
+                    "DROP TABLE in_game_save_sync;
+                     CREATE TABLE in_game_save_sync (rom_id INTEGER PRIMARY KEY,
+                       md5 TEXT NOT NULL, synced_at INTEGER NOT NULL);
+                     INSERT INTO in_game_save_sync VALUES (5, 'abc', 100);
+                     PRAGMA user_version = 15;",
+                )
+                .unwrap();
+        }
+        let mut s = Store::open(&path).unwrap();
+        assert_eq!(s.in_game_save_record(5, "").unwrap().md5, "abc");
+        s.set_in_game_save_record(5, "Advent", "def", 200);
+        assert_eq!(s.in_game_save_record(5, "").unwrap().md5, "abc");
+        assert_eq!(s.in_game_save_record(5, "Advent").unwrap().md5, "def");
     }
 
     #[test]

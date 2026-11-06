@@ -48,7 +48,10 @@ async fn sync_game(
     game: &GameSaves,
     core_version: Option<&str>,
 ) -> Result<SramOutcome, Error> {
-    let last = store.lock().unwrap().in_game_save_record(game.rom_id);
+    let last = store
+        .lock()
+        .unwrap()
+        .in_game_save_record(game.rom_id, game.record_variant());
     let sram = saves::sync_sram(client, device_id, game, last.as_ref()).await?;
     saves::remember_outcome(store, game, &sram);
     if let Some(version) = core_version {
@@ -103,7 +106,18 @@ impl Controller {
 
     pub(super) fn game_saves(&self, detail: &GameDetail) -> Option<GameSaves> {
         let core = core_for_platform(&detail.platform_slug)?;
-        let dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
+        let variant = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .chosen_file(detail.id)
+            .map(|file| crate::saves::variant_of(&file));
+        let base = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
+        let dir = match &variant {
+            Some(variant) => base.join(crate::saves::VARIANTS).join(variant),
+            None => base,
+        };
         if core.id == "melondsds" {
             if let Err(e) = crate::saves::adopt_desmume_saves(&dir) {
                 tracing::warn!("moving {}'s DeSmuME save to melonDS: {e}", detail.title);
@@ -118,6 +132,7 @@ impl Controller {
             emulator: core.id.to_string(),
             save_file,
             save_emulator,
+            variant,
         })
     }
 

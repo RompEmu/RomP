@@ -218,6 +218,8 @@ pub fn state_remote_name(slot: &str, core_id: &str, core_version: &str) -> Strin
 
 pub const SRAM_FILE: &str = "game.srm";
 pub const SRAM_SLOT: &str = "autosave";
+/// The folder, inside a game's save folder, that each file it can start with keeps saves in.
+pub const VARIANTS: &str = "files";
 const ARMSX2_CARD: &str = "pcsx2/memcards/Mcd001.ps2";
 const DOS_SAVE: &str = ".pure.zip";
 // Both PS2 emulators write the same memory card format, so a card follows the game between them.
@@ -232,6 +234,34 @@ pub struct GameSaves {
     /// The in-game save, relative to `dir`: save RAM, or a PS2 memory card.
     pub save_file: String,
     pub save_emulator: String,
+    /// For a multi-file game started with a file other than the one RomP picks, that file's
+    /// name: its saves and states are its own, in their own folder and RomM slot.
+    pub variant: Option<String>,
+}
+
+/// The name a file a game was started with gives its saves: the file name without extension,
+/// safe as a folder name and short enough for a RomM slot.
+pub fn variant_of(file: &str) -> String {
+    let stem = Path::new(file)
+        .file_stem()
+        .map_or_else(|| file.into(), |s| s.to_string_lossy());
+    let safe: String = stem
+        .chars()
+        .map(|c| {
+            if c.is_control() || "/\\:|*?\"<>".contains(c) {
+                '-'
+            } else {
+                c
+            }
+        })
+        .take(100)
+        .collect();
+    let safe = safe.trim().trim_matches('.').to_string();
+    if safe.is_empty() {
+        "file".into()
+    } else {
+        safe
+    }
 }
 
 /// The file a core keeps its in-game saves in, relative to the game's save folder, and the
@@ -312,6 +342,24 @@ pub enum Keep {
 }
 
 impl GameSaves {
+    /// The RomM slot the in-game save syncs to.
+    pub fn sram_slot(&self) -> &str {
+        self.variant.as_deref().unwrap_or(SRAM_SLOT)
+    }
+
+    /// What tells this game's sync records apart from other files' of the same game.
+    pub fn record_variant(&self) -> &str {
+        self.variant.as_deref().unwrap_or("")
+    }
+
+    /// A state slot as recorded here and named on RomM, kept apart for each file.
+    fn state_key(&self, slot: &str) -> String {
+        match &self.variant {
+            Some(variant) => format!("{variant}/{slot}"),
+            None => slot.to_string(),
+        }
+    }
+
     fn sram_path(&self) -> PathBuf {
         self.dir.join(&self.save_file)
     }
@@ -322,7 +370,9 @@ impl GameSaves {
             return format!("{stem}.zip");
         }
         let clean: String = self
-            .title
+            .variant
+            .as_ref()
+            .unwrap_or(&self.title)
             .chars()
             .map(|c| {
                 if c.is_control() || "/\\:|*?\"<>+".contains(c) {
@@ -510,7 +560,7 @@ pub fn remember_synced(store: &std::sync::Mutex<crate::store::Store>, game: &Gam
     store
         .lock()
         .unwrap()
-        .set_in_game_save_record(game.rom_id, &md5, now);
+        .set_in_game_save_record(game.rom_id, game.record_variant(), &md5, now);
 }
 
 async fn upload_sram(
@@ -525,7 +575,7 @@ async fn upload_sram(
     client
         .upload_save(SaveUpload {
             rom_id: game.rom_id,
-            slot: SRAM_SLOT,
+            slot: game.sram_slot(),
             emulator: &game.save_emulator,
             device_id,
             session_id,
@@ -600,7 +650,9 @@ pub async fn sync_sram(
 ) -> Result<SramOutcome, Error> {
     let local = std::fs::read(game.sram_path()).ok();
     let local_md5 = local.as_deref().map(content_hash);
-    let listed = client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?;
+    let listed = client
+        .list_saves(game.rom_id, game.sram_slot(), device_id)
+        .await?;
     let server = newest(for_emulator(listed, &game.save_emulator));
     let action = sram_action(
         local_md5.as_deref(),
@@ -654,7 +706,9 @@ pub async fn resolve_sram(
             let save_id = match conflict.save_id {
                 Some(id) => id,
                 None => newest(for_emulator(
-                    client.list_saves(game.rom_id, SRAM_SLOT, device_id).await?,
+                    client
+                        .list_saves(game.rom_id, game.sram_slot(), device_id)
+                        .await?,
                     &game.save_emulator,
                 ))
                 .map(|s| s.id)
@@ -695,10 +749,11 @@ pub const DELETED: &str = "deleted";
 /// Deletes a save state and its picture, keeping a backup, and marks it for deleting on RomM.
 pub fn delete_state(
     store: &std::sync::Mutex<crate::store::Store>,
-    rom_id: i64,
-    dir: &Path,
+    game: &GameSaves,
     slot: &str,
 ) -> io::Result<()> {
+    let dir = &game.dir;
+    let rom_id = game.rom_id;
     let file = format!("{slot}.state");
     backup(dir, &file)?;
     for path in [dir.join(&file), dir.join(format!("{slot}.png"))] {
@@ -707,6 +762,7 @@ pub fn delete_state(
             _ => {}
         }
     }
+    let slot = &game.state_key(slot);
     let mut store = store.lock().unwrap();
     match store.state_record(rom_id, slot) {
         Some(record) if record.remote_id.is_some() => store.set_state_record(
@@ -742,10 +798,11 @@ pub async fn sync_states(
     for slot in STATE_SLOTS {
         let file = format!("{slot}.state");
         let path = game.dir.join(&file);
-        let name = state_remote_name(slot, &game.emulator, core_version);
+        let name = state_remote_name(&game.state_key(slot), &game.emulator, core_version);
         let server = remote.iter().find(|r| r.file_name == name);
         let local = std::fs::read(&path).ok();
-        let record = store.lock().unwrap().state_record(game.rom_id, slot);
+        let key = game.state_key(slot);
+        let record = store.lock().unwrap().state_record(game.rom_id, &key);
         if let Some(deleted) = record
             .as_ref()
             .filter(|r| r.local_md5 == DELETED && local.is_none())
@@ -762,7 +819,7 @@ pub async fn sync_states(
                 None => true,
             };
             if forget {
-                store.lock().unwrap().delete_state_record(game.rom_id, slot);
+                store.lock().unwrap().delete_state_record(game.rom_id, &key);
                 continue;
             }
         }
@@ -829,7 +886,7 @@ pub async fn sync_states(
         store
             .lock()
             .unwrap()
-            .set_state_record(game.rom_id, slot, &recorded);
+            .set_state_record(game.rom_id, &key, &recorded);
     }
     Ok(report)
 }
@@ -1019,12 +1076,13 @@ mod tests {
             emulator: "snes9x".into(),
             save_file: SRAM_FILE.into(),
             save_emulator: "snes9x".into(),
+            variant: None,
         };
         remember_synced(&store, &game);
-        assert_eq!(store.lock().unwrap().in_game_save_record(5), None);
+        assert_eq!(store.lock().unwrap().in_game_save_record(5, ""), None);
         std::fs::write(dir.path().join(SRAM_FILE), b"save").unwrap();
         remember_synced(&store, &game);
-        let record = store.lock().unwrap().in_game_save_record(5).unwrap();
+        let record = store.lock().unwrap().in_game_save_record(5, "").unwrap();
         assert_eq!(record.md5, md5_hex(b"save"));
         assert_eq!(local_md5(&game).as_deref(), Some(record.md5.as_str()));
     }
@@ -1292,6 +1350,7 @@ mod tests {
             emulator: "dosbox_pure".into(),
             save_file: "Strike Commander (1993).pure.zip".into(),
             save_emulator: "dosbox_pure".into(),
+            variant: None,
         };
         assert_eq!(game.remote_sram_name(), "Strike Commander (1993).zip");
     }
@@ -1333,7 +1392,34 @@ mod tests {
                 emulator: "snes9x".into(),
                 save_file: SRAM_FILE.into(),
                 save_emulator: "snes9x".into(),
+                variant: None,
             }
+        }
+
+        #[test]
+        fn a_file_a_game_starts_with_keeps_its_own_saves() {
+            let dir = tempfile::tempdir().unwrap();
+            let original = game(dir.path());
+            assert_eq!(original.sram_slot(), SRAM_SLOT);
+            assert_eq!(original.state_key("auto"), "auto");
+            let hack = GameSaves {
+                variant: Some(variant_of("hack/Super Metroid - Advent.smc")),
+                ..original
+            };
+            assert_eq!(hack.sram_slot(), "Super Metroid - Advent");
+            assert_eq!(hack.record_variant(), "Super Metroid - Advent");
+            assert_eq!(hack.remote_sram_name(), "Super Metroid - Advent.srm");
+            assert_eq!(
+                state_remote_name(&hack.state_key("auto"), "snes9x", "1.63"),
+                "Super-Metroid---Advent-auto.snes9x.1-63.state"
+            );
+        }
+
+        #[test]
+        fn a_files_save_name_is_safe() {
+            assert_eq!(variant_of("Zelda: <Hack>?.nes"), "Zelda- -Hack--");
+            assert_eq!(variant_of(".smc"), "smc");
+            assert_eq!(variant_of("..."), "file");
         }
 
         fn ps2_game(dir: &Path) -> GameSaves {
@@ -1752,6 +1838,7 @@ mod tests {
                 emulator: "snes9x".into(),
                 save_file: SRAM_FILE.into(),
                 save_emulator: "snes9x".into(),
+                variant: None,
             }
         }
 
@@ -2040,7 +2127,7 @@ mod tests {
                     remote_updated_at: Some("t1".into()),
                 },
             );
-            delete_state(&store, 5, dir.path(), "slot-2").unwrap();
+            delete_state(&store, &game(dir.path()), "slot-2").unwrap();
             assert!(!dir.path().join("slot-2.state").exists());
             assert!(!dir.path().join("slot-2.png").exists());
             let backed_up: Vec<_> = walkdir(dir.path().join("backup"));
@@ -2050,7 +2137,7 @@ mod tests {
                 Some(deleted_here("t1"))
             );
 
-            delete_state(&store, 5, dir.path(), "slot-3").unwrap();
+            delete_state(&store, &game(dir.path()), "slot-3").unwrap();
             assert!(!dir.path().join("slot-3.state").exists());
             assert!(
                 store.lock().unwrap().state_record(5, "slot-3").is_none(),

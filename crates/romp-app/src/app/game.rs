@@ -681,7 +681,10 @@ impl Controller {
             let sram = match (&client, sync) {
                 (Some(client), Some((device, game))) => {
                     on_ui(move |c| c.game_status(id, tr!("Syncing your save…")));
-                    let last = store.lock().unwrap().in_game_save_record(game.rom_id);
+                    let last = store
+                        .lock()
+                        .unwrap()
+                        .in_game_save_record(game.rom_id, game.record_variant());
                     let result = saves::sync_sram(client, &device, &game, last.as_ref()).await;
                     if let Ok(outcome) = &result {
                         saves::remember_outcome(&store, &game, outcome);
@@ -1101,7 +1104,10 @@ impl Controller {
 
     pub(super) fn start_game(&self, detail: GameDetail, rom: PathBuf, jit: bool, core: PathBuf) {
         self.preparing.set(false);
-        let save_dir = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
+        let save_dir = self.game_saves(&detail).map_or_else(
+            || paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
+            |game| game.dir,
+        );
         let prefs = self.prefs.get();
         let states = core_for_platform(&detail.platform_slug)
             .is_none_or(|core| crate::cores::saves_states(core.id));

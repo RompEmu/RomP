@@ -16,13 +16,14 @@ impl Controller {
         // The server is asked only when there's no save here, or no record of syncing it.
         let game = self.game_saves(detail);
         let local = game.as_ref().and_then(saves::local_md5);
-        let recorded = self
-            .shared
-            .store
-            .lock()
-            .unwrap()
-            .in_game_save_record(detail.id)
-            .is_some();
+        let recorded = game.as_ref().is_some_and(|game| {
+            self.shared
+                .store
+                .lock()
+                .unwrap()
+                .in_game_save_record(game.rom_id, game.record_variant())
+                .is_some()
+        });
         if (local.is_some() && recorded) || self.offline.get() {
             return;
         }
@@ -35,7 +36,7 @@ impl Controller {
         let detail = detail.clone();
         self.shared.rt.spawn(async move {
             // RomM sometimes fails a request while RomP starts up and asks for much at once.
-            let list = || client.list_saves(game.rom_id, saves::SRAM_SLOT, &device);
+            let list = || client.list_saves(game.rom_id, game.sram_slot(), &device);
             let listed = match list().await {
                 Err(_) => {
                     tokio::time::sleep(SAVES_RETRY).await;
@@ -61,6 +62,7 @@ impl Controller {
             if let Some(record) = local.and_then(|md5| saves::matching_server_save(&md5, &ours)) {
                 store.lock().unwrap().set_in_game_save_record(
                     game.rom_id,
+                    game.record_variant(),
                     &record.md5,
                     record.synced_at,
                 );
@@ -75,17 +77,22 @@ impl Controller {
 
     fn render_save_slots(&self, detail: &GameDetail, server: &ServerSaves) {
         let Some(ui) = self.ui() else { return };
-        let dir = crate::paths::game_save_dir(&crate::paths::data_dir(), &self.server(), detail.id);
+        let game = self.game_saves(detail);
+        let dir = game.as_ref().map_or_else(
+            || crate::paths::game_save_dir(&crate::paths::data_dir(), &self.server(), detail.id),
+            |game| game.dir.clone(),
+        );
         let now = std::time::SystemTime::now();
         let paired = self.sync_device().is_some();
         let (record, pending) = {
             let store = self.shared.store.lock().unwrap();
             (
-                store.in_game_save_record(detail.id),
+                game.as_ref()
+                    .and_then(|game| store.in_game_save_record(game.rom_id, game.record_variant())),
                 store.pending().contains(&detail.id),
             )
         };
-        let in_game = self.game_saves(detail).and_then(|game| {
+        let in_game = game.and_then(|game| {
             saves::in_game_save_status(
                 saves::local_md5(&game).as_deref(),
                 record.as_ref(),
@@ -189,7 +196,7 @@ impl Controller {
             return;
         };
         let store = self.shared.store.clone();
-        if let Err(e) = saves::delete_state(&store, detail.id, &game.dir, &slots::stem(slot)) {
+        if let Err(e) = saves::delete_state(&store, &game, &slots::stem(slot)) {
             return self.game_status(detail.id, tr!("Couldn't delete the save state: {}.", e));
         }
         self.show_save_slots(&detail);
