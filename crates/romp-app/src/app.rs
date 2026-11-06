@@ -142,6 +142,9 @@ struct Controller {
     dialog: RefCell<Option<collections::DialogAction>>,
     prefs: Cell<crate::prefs::Preferences>,
     mappings: Rc<RefCell<crate::mapping::Mappings>>,
+    /// The running game's console and the layout it reads, kept so Settings
+    /// changes reach it while it plays.
+    game_mappings: RefCell<Option<(String, Rc<RefCell<crate::mapping::Mappings>>)>>,
     remap_device: RefCell<Option<String>>,
     remap_waiting: Cell<Option<u32>>,
     remap_console: RefCell<Option<String>>,
@@ -260,6 +263,7 @@ pub fn run() -> anyhow::Result<()> {
         settings_timer: RefCell::new(None),
         prefs: Cell::new(prefs),
         mappings: Rc::new(RefCell::new(mappings)),
+        game_mappings: RefCell::new(None),
         remap_device: RefCell::new(None),
         remap_waiting: Cell::new(None),
         remap_console: RefCell::new(None),
