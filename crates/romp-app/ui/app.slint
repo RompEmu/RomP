@@ -1549,6 +1549,9 @@ component GamePage inherits FocusScope {
     in property <[string]> versions;
     in property <int> version-index;
     callback choose-version(int);
+    in property <[string]> files;
+    in property <int> file-index;
+    callback choose-file(int);
 
     property <int> viewing: -1;
     property <bool> banner-from-shot: root.shots.length > 0 && root.shots[0].loaded;
@@ -1748,6 +1751,11 @@ component GamePage inherits FocusScope {
                                 labels: root.versions;
                                 index: root.version-index;
                                 chosen(i) => { root.choose-version(i); }
+                            }
+                            if root.files.length > 1: Dropdown {
+                                labels: root.files;
+                                index: root.file-index;
+                                chosen(i) => { root.choose-file(i); }
                             }
                         }
                         if root.status != "": Text { horizontal-alignment: Locale.start; text: root.status; color: Theme.text-secondary; wrap: word-wrap; }
@@ -3105,6 +3113,9 @@ export component AppWindow inherits Window {
     in property <[string]> game-versions;
     in property <int> game-version-index;
     callback choose-game-version(int);
+    in property <[string]> game-files;
+    in property <int> game-file-index;
+    callback choose-game-file(int);
     in property <int> grid-focus-row: -1;
     in-out property <length> grid-scroll <=> library.scroll-y;
     in property <float> grid-focus-top;
@@ -3325,6 +3336,9 @@ export component AppWindow inherits Window {
             versions: root.game-versions;
             version-index: root.game-version-index;
             choose-version(index) => { root.choose-game-version(index); }
+            files: root.game-files;
+            file-index: root.game-file-index;
+            choose-file(index) => { root.choose-game-file(index); }
         }
         if root.screen == 4: SettingsPage {
             back-label: root.heading;

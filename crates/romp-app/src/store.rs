@@ -394,13 +394,17 @@ impl Store {
         json_column(self.get(&format!("file_choices:{id}")))
     }
 
+    /// Whether the files a game can start with were ever looked up.
+    pub fn knows_file_choices(&self, id: i64) -> bool {
+        self.get(&format!("file_choices:{id}")).is_some()
+    }
+
     pub fn set_file_choices(&self, id: i64, files: &[String]) {
-        let key = format!("file_choices:{id}");
-        if files.len() < 2 {
-            self.remove(&key);
-        } else {
-            self.set(&key, &serde_json::to_string(files).expect("file list"));
-        }
+        let files = if files.len() < 2 { &[] } else { files };
+        self.set(
+            &format!("file_choices:{id}"),
+            &serde_json::to_string(files).expect("file list"),
+        );
     }
 
     /// The file the player chose to start a game with, when it isn't the one RomP would.
@@ -1246,8 +1250,10 @@ mod tests {
         s.choose_file(7, "Original.zip");
         s.set_file_choices(7, &files[..2]);
         assert_eq!(s.chosen_file(7), None);
+        assert!(!s.knows_file_choices(8));
         s.set_file_choices(7, &files[..1]);
         assert!(s.file_choices(7).is_empty());
+        assert!(s.knows_file_choices(7));
     }
 
     #[test]

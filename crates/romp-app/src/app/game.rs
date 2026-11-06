@@ -141,6 +141,7 @@ impl Controller {
         self.show_save_slots(&detail);
         self.load_play_stats(id);
         self.load_similar(id);
+        self.load_file_choices(id);
     }
 
     pub(super) fn with_game<T>(&self, id: i64, f: impl FnOnce(&GameState) -> T) -> Option<T> {
@@ -197,6 +198,37 @@ impl Controller {
                     },
                 );
             }
+        });
+    }
+
+    /// Looks up once which files a multi-file game can start with, for its page's file menu.
+    fn load_file_choices(&self, id: i64) {
+        let client = self.client.borrow().clone();
+        let Some(client) = client.filter(|_| !self.offline.get()) else {
+            return;
+        };
+        if self.shared.store.lock().unwrap().knows_file_choices(id) {
+            return;
+        }
+        let store = self.shared.store.clone();
+        self.shared.rt.spawn(async move {
+            let rom = match client.rom_detail(id).await {
+                Ok(rom) => rom,
+                Err(e) => return tracing::warn!("files of {id}: {e}"),
+            };
+            let Ok(files) = crate::layout::plan(&rom) else {
+                return;
+            };
+            let choices: Vec<String> = crate::layout::file_choices(&rom, &files)
+                .iter()
+                .map(|c| c.to_string_lossy().into_owned())
+                .collect();
+            store.lock().unwrap().set_file_choices(id, &choices);
+            on_ui(move |c| {
+                if c.current_game_id() == Some(id) {
+                    c.refresh_file_controls(id);
+                }
+            });
         });
     }
 
@@ -329,6 +361,7 @@ impl Controller {
         self.refresh_collection_controls(detail.id);
         self.refresh_status_controls(detail.id);
         self.refresh_version_controls(detail.id);
+        self.refresh_file_controls(detail.id);
         ui.set_game_can_download(!self.offline.get() && self.downloading_id().is_none());
         if !playable {
             ui.set_game_status(tr!("RomP can't play {} games yet.", detail.platform).into());
@@ -969,6 +1002,69 @@ impl Controller {
         }
         if let Some(state) = self.game.borrow_mut().as_mut() {
             state.versions = versions.into_iter().map(|v| v.id).collect();
+        }
+    }
+
+    fn refresh_file_controls(&self, id: i64) {
+        let (files, chosen) = {
+            let store = self.shared.store.lock().unwrap();
+            (store.file_choices(id), store.chosen_file(id))
+        };
+        let index = chosen
+            .and_then(|chosen| files.iter().position(|f| *f == chosen))
+            .unwrap_or(0);
+        if let Some(ui) = self.ui() {
+            let labels: Vec<SharedString> = files
+                .iter()
+                .map(|f| {
+                    Path::new(f)
+                        .file_name()
+                        .map_or_else(|| f.clone(), |n| n.to_string_lossy().into_owned())
+                        .into()
+                })
+                .collect();
+            ui.set_game_files(ModelRc::new(VecModel::from(labels)));
+            ui.set_game_file_index(index as i32);
+        }
+    }
+
+    /// Starts a multi-file game with another of its files from now on, with that file's saves.
+    pub(super) fn choose_file(&self, index: usize) {
+        let Some(detail) = self.current_game() else {
+            return;
+        };
+        if self.running.borrow().is_some() || self.preparing.get() {
+            return self.game_status(detail.id, tr!("Close the running game first."));
+        }
+        let Some(file) = self
+            .shared
+            .store
+            .lock()
+            .unwrap()
+            .file_choices(detail.id)
+            .get(index)
+            .cloned()
+        else {
+            return;
+        };
+        let here = Some(
+            paths::server_roms_dir(&self.server())
+                .join(&detail.platform_slug)
+                .join(detail.id.to_string())
+                .join(&file),
+        )
+        .filter(|path| path.exists());
+        {
+            let mut store = self.shared.store.lock().unwrap();
+            store.choose_file(detail.id, &file);
+            store.set_local_path(
+                detail.id,
+                here.as_deref().map(|p| p.to_string_lossy()).as_deref(),
+            );
+        }
+        self.refresh_game_page(false);
+        if let Some(detail) = self.current_game() {
+            self.show_save_slots(&detail);
         }
     }
 
