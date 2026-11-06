@@ -61,7 +61,8 @@ pub fn buttons(console: &str) -> Vec<(u32, &'static str)> {
         "sms" | "gamegear" | "sg1000" => {
             list.extend([(B, "1"), (A, "2"), (START, gettext_noop!("Start"))]);
         }
-        "psx" => {
+        // RPCS3 binds the same sixteen buttons by the PlayStation names, so the PS3 shares the PS1 list.
+        "psx" | "ps3" => {
             list.extend([
                 (B, gettext_noop!("Cross")),
                 (A, gettext_noop!("Circle")),
@@ -76,6 +77,25 @@ pub fn buttons(console: &str) -> Vec<(u32, &'static str)> {
             ]);
             list.extend([
                 (SELECT, gettext_noop!("Select")),
+                (START, gettext_noop!("Start")),
+            ]);
+        }
+        // xemu swaps A/B and X/Y against the libretro names (see PAD_BUTTONS in xemu.rs).
+        "xbox" => {
+            list.extend([
+                (B, "A"),
+                (A, "B"),
+                (Y, "X"),
+                (X, "Y"),
+                (L, gettext_noop!("White")),
+                (R, gettext_noop!("Black")),
+                (L2, gettext_noop!("Left trigger")),
+                (R2, gettext_noop!("Right trigger")),
+                (L3, gettext_noop!("Left stick")),
+                (R3, gettext_noop!("Right stick")),
+            ]);
+            list.extend([
+                (SELECT, gettext_noop!("Back")),
                 (START, gettext_noop!("Start")),
             ]);
         }
@@ -99,7 +119,7 @@ mod tests {
     fn every_listed_button_is_a_known_button_once() {
         for slug in [
             "nes", "famicom", "fds", "gb", "gbc", "gba", "snes", "sfam", "genesis", "sms",
-            "gamegear", "sg1000", "psx", "wii",
+            "gamegear", "sg1000", "psx", "ps3", "xbox", "wii",
         ] {
             let list = buttons(slug);
             let mut seen = Vec::new();
@@ -120,6 +140,31 @@ mod tests {
         for want in [(Y, "A"), (B, "B"), (A, "C"), (L, "X"), (X, "Y"), (R, "Z")] {
             assert!(list.contains(&want), "{want:?}");
         }
+    }
+
+    #[test]
+    fn the_xbox_names_its_buttons_the_way_the_console_does() {
+        let list = buttons("xbox");
+        for want in [
+            (B, "A"),
+            (A, "B"),
+            (Y, "X"),
+            (X, "Y"),
+            (L, "White"),
+            (R, "Black"),
+            (L2, "Left trigger"),
+            (R2, "Right trigger"),
+            (L3, "Left stick"),
+            (R3, "Right stick"),
+            (SELECT, "Back"),
+        ] {
+            assert!(list.contains(&want), "{want:?}");
+        }
+    }
+
+    #[test]
+    fn the_ps3_pad_is_named_like_the_playstation_one() {
+        assert_eq!(buttons("ps3"), buttons("psx"));
     }
 
     #[test]
