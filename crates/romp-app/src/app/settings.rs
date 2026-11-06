@@ -332,7 +332,9 @@ impl Controller {
             .unwrap()
             .platforms(false)
             .into_iter()
-            .filter(|p| super::game::playable(&p.slug))
+            .filter(|p| {
+                super::game::playable(&p.slug) && remappable_on(&p.slug, device == KEYBOARD)
+            })
             .map(|p| (p.slug, p.name))
             .collect();
         // A change made for all consoles would be hidden by the running
@@ -807,6 +809,12 @@ fn index_within(index: i32, list: &[&str]) -> u8 {
     index.clamp(0, list.len() as i32 - 1) as u8
 }
 
+/// xemu and RPCS3 read the keyboard layout Romp writes into their settings, but bind controllers
+/// themselves, so a controller remap saved for them would never reach the game.
+fn remappable_on(slug: &str, keyboard: bool) -> bool {
+    keyboard || core_for_platform(slug).is_some()
+}
+
 /// The consoles whose name or platform slug holds `query`, ignoring case, as positions in `consoles`.
 fn matching_consoles(consoles: &[(String, String)], query: &str) -> Vec<usize> {
     let query = query.trim().to_lowercase();
@@ -824,7 +832,17 @@ fn matching_consoles(consoles: &[(String, String)], query: &str) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::matching_consoles;
+    use super::{matching_consoles, remappable_on};
+
+    #[test]
+    fn standalone_emulators_only_take_a_keyboard_layout() {
+        for slug in ["xbox", "ps3"] {
+            assert!(remappable_on(slug, true), "{slug} keyboard");
+            assert!(!remappable_on(slug, false), "{slug} controller");
+        }
+        assert!(remappable_on("snes", false));
+        assert!(remappable_on("snes", true));
+    }
 
     fn consoles() -> Vec<(String, String)> {
         [
