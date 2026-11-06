@@ -2430,6 +2430,96 @@ component SettingsPage inherits FocusScope {
     }
 }
 
+component ConsolePicker inherits Rectangle {
+    in property <[string]> choices;
+    in property <string> current;
+    in property <int> selected;
+    in-out property <string> query;
+    out property <bool> opened: picker-popup.is-open;
+    callback search(string);
+    callback chosen(int);
+    height: picker-button.preferred-height;
+    picker-button := Button {
+        width: parent.width;
+        text: root.current + "  ▾";
+        clicked => {
+            root.query = "";
+            root.search("");
+            picker-popup.show();
+        }
+    }
+    picker-popup := PopupWindow {
+        y: parent.height + 4px;
+        width: max(root.width, 300px);
+        height: picker-box.preferred-height;
+        close-policy: close-on-click-outside;
+        // The dialog behind closes on Esc too, so the popup has to take it first.
+        FocusScope {
+            key-pressed(event) => {
+                if event.text == Key.Escape {
+                    picker-popup.close();
+                    return accept;
+                }
+                return reject;
+            }
+            Rectangle {
+                background: Theme.surface-raised;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: Theme.surface-selected;
+                drop-shadow-blur: 12px;
+                drop-shadow-color: Theme.shadow;
+                picker-box := VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+                    // Created each time the popup opens, so the search box can take focus then.
+                    if root.opened: LineEdit {
+                        placeholder-text: @tr("Search consoles");
+                        text <=> root.query;
+                        init => { self.focus(); }
+                        edited(text) => { root.search(text); }
+                        accepted(text) => {
+                            if text != "" && root.choices.length > 1 {
+                                picker-popup.close();
+                                root.chosen(1);
+                            }
+                        }
+                    }
+                    ListView {
+                        height: min(root.choices.length * 32px, 240px);
+                        for name[i] in root.choices: Rectangle {
+                            height: 32px;
+                            border-radius: 6px;
+                            background: row-touch.has-hover ? Theme.surface-muted : (i == root.selected ? Theme.accent-soft-strong : transparent);
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                Text {
+                                    horizontal-alignment: Locale.start;
+                                    vertical-alignment: center;
+                                    text: name;
+                                    overflow: elide;
+                                }
+                            }
+                            row-touch := TouchArea {
+                                clicked => {
+                                    picker-popup.close();
+                                    root.chosen(i);
+                                }
+                            }
+                        }
+                    }
+                    if root.query != "" && root.choices.length == 1: Text {
+                        horizontal-alignment: Locale.start;
+                        text: @tr("No consoles match");
+                        color: Theme.text-muted;
+                    }
+                }
+            }
+        }
+    }
+}
+
 component RemapDialog inherits Rectangle {
     in property <string> title;
     in property <string> hint;
@@ -2441,8 +2531,10 @@ component RemapDialog inherits Rectangle {
     in property <bool> console-shown;
     in property <[string]> consoles;
     in property <int> console;
+    in property <string> console-name;
     callback labels-chosen(int);
     callback console-chosen(int);
+    callback console-search(string);
     callback pick(int);
     callback key(string, KeyboardModifiers);
     callback reset();
@@ -2450,7 +2542,7 @@ component RemapDialog inherits Rectangle {
     background: Theme.scrim;
     TouchArea { }
     Rectangle {
-        width: 480px;
+        width: 600px;
         height: min(parent.height - 64px, remap-box.preferred-height);
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -2477,23 +2569,39 @@ component RemapDialog inherits Rectangle {
                 spacing: 12px;
                 Text { horizontal-alignment: Locale.start; text: root.title; font-size: Theme.font-subtitle; font-weight: 700; }
                 Text { horizontal-alignment: Locale.start; text: root.hint; color: Theme.text-secondary; wrap: word-wrap; }
-                if root.console-shown: SettingRow {
-                    label: @tr("Controls for");
-                    ComboBox {
-                        width: 190px;
-                        model: root.consoles;
-                        current-index: root.console;
-                        selected => { root.console-chosen(self.current-index); }
+                HorizontalLayout {
+                    spacing: 12px;
+                    if root.console-shown: VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 6px;
+                        Text { horizontal-alignment: Locale.start; text: @tr("Controls for"); color: Theme.text-secondary; }
+                        ConsolePicker {
+                            choices: root.consoles;
+                            current: root.console-name;
+                            selected: root.console;
+                            search(query) => { root.console-search(query); }
+                            chosen(i) => {
+                                root.console-chosen(i);
+                                remap-keys.focus();
+                            }
+                        }
                     }
-                }
-                if root.labels-shown: SettingRow {
-                    label: @tr("Button labels");
-                    detail: @tr("For controllers that say they're another kind.");
-                    ComboBox {
-                        width: 190px;
-                        model: root.label-choices;
-                        current-index: root.labels;
-                        selected => { root.labels-chosen(self.current-index); }
+                    if root.labels-shown: VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 6px;
+                        Text { horizontal-alignment: Locale.start; text: @tr("Button labels"); color: Theme.text-secondary; }
+                        ComboBox {
+                            model: root.label-choices;
+                            current-index: root.labels;
+                            selected => { root.labels-chosen(self.current-index); }
+                        }
+                        Text {
+                            horizontal-alignment: Locale.start;
+                            text: @tr("For controllers that say they're another kind.");
+                            color: Theme.text-muted;
+                            font-size: Theme.font-small;
+                            wrap: word-wrap;
+                        }
                     }
                 }
                 ScrollView {
@@ -2977,8 +3085,10 @@ export component AppWindow inherits Window {
     in property <bool> remap-console-shown;
     in property <[string]> remap-consoles;
     in property <int> remap-console;
+    in property <string> remap-console-name;
     callback remap-labels-chosen(int);
     callback remap-console-chosen(int);
+    callback remap-console-search(string);
     callback customize(string);
     callback remap-pick(int);
     callback remap-key(string, KeyboardModifiers);
@@ -3374,8 +3484,10 @@ export component AppWindow inherits Window {
         console-shown: root.remap-console-shown;
         consoles: root.remap-consoles;
         console: root.remap-console;
+        console-name: root.remap-console-name;
         labels-chosen(i) => { root.remap-labels-chosen(i); }
         console-chosen(i) => { root.remap-console-chosen(i); }
+        console-search(q) => { root.remap-console-search(q); }
         pick(i) => { root.remap-pick(i); }
         key(text, modifiers) => { root.remap-key(text, modifiers); }
         reset => { root.remap-reset(); }

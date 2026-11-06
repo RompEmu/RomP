@@ -149,6 +149,7 @@ struct Controller {
     remap_waiting: Cell<Option<u32>>,
     remap_console: RefCell<Option<String>>,
     remap_consoles: RefCell<Vec<(String, String)>>,
+    remap_console_query: RefCell<String>,
     nav_card: Cell<Option<usize>>,
     nav_repeat: RefCell<crate::navigation::Repeater>,
     pad_hints: RefCell<Vec<navigation::Hint>>,
@@ -268,6 +269,7 @@ pub fn run() -> anyhow::Result<()> {
         remap_waiting: Cell::new(None),
         remap_console: RefCell::new(None),
         remap_consoles: RefCell::new(Vec::new()),
+        remap_console_query: RefCell::new(String::new()),
         nav_card: Cell::new(None),
         nav_repeat: RefCell::default(),
         pad_hints: RefCell::default(),
@@ -368,6 +370,7 @@ impl Controller {
         ui.on_remap_reset(|| with_controller(|c| c.remap_reset()));
         ui.on_remap_labels_chosen(|i| with_controller(|c| c.remap_labels_chosen(i)));
         ui.on_remap_console_chosen(|i| with_controller(|c| c.remap_console_chosen(i)));
+        ui.on_remap_console_search(|q| with_controller(|c| c.remap_console_search(q.to_string())));
         ui.on_remap_close(|| with_controller(|c| c.remap_close()));
         ui.on_show_folder(|| with_controller(|c| c.show_folder()));
         ui.on_show_log(|| with_controller(|c| c.show_log()));
