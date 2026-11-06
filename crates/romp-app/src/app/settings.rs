@@ -344,6 +344,7 @@ impl Controller {
             .map(|(slug, _)| slug.clone())
             .filter(|slug| device != SHORTCUTS && consoles.iter().any(|(s, _)| s == slug));
         *self.remap_consoles.borrow_mut() = consoles;
+        self.remap_console_query.borrow_mut().clear();
         *self.remap_device.borrow_mut() = Some(device);
         self.remap_waiting.set(None);
         self.show_remap(None);
@@ -407,17 +408,26 @@ impl Controller {
         ui.set_remap_console_shown(true);
         let console = self.remap_console.borrow().clone();
         let consoles = self.remap_consoles.borrow();
+        let shown = matching_consoles(&consoles, &self.remap_console_query.borrow());
         let names: Vec<slint::SharedString> = std::iter::once(tr!("All consoles"))
-            .chain(consoles.iter().map(|(_, name)| name.clone()))
+            .chain(shown.iter().map(|i| consoles[*i].1.clone()))
             .map(slint::SharedString::from)
             .collect();
         ui.set_remap_consoles(ModelRc::new(VecModel::from(names)));
+        // -1 when the chosen console is filtered out of the list, so no row looks chosen.
         ui.set_remap_console(console.as_ref().map_or(0, |slug| {
-            consoles
+            shown
                 .iter()
-                .position(|(s, _)| s == slug)
-                .map_or(0, |i| i as i32 + 1)
+                .position(|i| &consoles[*i].0 == slug)
+                .map_or(-1, |p| p as i32 + 1)
         }));
+        ui.set_remap_console_name(
+            console
+                .as_ref()
+                .and_then(|slug| consoles.iter().find(|(s, _)| s == slug))
+                .map_or_else(|| tr!("All consoles"), |(_, name)| name.clone())
+                .into(),
+        );
         let view = match &console {
             Some(slug) => mappings.for_console(slug),
             None => mappings.clone(),
@@ -456,12 +466,24 @@ impl Controller {
         }
     }
 
+    /// `index` is a row of the picker's list, which the search may have shortened.
     pub(super) fn remap_console_chosen(&self, index: i32) {
-        let slug = usize::try_from(index - 1)
-            .ok()
-            .and_then(|i| self.remap_consoles.borrow().get(i).map(|(s, _)| s.clone()));
+        let slug = {
+            let consoles = self.remap_consoles.borrow();
+            let shown = matching_consoles(&consoles, &self.remap_console_query.borrow());
+            usize::try_from(index - 1)
+                .ok()
+                .and_then(|row| shown.get(row))
+                .map(|i| consoles[*i].0.clone())
+        };
         *self.remap_console.borrow_mut() = slug;
+        self.remap_console_query.borrow_mut().clear();
         self.remap_waiting.set(None);
+        self.show_remap(None);
+    }
+
+    pub(super) fn remap_console_search(&self, query: String) {
+        *self.remap_console_query.borrow_mut() = query;
         self.show_remap(None);
     }
 
@@ -613,6 +635,7 @@ impl Controller {
         self.remap_device.borrow_mut().take();
         self.remap_console.borrow_mut().take();
         self.remap_consoles.borrow_mut().clear();
+        self.remap_console_query.borrow_mut().clear();
         self.remap_waiting.set(None);
         if let Some(ui) = self.ui() {
             ui.set_remap_open(false);
@@ -782,4 +805,58 @@ impl Controller {
 /// A picked index, kept within `list`.
 fn index_within(index: i32, list: &[&str]) -> u8 {
     index.clamp(0, list.len() as i32 - 1) as u8
+}
+
+/// The consoles whose name or platform slug holds `query`, ignoring case, as positions in `consoles`.
+fn matching_consoles(consoles: &[(String, String)], query: &str) -> Vec<usize> {
+    let query = query.trim().to_lowercase();
+    consoles
+        .iter()
+        .enumerate()
+        .filter(|(_, (slug, name))| {
+            query.is_empty()
+                || name.to_lowercase().contains(&query)
+                || slug.to_lowercase().contains(&query)
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::matching_consoles;
+
+    fn consoles() -> Vec<(String, String)> {
+        [
+            ("snes", "Super Nintendo"),
+            ("psx", "PlayStation"),
+            ("ps3", "PlayStation 3"),
+            ("genesis", "Sega Genesis"),
+        ]
+        .iter()
+        .map(|(slug, name)| (slug.to_string(), name.to_string()))
+        .collect()
+    }
+
+    #[test]
+    fn no_search_lists_every_console() {
+        assert_eq!(matching_consoles(&consoles(), ""), [0, 1, 2, 3]);
+        assert_eq!(matching_consoles(&consoles(), "   "), [0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn a_search_matches_names_ignoring_case() {
+        assert_eq!(matching_consoles(&consoles(), "playst"), [1, 2]);
+        assert_eq!(matching_consoles(&consoles(), "NINTENDO"), [0]);
+    }
+
+    #[test]
+    fn a_search_also_matches_the_short_name_people_know_a_console_by() {
+        assert_eq!(matching_consoles(&consoles(), "psx"), [1]);
+    }
+
+    #[test]
+    fn a_search_that_matches_nothing_lists_nothing() {
+        assert!(matching_consoles(&consoles(), "dreamcast").is_empty());
+    }
 }
