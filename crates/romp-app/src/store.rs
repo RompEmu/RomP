@@ -374,6 +374,39 @@ impl Store {
             .expect("delete kv");
     }
 
+    /// The files a multi-file game can start with, the one RomP starts by itself first; empty
+    /// when it has no choice.
+    pub fn file_choices(&self, id: i64) -> Vec<String> {
+        json_column(self.get(&format!("file_choices:{id}")))
+    }
+
+    pub fn set_file_choices(&self, id: i64, files: &[String]) {
+        let key = format!("file_choices:{id}");
+        if files.len() < 2 {
+            self.remove(&key);
+        } else {
+            self.set(&key, &serde_json::to_string(files).expect("file list"));
+        }
+    }
+
+    /// The file the player chose to start a game with, when it isn't the one RomP would.
+    pub fn chosen_file(&self, id: i64) -> Option<String> {
+        let chosen = self.get(&format!("chosen_file:{id}"))?;
+        let choices = self.file_choices(id);
+        choices[1.min(choices.len())..]
+            .contains(&chosen)
+            .then_some(chosen)
+    }
+
+    pub fn choose_file(&self, id: i64, file: &str) {
+        let key = format!("chosen_file:{id}");
+        if self.file_choices(id).first().is_some_and(|f| f == file) {
+            self.remove(&key);
+        } else {
+            self.set(&key, file);
+        }
+    }
+
     pub fn replace_platforms(&mut self, platforms: &[Platform]) {
         fn aliases_json(p: &Platform) -> String {
             let aliases: Vec<&String> = std::iter::once(&p.abbreviation)
@@ -1169,6 +1202,28 @@ mod tests {
 
     fn ids(s: &Store, f: GameFilter) -> Vec<i64> {
         s.games(&f).into_iter().map(|g| g.id).collect()
+    }
+
+    #[test]
+    fn a_chosen_file_is_kept_only_while_the_game_still_offers_it() {
+        let s = Store::open_in_memory().unwrap();
+        let files = [
+            "Hyper.smc".to_string(),
+            "Advent.smc".into(),
+            "Original.zip".into(),
+        ];
+        s.set_file_choices(7, &files);
+        assert_eq!(s.file_choices(7), files);
+        assert_eq!(s.chosen_file(7), None);
+        s.choose_file(7, "Advent.smc");
+        assert_eq!(s.chosen_file(7).as_deref(), Some("Advent.smc"));
+        s.choose_file(7, "Hyper.smc");
+        assert_eq!(s.chosen_file(7), None);
+        s.choose_file(7, "Original.zip");
+        s.set_file_choices(7, &files[..2]);
+        assert_eq!(s.chosen_file(7), None);
+        s.set_file_choices(7, &files[..1]);
+        assert!(s.file_choices(7).is_empty());
     }
 
     #[test]

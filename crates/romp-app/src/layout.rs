@@ -147,7 +147,8 @@ const NOT_PLAYABLE: [&str; 6] = [
 ];
 
 /// The files a player can choose to start a multi-file game with, such as a folder of hacks of
-/// one game, or nothing when RomP starts the whole set itself: discs, a playlist, a PS3 game.
+/// one game, the one RomP starts by itself first; or nothing when RomP starts the whole set
+/// itself: discs, a playlist, a PS3 game.
 pub fn file_choices(rom: &RomDetail, files: &[PlannedFile]) -> Vec<PathBuf> {
     if !rom.has_multiple_files {
         return Vec::new();
@@ -156,10 +157,10 @@ pub fn file_choices(rom: &RomDetail, files: &[PlannedFile]) -> Vec<PathBuf> {
         .iter()
         .map(|f| (f.rel_path.clone(), f.file.file_size_bytes.max(0) as u64))
         .collect();
-    match launch_target(rom, &sized) {
-        Some(Launch::File(path)) if !DISC_ORDER.contains(&ext(&path).as_str()) => {}
+    let automatic = match launch_target(rom, &sized) {
+        Some(Launch::File(path)) if !DISC_ORDER.contains(&ext(&path).as_str()) => path,
         _ => return Vec::new(),
-    }
+    };
     if rom.platform_slug == crate::rpcs3::PLATFORM {
         return Vec::new();
     }
@@ -177,7 +178,7 @@ pub fn file_choices(rom: &RomDetail, files: &[PlannedFile]) -> Vec<PathBuf> {
     if choices.len() < 2 {
         return Vec::new();
     }
-    choices.sort_by_cached_key(|p| p.to_string_lossy().to_lowercase());
+    choices.sort_by_cached_key(|p| (*p != automatic, p.to_string_lossy().to_lowercase()));
     choices
 }
 
@@ -287,8 +288,8 @@ mod tests {
                 file(6, dir, "Hyper Metroid.smc"),
             ]),
             [
-                PathBuf::from("hack/Super Metroid - Advent.smc"),
                 PathBuf::from("Hyper Metroid.smc"),
+                PathBuf::from("hack/Super Metroid - Advent.smc"),
                 PathBuf::from("Super Metroid (Japan, USA).zip"),
             ]
         );
