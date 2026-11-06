@@ -208,6 +208,10 @@ msgstr ""
 msgid "Installing the PS3 system software…"
 msgstr ""
 
+#: crates/romp-app/src/app/game.rs crates/romp-app/src/app/slots.rs
+msgid "Close the running game first."
+msgstr ""
+
 #: crates/romp-app/src/app/game.rs
 msgid "You're offline, so this version doesn't become your main one."
 msgstr ""
@@ -218,10 +222,6 @@ msgstr ""
 
 #: crates/romp-app/src/app/game.rs
 msgid "Could not start the game: {e}"
-msgstr ""
-
-#: crates/romp-app/src/app/game.rs crates/romp-app/src/app/slots.rs
-msgid "Close the running game first."
 msgstr ""
 
 #: crates/romp-app/src/installs.rs
@@ -720,6 +720,10 @@ msgstr ""
 
 #: crates/romp-app/src/app/navigation.rs
 msgid "Change version"
+msgstr ""
+
+#: crates/romp-app/src/app/navigation.rs
+msgid "Change file"
 msgstr ""
 
 #: crates/romp-app/src/app/navigation.rs crates/romp-app/src/pad_labels.rs
