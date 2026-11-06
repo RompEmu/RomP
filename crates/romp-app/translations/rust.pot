@@ -730,7 +730,7 @@ msgstr ""
 msgid "Change version"
 msgstr ""
 
-#: crates/romp-app/src/app/navigation.rs crates/romp-app/src/pad_labels.rs
+#: crates/romp-app/src/app/navigation.rs crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
 msgid "Back"
 msgstr ""
 
@@ -864,6 +864,30 @@ msgstr ""
 
 #: crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
 msgid "Triangle"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs
+msgid "White"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs
+msgid "Black"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
+msgid "Left trigger"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs crates/romp-app/src/pad_labels.rs
+msgid "Right trigger"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs
+msgid "Left stick"
+msgstr ""
+
+#: crates/romp-app/src/controllers.rs
+msgid "Right stick"
 msgstr ""
 
 #: crates/romp-app/src/cores.rs
@@ -1232,14 +1256,6 @@ msgstr ""
 
 #: crates/romp-app/src/pad_labels.rs
 msgid "Right bumper"
-msgstr ""
-
-#: crates/romp-app/src/pad_labels.rs
-msgid "Left trigger"
-msgstr ""
-
-#: crates/romp-app/src/pad_labels.rs
-msgid "Right trigger"
 msgstr ""
 
 #: crates/romp-app/src/pad_labels.rs
