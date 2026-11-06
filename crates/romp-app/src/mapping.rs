@@ -292,6 +292,17 @@ enum Side<'a> {
     Pad(&'a str),
 }
 
+/// What a console button gets when an all-consoles edit puts a shortcut on
+/// its key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shortcuts {
+    /// The shortcut's previous key, as an all-consoles button would.
+    Trade,
+    /// Nothing: the console's keyboard goes back to the all-consoles one, as a
+    /// reset does to the all-consoles keyboard when the two sides clash.
+    Reset,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Mappings {
@@ -408,7 +419,9 @@ impl Mappings {
 
     /// Hands `text` to `button`; whatever had it before gets the button's old key.
     pub fn set_key(&mut self, button: u32, text: &str) -> Assigned {
-        self.edit_everywhere(Side::Keyboard, |m| m.assign_key(button, text))
+        self.edit_everywhere(Side::Keyboard, Shortcuts::Trade, |m| {
+            m.assign_key(button, text)
+        })
     }
 
     fn assign_key(&mut self, button: u32, text: &str) -> Assigned {
@@ -423,8 +436,14 @@ impl Mappings {
     }
 
     /// Hands `text` to `hotkey`; whatever had it before gets the hotkey's old key.
+    /// A console button on that key trades with the hotkey too.
     pub fn set_hotkey(&mut self, hotkey: Hotkey, text: &str) -> Assigned {
-        self.edit_everywhere(Side::Keyboard, |m| {
+        let console_button = self
+            .consoles
+            .keys()
+            .find_map(|c| self.for_console(c).button_for_key(text))
+            .filter(|_| split_combo(text).0.is_empty());
+        let outcome = self.edit_everywhere(Side::Keyboard, Shortcuts::Trade, |m| {
             if is_reserved(text) {
                 return Assigned::Reserved;
             }
@@ -433,13 +452,22 @@ impl Mappings {
             let outcome = m.give_away(&text, previous, None, Some(hotkey));
             m.hotkeys.insert(hotkey_entry(hotkey).1.into(), text);
             outcome
-        })
+        });
+        match (outcome, console_button) {
+            (Assigned::Set, Some(button)) => Assigned::Swapped(name(button).into()),
+            (outcome, _) => outcome,
+        }
     }
 
     /// Runs an all-consoles edit, then mends every console it put two buttons
     /// on one place in: consoles save only what differs, so the edit can move
     /// a button a console follows onto a place the console saved.
-    fn edit_everywhere<R>(&mut self, side: Side, edit: impl FnOnce(&mut Self) -> R) -> R {
+    fn edit_everywhere<R>(
+        &mut self,
+        side: Side,
+        shortcuts: Shortcuts,
+        edit: impl FnOnce(&mut Self) -> R,
+    ) -> R {
         let before: Vec<(String, Mappings)> = self
             .consoles
             .keys()
@@ -447,16 +475,17 @@ impl Mappings {
             .collect();
         let outcome = edit(self);
         for (console, before) in before {
-            self.keep_apart(&console, side, &before);
+            self.keep_apart(&console, side, shortcuts, &before);
         }
         outcome
     }
 
     /// Gives each clashing button the console follows the place it had
-    /// before, the same swap a console's own edit would make. Each round saves
-    /// one more button, and saved buttons all keep their old, distinct places,
-    /// so it ends; resetting that side of the console is the fallback anyway.
-    fn keep_apart(&mut self, console: &str, side: Side, before: &Mappings) {
+    /// before, the same swap a console's own edit would make, and trades a
+    /// saved button on a shortcut's new key for the shortcut's old one. Saved
+    /// buttons keep their old, distinct places, so this settles within a round
+    /// per button; resetting that side of the console is the fallback anyway.
+    fn keep_apart(&mut self, console: &str, side: Side, shortcuts: Shortcuts, before: &Mappings) {
         for _ in 0..=BUTTONS.len() {
             let now = self.for_console(console);
             let troubled = now.troubled(side);
@@ -464,10 +493,23 @@ impl Mappings {
                 return;
             }
             let Some(button) = troubled
-                .into_iter()
+                .iter()
+                .copied()
                 .find(|b| !self.console_saves(console, side, *b))
             else {
-                break;
+                // Only saved buttons are left, so one sits on a shortcut's key.
+                let traded = troubled.iter().find_map(|b| {
+                    let key = now.key_for(*b);
+                    let old = before.hotkey_key(now.hotkey_for(&key)?);
+                    (old != key).then_some((*b, old))
+                });
+                match traded.filter(|_| shortcuts == Shortcuts::Trade) {
+                    Some((b, old)) => {
+                        self.console_side(console, side).insert(name(b).into(), old);
+                        continue;
+                    }
+                    None => break,
+                }
             };
             // Its pair goes too, as saving one member moves the other back to
             // the plain default.
@@ -492,7 +534,7 @@ impl Mappings {
         }
     }
 
-    /// Buttons that share their place with another.
+    /// Buttons that share their place with another or with a shortcut.
     fn troubled(&self, side: Side) -> Vec<u32> {
         let places: Vec<(u32, String)> = BUTTONS
             .iter()
@@ -500,7 +542,11 @@ impl Mappings {
             .collect();
         places
             .iter()
-            .filter(|(b, p)| !p.is_empty() && places.iter().any(|(o, q)| o != b && q == p))
+            .filter(|(b, p)| {
+                !p.is_empty()
+                    && (places.iter().any(|(o, q)| o != b && q == p)
+                        || matches!(side, Side::Keyboard) && self.hotkey_for(p).is_some())
+            })
             .map(|(b, _)| *b)
             .collect()
     }
@@ -666,7 +712,7 @@ impl Mappings {
     }
 
     pub fn reset_keyboard(&mut self) {
-        self.edit_everywhere(Side::Keyboard, |m| {
+        self.edit_everywhere(Side::Keyboard, Shortcuts::Reset, |m| {
             m.keyboard.clear();
             if m.keys_clash() {
                 m.hotkeys.clear();
@@ -675,7 +721,7 @@ impl Mappings {
     }
 
     pub fn reset_hotkeys(&mut self) {
-        self.edit_everywhere(Side::Keyboard, |m| {
+        self.edit_everywhere(Side::Keyboard, Shortcuts::Reset, |m| {
             m.hotkeys.clear();
             if m.keys_clash() {
                 m.keyboard.clear();
@@ -699,7 +745,7 @@ impl Mappings {
     }
 
     pub fn set_pad_button(&mut self, model: &str, button: u32, physical: Button) {
-        self.edit_everywhere(Side::Pad(model), |m| {
+        self.edit_everywhere(Side::Pad(model), Shortcuts::Trade, |m| {
             m.assign_pad_button(model, button, physical);
         });
     }
@@ -718,7 +764,7 @@ impl Mappings {
     }
 
     pub fn reset_pad(&mut self, model: &str) {
-        self.edit_everywhere(Side::Pad(model), |m| {
+        self.edit_everywhere(Side::Pad(model), Shortcuts::Trade, |m| {
             m.pads.remove(model);
             m.labels.remove(model);
         });
@@ -1292,6 +1338,58 @@ mod tests {
         assert_eq!(m.for_console("wii").pad_button("pad", Y), Button::South);
     }
 
+    fn shortcuts_apart(m: &Mappings) -> bool {
+        BUTTONS
+            .iter()
+            .all(|(b, _)| m.hotkey_for(&m.key_for(*b)).is_none())
+    }
+
+    #[test]
+    fn a_shortcut_takes_a_console_key_by_trading() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, "o");
+        assert_eq!(
+            m.set_hotkey(Hotkey::Pause, "o"),
+            Assigned::Swapped("A".into())
+        );
+        let nes = m.for_console("nes");
+        assert_eq!(nes.key_for(A), "p");
+        assert_eq!(nes.hotkey_for("o"), Some(Hotkey::Pause));
+        assert!(shortcuts_apart(&nes) && no_clashes(&nes));
+    }
+
+    #[test]
+    fn a_key_for_everything_never_hands_a_shortcut_a_console_key() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, &default_key(B));
+        m.set_key(B, "p");
+        assert_eq!(m.hotkey_key(Hotkey::Pause), default_key(B));
+        let nes = m.for_console("nes");
+        assert!(shortcuts_apart(&nes) && no_clashes(&nes), "{}", m.to_json());
+        assert_eq!(nes.key_for(A), "p");
+    }
+
+    #[test]
+    fn resetting_shortcuts_never_lands_one_on_a_console_key() {
+        let mut m = Mappings::default();
+        m.set_hotkey(Hotkey::Pause, "o");
+        assert_eq!(m.set_console_key("nes", A, "p"), Assigned::Set);
+        m.reset_hotkeys();
+        assert_eq!(m.hotkey_for("p"), Some(Hotkey::Pause));
+        let nes = m.for_console("nes");
+        assert!(shortcuts_apart(&nes) && no_clashes(&nes), "{}", m.to_json());
+        assert_eq!(nes.key_for(A), default_key(A));
+    }
+
+    #[test]
+    fn a_console_cannot_take_a_shortcut_key_typed_in_capitals() {
+        let mut m = Mappings::default();
+        assert_eq!(
+            m.set_console_key("nes", A, "P"),
+            Assigned::Taken("Pause".into())
+        );
+    }
+
     #[test]
     fn putting_a_console_button_back_stores_nothing() {
         let mut m = Mappings::default();
@@ -1394,7 +1492,7 @@ mod tests {
     }
 
     #[test]
-    fn no_sequence_of_edits_doubles_up_a_button_in_any_console() {
+    fn no_sequence_of_edits_doubles_up_a_button_or_shortcut_in_any_console() {
         for seed in 0..300 {
             let mut rng = Lcg(seed);
             let mut m = Mappings::default();
@@ -1408,7 +1506,7 @@ mod tests {
                         m.for_console(console)
                     };
                     assert!(
-                        no_clashes(&c),
+                        no_clashes(&c) && shortcuts_apart(&c),
                         "seed {seed}, console {console:?} after {steps:#?}\n{}",
                         m.to_json()
                     );
