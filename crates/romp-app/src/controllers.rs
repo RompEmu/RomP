@@ -26,7 +26,17 @@ pub fn buttons(console: &str) -> Vec<(u32, &'static str)> {
     ];
     let mut list = dpad.to_vec();
     match console {
-        "nes" | "famicom" | "fds" | "gb" | "gbc" => return NES_PAD.to_vec(),
+        "nes" | "famicom" | "gb" | "gbc" => return NES_PAD.to_vec(),
+        // Nestopia reads these from L and R on a Disk System game
+        // (poll_fds_buttons in its libretro.cpp); R moves on to the next disk.
+        "fds" => {
+            let mut fds = NES_PAD.to_vec();
+            fds.extend([
+                (L, gettext_noop!("Disk side")),
+                (R, gettext_noop!("Eject disk")),
+            ]);
+            return fds;
+        }
         "gba" => {
             list.extend([(A, "A"), (B, "B"), (L, "L"), (R, "R")]);
             list.extend([
@@ -121,6 +131,15 @@ mod tests {
         assert!(snes.iter().any(|(b, _)| *b == X));
         assert!(snes.iter().any(|(b, _)| *b == Y));
         assert!(!snes.iter().any(|(b, _)| *b == L3));
+    }
+
+    #[test]
+    fn the_disk_system_shows_its_disk_buttons() {
+        let fds = buttons("fds");
+        assert!(fds.contains(&(L, "Disk side")));
+        assert!(fds.contains(&(R, "Eject disk")));
+        assert!(NES_PAD.iter().all(|b| fds.contains(b)));
+        assert!(!buttons("nes").iter().any(|(b, _)| *b == L || *b == R));
     }
 
     #[test]
