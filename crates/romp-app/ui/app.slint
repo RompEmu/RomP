@@ -2439,14 +2439,37 @@ component ConsolePicker inherits Rectangle {
     callback search(string);
     callback chosen(int);
     height: 36px;
-    picker-button := Button {
+    function open-popup() {
+        root.query = "";
+        root.search("");
+        picker-popup.show();
+    }
+    // The real ComboBox is only drawn for its closed look, so this dropdown matches the others; clicks go to the layer above it.
+    ComboBox {
         width: parent.width;
         height: parent.height;
-        text: root.current + "  ▾";
-        clicked => {
-            root.query = "";
-            root.search("");
-            picker-popup.show();
+        model: [root.current];
+        current-index: 0;
+    }
+    Rectangle {
+        border-radius: Theme.radius-small;
+        background: picker-touch.has-hover ? Theme.hover : transparent;
+    }
+    picker-focus := FocusScope {
+        accessible-role: combobox;
+        accessible-label: root.current;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " || event.text == Key.DownArrow {
+                root.open-popup();
+                return accept;
+            }
+            return reject;
+        }
+        picker-touch := TouchArea {
+            clicked => {
+                picker-focus.focus();
+                root.open-popup();
+            }
         }
     }
     picker-popup := PopupWindow {
