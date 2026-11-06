@@ -430,6 +430,11 @@ impl Controller {
         self.refresh_game_page(false);
         let covers = self.shared.covers.clone();
         let id = detail.id;
+        let store = self.shared.store.clone();
+        let pick = match origin {
+            Origin::Page => store.lock().unwrap().chosen_file(id).map(PathBuf::from),
+            Origin::Install(_) => None,
+        };
         self.shared.rt.spawn(async move {
             let last = AtomicU64::new(u64::MAX);
             let progress = |done: u64, total: u64| {
@@ -439,9 +444,25 @@ impl Controller {
                 }
             };
             let roms = paths::server_roms_dir(client.base().as_str());
-            let downloaded =
-                download_files(&client, id, &roms, only.as_deref(), &progress, &cancel).await;
+            let downloaded = download_files(
+                &client,
+                id,
+                &roms,
+                only.as_deref(),
+                pick.as_deref(),
+                &progress,
+                &cancel,
+            )
+            .await;
             let fetched = downloaded.as_ref().is_ok_and(|d| d.fetched);
+            if let Ok(d) = &downloaded {
+                let choices: Vec<String> = d
+                    .choices
+                    .iter()
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .collect();
+                store.lock().unwrap().set_file_choices(id, &choices);
+            }
             let mut result = downloaded.map(|d| d.launch);
             if let Ok(path) = &result {
                 if detail.platform_slug == rpcs3::PLATFORM && rpcs3::is_archive(path) {

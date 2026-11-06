@@ -1,5 +1,5 @@
 use crate::download::{already_there, download_file, DownloadError, Foreign};
-use crate::layout::{launch_target, m3u, plan, safe_component, Launch};
+use crate::layout::{file_choices, launch_target, m3u, plan, safe_component, Launch};
 use crate::romm::client::Client;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -33,11 +33,13 @@ fn verifiable_sha1<'a>(file_name: &str, sha1: Option<&'a str>) -> Option<&'a str
     sha1.filter(|_| !CONTENT_HASHED.contains(&ext.as_str()))
 }
 
-/// What a download left: the file to start, and whether anything had to be fetched for it.
+/// What a download left: the file to start, whether anything had to be fetched for it, and the
+/// files the game could start with instead (see `layout::file_choices`).
 #[derive(Debug)]
 pub struct Downloaded {
     pub launch: PathBuf,
     pub fetched: bool,
+    pub choices: Vec<PathBuf>,
 }
 
 pub async fn download_files(
@@ -45,6 +47,7 @@ pub async fn download_files(
     rom_id: i64,
     roms_dir: &Path,
     only: Option<&[i64]>,
+    pick: Option<&Path>,
     progress: &(dyn Fn(u64, u64) + Send + Sync),
     cancel: &AtomicBool,
 ) -> Result<Downloaded, DownloadError> {
@@ -60,6 +63,13 @@ pub async fn download_files(
     if let Some(found) = files.iter().find_map(|f| foreign_format(&f.file.file_name)) {
         return Err(DownloadError::Foreign(found));
     }
+    let choices = file_choices(&rom, &files);
+    // A file the player chose to start with is all that's needed of the game.
+    let pick = pick.filter(|p| choices.iter().any(|c| c == p));
+    let files: Vec<_> = match pick {
+        Some(pick) => files.into_iter().filter(|f| f.rel_path == pick).collect(),
+        None => files,
+    };
     // RomM's "Install on device" names the files to send: the game, its updates and DLC.
     let files: Vec<_> = match only {
         Some(ids) => files
@@ -100,7 +110,11 @@ pub async fn download_files(
         .iter()
         .map(|f| (f.rel_path.clone(), f.file.file_size_bytes.max(0) as u64))
         .collect();
-    let launch = match launch_target(&rom, &rels) {
+    let target = match pick {
+        Some(pick) => Some(Launch::File(pick.to_path_buf())),
+        None => launch_target(&rom, &rels),
+    };
+    let launch = match target {
         Some(Launch::File(rel)) => dir.join(rel),
         Some(Launch::Playlist { name, discs }) => {
             let path = dir.join(name);
@@ -111,7 +125,11 @@ pub async fn download_files(
         }
         None => return Err(DownloadError::Io("nothing to launch".into())),
     };
-    Ok(Downloaded { launch, fetched })
+    Ok(Downloaded {
+        launch,
+        fetched,
+        choices,
+    })
 }
 
 #[cfg(test)]
@@ -159,6 +177,7 @@ mod tests {
             7,
             dir.path(),
             Some(&[1]),
+            None,
             &|_, _| {},
             &AtomicBool::new(false),
         )
@@ -170,6 +189,7 @@ mod tests {
             7,
             dir.path(),
             Some(&[1]),
+            None,
             &|_, _| {},
             &AtomicBool::new(false),
         )
@@ -208,6 +228,7 @@ mod tests {
             7,
             dir.path(),
             Some(&[2]),
+            None,
             &|_, _| {},
             &AtomicBool::new(false),
         )
@@ -218,6 +239,48 @@ mod tests {
         assert!(launch.starts_with(&game_dir));
         assert!(game_dir.join("Arc (Disc 2).chd").exists());
         assert!(!game_dir.join("Arc (Disc 1).chd").exists());
+    }
+
+    #[tokio::test]
+    async fn a_chosen_file_is_all_that_comes_down_and_what_starts() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 7, "platform_id": 3, "platform_slug": "snes", "fs_name": "Metroid", "fs_path": "roms/snes",
+                "has_multiple_files": true,
+                "files": [
+                    {"id": 1, "file_name": "Hyper.smc", "file_path": "roms/snes/Metroid", "file_size_bytes": 4, "sha1_hash": null},
+                    {"id": 2, "file_name": "Original.zip", "file_path": "roms/snes/Metroid", "file_size_bytes": 3, "sha1_hash": null}
+                ]})))
+            .mount(&server)
+            .await;
+        for (id, body, times) in [("1", "hack", 0), ("2", "zip", 1)] {
+            Mock::given(method("GET"))
+                .and(query_param("file_ids", id))
+                .respond_with(ResponseTemplate::new(200).set_body_string(body))
+                .expect(times)
+                .mount(&server)
+                .await;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/")).with_token("t".into());
+        let done = download_files(
+            &client,
+            7,
+            dir.path(),
+            None,
+            Some(Path::new("Original.zip")),
+            &|_, _| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(done.launch, dir.path().join("snes/7/Original.zip"));
+        assert_eq!(
+            done.choices,
+            [PathBuf::from("Hyper.smc"), PathBuf::from("Original.zip")]
+        );
     }
 
     #[tokio::test]
@@ -248,6 +311,7 @@ mod tests {
             &client,
             7,
             dir.path(),
+            None,
             None,
             &|d, t| *last.lock().unwrap() = (d, t),
             &AtomicBool::new(false),
@@ -286,6 +350,7 @@ mod tests {
             7,
             dir.path(),
             None,
+            None,
             &|_, _| {},
             &AtomicBool::new(false),
         )
@@ -311,6 +376,7 @@ mod tests {
             &client,
             7,
             dir.path(),
+            None,
             None,
             &|_, _| {},
             &AtomicBool::new(false),
@@ -343,6 +409,7 @@ mod tests {
             &client,
             8,
             dir.path(),
+            None,
             None,
             &|_, _| {},
             &AtomicBool::new(false),
