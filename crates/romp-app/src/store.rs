@@ -161,6 +161,19 @@ fn write_play_status(conn: &Connection, id: i64, status: PlayStatus) {
     .expect("write play status");
 }
 
+/// The ROMs RomM lists as versions of the ROM `id` names, which RomP has. RomM works them out
+/// live, but a ROM's `updated_at` doesn't move when another ROM becomes or stops being its
+/// version, so of the two lists that could name the pair, the more recently updated one decides.
+fn versions_of(id: &str) -> String {
+    format!(
+        "SELECT s.sibling_id FROM siblings s JOIN games o ON o.id = s.sibling_id
+           WHERE s.rom_id = {id} AND o.updated_at <= (SELECT updated_at FROM games WHERE id = {id})
+         UNION
+         SELECT s.rom_id FROM siblings s JOIN games o ON o.id = s.rom_id
+           WHERE s.sibling_id = {id} AND o.updated_at >= (SELECT updated_at FROM games WHERE id = {id})"
+    )
+}
+
 fn json_column<T: serde::de::DeserializeOwned + Default>(text: Option<String>) -> T {
     text.and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default()
@@ -328,6 +341,7 @@ impl Store {
                  ALTER TABLE games ADD COLUMN card TEXT;
                  UPDATE games SET card = 'romm-' || platform_id || '-' || id;
                  CREATE INDEX games_card ON games(card);
+                 CREATE INDEX IF NOT EXISTS siblings_reverse ON siblings(sibling_id);
                  DROP INDEX games_group;
                  ALTER TABLE games DROP COLUMN group_id;
                  DELETE FROM kv WHERE key IN ('last_sync_at', 'versions_repaired');
@@ -544,6 +558,7 @@ impl Store {
                 "g.group_played IS NULL, g.group_played DESC, g.title COLLATE NOCASE, g.id"
             }
         };
+        let linked = versions_of("g.id");
         let mut stmt = self
             .conn
             .prepare(&format!(
@@ -571,15 +586,15 @@ impl Store {
                           MAX(g.last_played) OVER grp AS group_played,
                           MIN(g.added_at) OVER grp AS group_added,
                           MIN(r.rank) OVER grp AS group_rank,
-                          MAX(f.rom_id IS NOT NULL) OVER grp AS group_favorite,
-                          COUNT(*) OVER grp AS versions
+                          MAX(f.rom_id IS NOT NULL) OVER grp AS group_favorite
                    FROM games g LEFT JOIN recommendations r ON r.rom_id = g.id
                      LEFT JOIN favorites f ON f.rom_id = g.id
                    WHERE g.card IN (SELECT card FROM members)
                    WINDOW grp AS (PARTITION BY g.card)
                  )
                  SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL,
-                        g.group_favorite, COALESCE(p.slug, ''), g.versions
+                        g.group_favorite, COALESCE(p.slug, ''),
+                        1 + (SELECT COUNT(*) FROM ({linked}))
                  FROM ranked g LEFT JOIN platforms p ON p.id = g.platform_id
                  WHERE (g.n = 1 OR (?3 = 0 AND g.picked = 1))
                    AND (?3 = 0 OR g.local_path IS NOT NULL)
@@ -647,14 +662,16 @@ impl Store {
         }
     }
 
-    /// The versions of `id`'s game, the one the library shows first; empty when it has none.
+    /// `id` and the versions RomM lists for it, the one its card shows first; empty when it has
+    /// none.
     pub fn versions(&self, id: i64) -> Vec<Version> {
         let mut stmt = self
             .conn
-            .prepare(
+            .prepare(&format!(
                 "SELECT g.id, COALESCE(g.fs_name, g.title) FROM games g
-                 WHERE g.card = (SELECT card FROM games WHERE id = ?1)",
-            )
+                 WHERE g.id = ?1 OR g.id IN ({})",
+                versions_of("?1")
+            ))
             .expect("prepare");
         let rows: Vec<(i64, String)> = stmt
             .query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))
@@ -919,14 +936,15 @@ impl Store {
     }
 
     pub fn game(&self, id: i64) -> Option<GameDetail> {
+        let linked = versions_of("g.id");
         self.conn
             .query_row(
+                &format!(
                 "SELECT g.id, g.title, g.platform_id, COALESCE(p.slug, ''), COALESCE(p.name, ''),
                         g.summary, g.size_bytes, g.cover_small, g.cover_large, g.local_path,
                         p.category, g.meta, g.screenshots,
-                        CASE WHEN (SELECT COUNT(*) FROM games o WHERE o.card = g.card) > 1
-                             THEN g.fs_name END
-                 FROM games g LEFT JOIN platforms p ON p.id = g.platform_id WHERE g.id = ?1",
+                        CASE WHEN EXISTS ({linked}) THEN g.fs_name END
+                 FROM games g LEFT JOIN platforms p ON p.id = g.platform_id WHERE g.id = ?1"),
                 [id],
                 |r| {
                     Ok(GameDetail {
@@ -1924,17 +1942,36 @@ mod tests {
     }
 
     #[test]
-    fn a_hack_on_its_own_card_keeps_away_from_the_games_versions() {
+    fn a_hack_is_its_own_card_and_still_a_version_as_in_romm() {
         let s = with_a_hack();
         assert_eq!(ids(&s, GameFilter::default()), [5, 10]);
-        assert_eq!(item(&s, GameFilter::default(), 10).versions, 3);
-        assert_eq!(item(&s, GameFilter::default(), 5).versions, 1);
+        assert_eq!(item(&s, GameFilter::default(), 10).versions, 4);
+        assert_eq!(item(&s, GameFilter::default(), 5).versions, 4);
+        let mut zelda: Vec<_> = s.versions(10).into_iter().map(|v| v.id).collect();
+        assert_eq!(zelda.remove(0), 10);
+        zelda.sort_unstable();
+        assert_eq!(zelda, [5, 11, 12]);
         let counts: Vec<_> = s
             .platforms(false)
             .into_iter()
             .map(|p| (p.id, p.count))
             .collect();
         assert_eq!(counts, [(1, 2)]);
+    }
+
+    #[test]
+    fn the_more_recently_updated_rom_decides_whether_two_are_versions() {
+        let mut s = Store::open_in_memory().unwrap();
+        let at = |id, updated: &str, siblings: &[i64]| Rom {
+            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+            ..rom(id, 1, "Game", updated)
+        };
+        s.upsert_games(&[at(1, "2026-01-01", &[2]), at(2, "2026-01-01", &[1])]);
+        s.upsert_games(&[at(3, "2026-02-01", &[1])]);
+        assert_eq!(item(&s, GameFilter::default(), 1).versions, 3);
+        s.upsert_games(&[at(2, "2026-03-01", &[])]);
+        assert_eq!(item(&s, GameFilter::default(), 1).versions, 2);
+        assert!(s.game(2).unwrap().version_file.is_none());
     }
 
     #[test]
