@@ -87,12 +87,12 @@ impl Store {
             .conn
             .prepare(&format!(
                 "WITH {SHOWN},
-                 member_groups AS (SELECT DISTINCT m.key, g.group_id FROM collection_roms m
+                 member_groups AS (SELECT DISTINCT m.key, g.card FROM collection_roms m
                                      JOIN games g ON g.id = m.rom_id)
                  SELECT c.key, c.kind, c.remote_id, c.name, c.owner, COALESCE(SUM(s.entries), 0)
                  FROM collections c
                  LEFT JOIN member_groups x ON x.key = c.key
-                 LEFT JOIN shown s ON s.group_id = x.group_id
+                 LEFT JOIN shown s ON s.card = x.card
                  GROUP BY c.key
                  ORDER BY c.kind, c.name COLLATE NOCASE, c.position",
             ))
@@ -191,7 +191,7 @@ fn insert(tx: &rusqlite::Transaction, r: &CollectionRecord, position: i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::romm::types::{rom, Rom, SiblingRom};
+    use crate::romm::types::{rom, MatchIds, Rom, SiblingRom};
     use crate::store::{GameFilter, Scope};
 
     fn record(key: &str, kind: CollectionKind, name: &str, rom_ids: &[i64]) -> CollectionRecord {
@@ -293,17 +293,24 @@ mod tests {
     #[test]
     fn group_members_in_a_collection_are_only_the_real_members() {
         let mut s = seeded();
+        let same = MatchIds {
+            igdb_id: Some(7),
+            ..MatchIds::default()
+        };
         s.upsert_games(&[
             Rom {
                 sibling_roms: vec![SiblingRom { id: 11 }, SiblingRom { id: 12 }],
+                match_ids: same.clone(),
                 ..rom(10, 1, "D", "t")
             },
             Rom {
                 sibling_roms: vec![SiblingRom { id: 10 }, SiblingRom { id: 12 }],
+                match_ids: same.clone(),
                 ..rom(11, 1, "D", "t")
             },
             Rom {
                 sibling_roms: vec![SiblingRom { id: 10 }, SiblingRom { id: 11 }],
+                match_ids: same,
                 ..rom(12, 1, "D", "t")
             },
         ]);

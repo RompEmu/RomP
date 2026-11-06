@@ -5,7 +5,6 @@ pub use collections::{CollectionItem, CollectionKind, CollectionRecord};
 use crate::romm::types::{Platform, PlayStatus, Progress, Rom, RomMetadata};
 use crate::versions;
 use rusqlite::{params, Connection};
-use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,9 +128,9 @@ pub struct Store {
 /// How many entries each group puts in the game list: every RomM pick, or one row when it has
 /// none; under "downloaded only" (`?1`), one when any version is downloaded.
 const SHOWN: &str = "shown AS (
-   SELECT group_id,
+   SELECT card,
           CASE WHEN ?1 THEN MAX(local_path IS NOT NULL) ELSE MAX(SUM(picked), 1) END AS entries
-   FROM games GROUP BY group_id)";
+   FROM games GROUP BY card)";
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -323,6 +322,19 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 15 {
+            conn.execute_batch(
+                "BEGIN;
+                 ALTER TABLE games ADD COLUMN card TEXT;
+                 UPDATE games SET card = 'romm-' || platform_id || '-' || id;
+                 CREATE INDEX games_card ON games(card);
+                 DROP INDEX games_group;
+                 ALTER TABLE games DROP COLUMN group_id;
+                 DELETE FROM kv WHERE key IN ('last_sync_at', 'versions_repaired');
+                 PRAGMA user_version = 15;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -376,7 +388,7 @@ impl Store {
             tx.execute(
                 "INSERT INTO games
                  (id, platform_id, title, summary, updated_at, cover_small, cover_large, size_bytes,
-                  meta, screenshots, added_at, last_played, group_id, fs_name)
+                  meta, screenshots, added_at, last_played, card, fs_name)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                  ON CONFLICT(id) DO UPDATE SET
                    platform_id = excluded.platform_id, title = excluded.title,
@@ -384,7 +396,7 @@ impl Store {
                    cover_small = excluded.cover_small, cover_large = excluded.cover_large,
                    size_bytes = excluded.size_bytes, meta = excluded.meta,
                    screenshots = excluded.screenshots, added_at = excluded.added_at,
-                   fs_name = excluded.fs_name,
+                   card = excluded.card, fs_name = excluded.fs_name,
                    last_played = NULLIF(MAX(COALESCE(last_played, 0),
                                             COALESCE(excluded.last_played, 0)), 0)",
                 params![
@@ -402,7 +414,7 @@ impl Store {
                     serde_json::to_string(&r.merged_screenshots).ok(),
                     r.added_at(),
                     r.last_played(),
-                    r.id,
+                    r.match_ids.card(r.platform_id, r.id),
                     fs_name
                 ],
             )
@@ -417,7 +429,6 @@ impl Store {
                 .expect("add sibling");
             }
         }
-        regroup(&tx);
         tx.commit().expect("commit");
     }
 
@@ -435,7 +446,6 @@ impl Store {
         }
         tx.execute("UPDATE games SET picked = id IN (SELECT id FROM keep)", [])
             .expect("set picks");
-        regroup(&tx);
         tx.commit().expect("commit");
     }
 
@@ -443,11 +453,10 @@ impl Store {
         let tx = self.conn.transaction().expect("tx");
         tx.execute(
             "UPDATE games SET picked = (id = ?1)
-             WHERE group_id = (SELECT group_id FROM games WHERE id = ?1)",
+             WHERE card = (SELECT card FROM games WHERE id = ?1)",
             [id],
         )
         .expect("set picked");
-        regroup(&tx);
         tx.commit().expect("commit");
     }
 
@@ -456,25 +465,6 @@ impl Store {
         if self.group_pick(failed) == Some(failed) {
             self.set_picked(prev);
         }
-    }
-
-    pub fn groups_consistent(&self) -> bool {
-        self.pickless_groups().is_empty()
-    }
-
-    /// The groups of two or more versions that RomM picked none of, in order.
-    pub fn pickless_groups(&self) -> Vec<i64> {
-        let mut stmt = self
-            .conn
-            .prepare(
-                "SELECT group_id FROM games GROUP BY group_id
-                 HAVING COUNT(*) >= 2 AND SUM(picked) = 0 ORDER BY group_id",
-            )
-            .expect("prepare");
-        stmt.query_map([], |r| r.get(0))
-            .expect("query")
-            .filter_map(Result::ok)
-            .collect()
     }
 
     pub fn retain_games(&mut self, ids: &[i64]) -> usize {
@@ -500,7 +490,6 @@ impl Store {
             [],
         )
         .expect("retain siblings");
-        regroup(&tx);
         tx.commit().expect("commit");
         removed
     }
@@ -511,8 +500,8 @@ impl Store {
             .prepare(&format!(
                 "WITH {SHOWN}
                  SELECT p.id, p.slug, p.name, SUM(s.entries), p.aliases FROM platforms p
-                 JOIN (SELECT DISTINCT platform_id, group_id FROM games) g ON g.platform_id = p.id
-                 JOIN shown s ON s.group_id = g.group_id
+                 JOIN (SELECT DISTINCT platform_id, card FROM games) g ON g.platform_id = p.id
+                 JOIN shown s ON s.card = g.card
                  GROUP BY p.id HAVING SUM(s.entries) > 0 ORDER BY p.name COLLATE NOCASE",
             ))
             .expect("prepare");
@@ -559,7 +548,7 @@ impl Store {
             .conn
             .prepare(&format!(
                 "WITH members AS (
-                   SELECT DISTINCT g.group_id FROM games g
+                   SELECT DISTINCT g.card FROM games g
                      LEFT JOIN recommendations r ON r.rom_id = g.id
                    WHERE (?1 IS NULL OR g.platform_id = ?1)
                      AND (g.title LIKE ?2 ESCAPE '\\' OR g.fs_name LIKE ?2 ESCAPE '\\')
@@ -576,7 +565,7 @@ impl Store {
                  ),
                  ranked AS (
                    SELECT g.*,
-                          ROW_NUMBER() OVER (PARTITION BY g.group_id
+                          ROW_NUMBER() OVER (PARTITION BY g.card
                             ORDER BY (?3 AND g.local_path IS NULL), g.picked DESC,
                                      g.last_played IS NULL, g.last_played DESC, g.id) AS n,
                           MAX(g.last_played) OVER grp AS group_played,
@@ -586,8 +575,8 @@ impl Store {
                           COUNT(*) OVER grp AS versions
                    FROM games g LEFT JOIN recommendations r ON r.rom_id = g.id
                      LEFT JOIN favorites f ON f.rom_id = g.id
-                   WHERE g.group_id IN (SELECT group_id FROM members)
-                   WINDOW grp AS (PARTITION BY g.group_id)
+                   WHERE g.card IN (SELECT card FROM members)
+                   WINDOW grp AS (PARTITION BY g.card)
                  )
                  SELECT g.id, g.title, COALESCE(p.name, ''), g.cover_small, g.local_path IS NOT NULL,
                         g.group_favorite, COALESCE(p.slug, ''), g.versions
@@ -643,7 +632,7 @@ impl Store {
             .conn
             .prepare(
                 "SELECT g.id FROM games g
-                 WHERE g.group_id = (SELECT group_id FROM games WHERE id = ?1)",
+                 WHERE g.card = (SELECT card FROM games WHERE id = ?1)",
             )
             .expect("prepare");
         let ids: Vec<i64> = stmt
@@ -664,7 +653,7 @@ impl Store {
             .conn
             .prepare(
                 "SELECT g.id, COALESCE(g.fs_name, g.title) FROM games g
-                 WHERE g.group_id = (SELECT group_id FROM games WHERE id = ?1)",
+                 WHERE g.card = (SELECT card FROM games WHERE id = ?1)",
             )
             .expect("prepare");
         let rows: Vec<(i64, String)> = stmt
@@ -698,7 +687,7 @@ impl Store {
         self.conn
             .query_row(
                 "SELECT g.id FROM games g
-                 WHERE g.group_id = (SELECT group_id FROM games WHERE id = ?1)
+                 WHERE g.card = (SELECT card FROM games WHERE id = ?1)
                  ORDER BY g.picked DESC, g.last_played IS NULL, g.last_played DESC, g.id
                  LIMIT 1",
                 [id],
@@ -722,7 +711,7 @@ impl Store {
             .query_row(
                 &format!(
                     "WITH {SHOWN} SELECT COALESCE(SUM(entries), 0) FROM shown
-                     WHERE group_id IN (SELECT group_id FROM games WHERE last_played IS NOT NULL)"
+                     WHERE card IN (SELECT card FROM games WHERE last_played IS NOT NULL)"
                 ),
                 [downloaded_only],
                 |r| r.get(0),
@@ -829,7 +818,7 @@ impl Store {
             .query_row(
                 &format!(
                     "WITH {SHOWN} SELECT COALESCE(SUM(entries), 0) FROM shown
-                     WHERE group_id IN (SELECT g.group_id FROM recommendations r
+                     WHERE card IN (SELECT g.card FROM recommendations r
                                           JOIN games g ON g.id = r.rom_id)"
                 ),
                 [downloaded_only],
@@ -905,9 +894,9 @@ impl Store {
             .query_row(
                 &format!(
                     "WITH {SHOWN}
-                     SELECT COALESCE(SUM(CASE WHEN group_id IN (SELECT group_id FROM games
+                     SELECT COALESCE(SUM(CASE WHEN card IN (SELECT card FROM games
                                                 WHERE now_playing = 1) THEN entries END), 0),
-                            COALESCE(SUM(CASE WHEN group_id IN (SELECT group_id FROM games
+                            COALESCE(SUM(CASE WHEN card IN (SELECT card FROM games
                                                 WHERE backlogged = 1) THEN entries END), 0)
                      FROM shown"
                 ),
@@ -935,7 +924,7 @@ impl Store {
                 "SELECT g.id, g.title, g.platform_id, COALESCE(p.slug, ''), COALESCE(p.name, ''),
                         g.summary, g.size_bytes, g.cover_small, g.cover_large, g.local_path,
                         p.category, g.meta, g.screenshots,
-                        CASE WHEN (SELECT COUNT(*) FROM games o WHERE o.group_id = g.group_id) > 1
+                        CASE WHEN (SELECT COUNT(*) FROM games o WHERE o.card = g.card) > 1
                              THEN g.fs_name END
                  FROM games g LEFT JOIN platforms p ON p.id = g.platform_id WHERE g.id = ?1",
                 [id],
@@ -1127,87 +1116,11 @@ impl Store {
     }
 }
 
-/// Groups each game with its versions. RomM calls ROMs siblings when they share any metadata id,
-/// so one wrong match can tie different games together; RomM's own grid still shows each version
-/// it picks on its own, so two picks never share a group. A version goes with the pick it's a
-/// sibling of, else with a sibling that has a group, else with its siblings under the lowest id.
-fn regroup(tx: &rusqlite::Transaction) {
-    let mut picked: HashMap<i64, bool> = HashMap::new();
-    let mut stmt = tx.prepare("SELECT id, picked FROM games").expect("prepare");
-    for row in stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-        .expect("query")
-        .filter_map(Result::ok)
-    {
-        picked.insert(row.0, row.1);
-    }
-    let mut links: HashMap<i64, Vec<i64>> = HashMap::new();
-    let mut stmt = tx
-        .prepare("SELECT rom_id, sibling_id FROM siblings")
-        .expect("prepare");
-    for (a, b) in stmt
-        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
-        .expect("query")
-        .filter_map(Result::ok)
-        .filter(|(a, b)| a != b && picked.contains_key(a) && picked.contains_key(b))
-    {
-        links.entry(a).or_default().push(b);
-        links.entry(b).or_default().push(a);
-    }
-    let neighbours = |id: &i64| links.get(id).map(Vec::as_slice).unwrap_or(&[]);
-    let mut group: HashMap<i64, i64> = HashMap::new();
-    for (&id, &is_pick) in &picked {
-        if is_pick {
-            group.insert(id, id);
-        }
-    }
-    for (&id, &is_pick) in &picked {
-        if !is_pick {
-            if let Some(pick) = neighbours(&id).iter().filter(|n| picked[n]).min() {
-                group.insert(id, *pick);
-            }
-        }
-    }
-    let mut ids: Vec<i64> = picked.keys().copied().collect();
-    ids.sort_unstable();
-    for &start in &ids {
-        if group.contains_key(&start) {
-            continue;
-        }
-        let mut component = vec![start];
-        let mut seen = HashSet::from([start]);
-        let mut i = 0;
-        while i < component.len() {
-            for &n in neighbours(&component[i]) {
-                if !group.contains_key(&n) && seen.insert(n) {
-                    component.push(n);
-                }
-            }
-            i += 1;
-        }
-        let target = component
-            .iter()
-            .flat_map(|m| neighbours(m).iter().filter_map(|n| group.get(n)))
-            .min()
-            .copied()
-            .unwrap_or(start);
-        for m in component {
-            group.insert(m, target);
-        }
-    }
-    let mut update = tx
-        .prepare("UPDATE games SET group_id = ?2 WHERE id = ?1 AND group_id IS NOT ?2")
-        .expect("prepare");
-    for (id, g) in group {
-        update.execute([id, g]).expect("regroup");
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::romm::types::rom;
-    use crate::romm::types::SiblingRom;
+    use crate::romm::types::{MatchIds, SiblingRom};
 
     fn platform(id: i64, name: &str) -> Platform {
         Platform {
@@ -1768,11 +1681,9 @@ mod tests {
         assert!(plain.screenshots.is_empty());
     }
 
-    fn group_of(s: &Store, id: i64) -> i64 {
+    fn card_of(s: &Store, id: i64) -> String {
         s.conn
-            .query_row("SELECT group_id FROM games WHERE id = ?1", [id], |r| {
-                r.get(0)
-            })
+            .query_row("SELECT card FROM games WHERE id = ?1", [id], |r| r.get(0))
             .unwrap()
     }
 
@@ -1787,15 +1698,24 @@ mod tests {
             .collect()
     }
 
+    fn matched(id: i64, igdb: Option<i64>, siblings: &[i64]) -> Rom {
+        Rom {
+            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+            match_ids: MatchIds {
+                igdb_id: igdb,
+                ..MatchIds::default()
+            },
+            ..rom(id, 1, "Game", "t")
+        }
+    }
+
     fn grouped() -> Store {
         let mut s = seeded();
-        let with = |id, siblings: &[i64]| Rom {
-            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
-            ..rom(id, 1, "Game", "t")
-        };
-        s.upsert_games(&[with(20, &[])]);
-        s.upsert_games(&[with(21, &[20])]);
-        s.upsert_games(&[with(19, &[20, 21])]);
+        s.upsert_games(&[
+            matched(19, Some(7), &[20, 21]),
+            matched(20, Some(7), &[19, 21]),
+            matched(21, Some(7), &[19, 20]),
+        ]);
         s
     }
 
@@ -1809,7 +1729,7 @@ mod tests {
             s.upsert_games(&[rom(5, 1, "A", "t")]);
             s.conn
                 .execute_batch(
-                    "DROP INDEX games_group; ALTER TABLE games DROP COLUMN group_id;
+                    "DROP INDEX games_card; ALTER TABLE games DROP COLUMN card;
                      ALTER TABLE games DROP COLUMN fs_name; ALTER TABLE games DROP COLUMN picked;
                      PRAGMA user_version = 12;",
                 )
@@ -1817,7 +1737,7 @@ mod tests {
         }
         let s = Store::open(&path).unwrap();
         assert_eq!(s.get("last_sync_at"), None);
-        assert_eq!(group_of(&s, 5), 5);
+        assert_eq!(card_of(&s, 5), "romm-1-5");
     }
 
     #[test]
@@ -1828,7 +1748,12 @@ mod tests {
             let s = Store::open(&path).unwrap();
             s.set("last_sync_at", "t");
             s.conn
-                .execute_batch("DROP TABLE siblings; PRAGMA user_version = 13;")
+                .execute_batch(
+                    "DROP TABLE siblings; DROP INDEX games_card; ALTER TABLE games DROP COLUMN card;
+                     ALTER TABLE games ADD COLUMN group_id INTEGER;
+                     CREATE INDEX games_group ON games(group_id);
+                     PRAGMA user_version = 13;",
+                )
                 .unwrap();
         }
         let s = Store::open(&path).unwrap();
@@ -1840,35 +1765,42 @@ mod tests {
     }
 
     #[test]
-    fn siblings_share_the_lowest_id() {
-        let mut s = seeded();
-        let with = |id, siblings: &[i64]| Rom {
-            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
-            ..rom(id, 1, "Game", "t")
-        };
-        s.upsert_games(&[with(20, &[])]);
-        s.upsert_games(&[with(21, &[20])]);
-        assert_eq!((group_of(&s, 20), group_of(&s, 21)), (20, 20));
-        s.upsert_games(&[with(19, &[20, 21])]);
-        assert_eq!(
-            [group_of(&s, 19), group_of(&s, 20), group_of(&s, 21)],
-            [19, 19, 19]
-        );
+    fn v14_database_migrates_to_v15_and_forgets_the_sync_cursor() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v14.db");
+        {
+            let mut s = Store::open(&path).unwrap();
+            s.set("last_sync_at", "t");
+            s.set("versions_repaired", "1");
+            s.upsert_games(&[rom(5, 1, "A", "t")]);
+            s.conn
+                .execute_batch(
+                    "DROP INDEX games_card; ALTER TABLE games DROP COLUMN card;
+                     ALTER TABLE games ADD COLUMN group_id INTEGER;
+                     CREATE INDEX games_group ON games(group_id);
+                     PRAGMA user_version = 14;",
+                )
+                .unwrap();
+        }
+        let s = Store::open(&path).unwrap();
+        assert_eq!(s.get("last_sync_at"), None);
+        assert_eq!(s.get("versions_repaired"), None);
+        assert_eq!(card_of(&s, 5), "romm-1-5");
     }
 
     #[test]
-    fn groups_are_consistent_while_each_has_a_pick() {
-        let mut s = grouped();
-        s.set_picks(&[21]);
-        assert_eq!(picked_ids(&s), [21]);
-        assert!(s.groups_consistent());
-        s.set_picks(&[20, 21]);
-        assert!(s.groups_consistent());
-        s.set_picks(&[1]);
-        assert!(!s.groups_consistent());
-        assert_eq!(s.pickless_groups(), [19]);
-        s.set_picks(&[]);
-        assert!(!s.groups_consistent());
+    fn games_share_a_card_by_their_first_match() {
+        let mut s = seeded();
+        s.upsert_games(&[
+            matched(20, Some(7), &[21]),
+            matched(21, Some(7), &[20]),
+            matched(22, None, &[20]),
+        ]);
+        assert_eq!(card_of(&s, 20), "igdb-1-7");
+        assert_eq!(card_of(&s, 21), "igdb-1-7");
+        assert_eq!(card_of(&s, 22), "romm-1-22");
+        s.upsert_games(&[matched(22, Some(7), &[20])]);
+        assert_eq!(card_of(&s, 22), "igdb-1-7");
     }
 
     #[test]
@@ -1887,9 +1819,14 @@ mod tests {
         fs_name: &str,
         siblings: &[i64],
     ) {
+        let igdb = (!siblings.is_empty()).then(|| siblings.iter().copied().chain([id]).min());
         s.upsert_games(&[Rom {
             fs_name: fs_name.into(),
             sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+            match_ids: MatchIds {
+                igdb_id: igdb.flatten(),
+                ..MatchIds::default()
+            },
             ..rom(id, platform, title, "t")
         }]);
     }
@@ -1946,23 +1883,66 @@ mod tests {
         assert_eq!(ids(&s, GameFilter::default()), [30, 40]);
     }
 
+    /// Zelda's three versions match on IGDB and RetroAchievements; a hack with a lower id matches
+    /// on RetroAchievements alone, so RomM shows it as a card of its own.
+    fn with_a_hack() -> Store {
+        let mut s = Store::open_in_memory().unwrap();
+        s.replace_platforms(&[platform(1, "NES")]);
+        let zelda = |id, fs_name: &str, igdb, siblings: &[i64]| Rom {
+            fs_name: fs_name.into(),
+            sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+            match_ids: MatchIds {
+                igdb_id: igdb,
+                ra_id: Some(1),
+                ..MatchIds::default()
+            },
+            ..rom(id, 1, "The Legend of Zelda", "t")
+        };
+        s.upsert_games(&[
+            zelda(5, "Zelda Outlands.nes", None, &[10, 11, 12]),
+            zelda(
+                10,
+                "Legend of Zelda, The (USA).nes",
+                Some(1022),
+                &[5, 11, 12],
+            ),
+            zelda(
+                11,
+                "Legend of Zelda, The (Europe).nes",
+                Some(1022),
+                &[5, 10, 12],
+            ),
+            zelda(
+                12,
+                "Legend of Zelda, The (USA) (Rev A).nes",
+                Some(1022),
+                &[5, 10, 11],
+            ),
+        ]);
+        s.set_picks(&[5, 10]);
+        s
+    }
+
     #[test]
-    fn two_picks_are_separate_games_and_a_shared_version_joins_the_lower() {
-        let mut s = with_versions();
-        s.set_picks(&[30, 31, 40]);
-        assert_eq!(ids(&s, GameFilter::default()), [30, 31, 40]);
-        assert_eq!(item(&s, GameFilter::default(), 30).versions, 2);
-        assert_eq!(item(&s, GameFilter::default(), 31).versions, 1);
-        assert!(s.versions(31).is_empty());
+    fn a_hack_on_its_own_card_keeps_away_from_the_games_versions() {
+        let s = with_a_hack();
+        assert_eq!(ids(&s, GameFilter::default()), [5, 10]);
+        assert_eq!(item(&s, GameFilter::default(), 10).versions, 3);
+        assert_eq!(item(&s, GameFilter::default(), 5).versions, 1);
         let counts: Vec<_> = s
             .platforms(false)
             .into_iter()
             .map(|p| (p.id, p.count))
             .collect();
-        assert_eq!(counts, [(2, 1), (1, 2)]);
-        s.mark_played(32, 1_000);
+        assert_eq!(counts, [(1, 2)]);
+    }
+
+    #[test]
+    fn lists_follow_the_card() {
+        let mut s = with_a_hack();
+        s.mark_played(12, 1_000);
         s.set_play_status(
-            32,
+            12,
             PlayStatus {
                 backlogged: true,
                 ..PlayStatus::default()
@@ -1974,45 +1954,43 @@ mod tests {
             remote_id: "5".into(),
             name: "Couch".into(),
             owner: None,
-            rom_ids: vec![32],
+            rom_ids: vec![12],
         }]);
-        s.replace_recommendations(&[(32, "Because".into())]);
-        assert_eq!(ids(&s, scoped(Scope::Recent)), [30]);
+        s.replace_recommendations(&[(12, "Because".into())]);
+        assert_eq!(ids(&s, scoped(Scope::Recent)), [10]);
         assert_eq!(s.recent_count(false), 1);
         assert_eq!(s.recommended_count(false), 1);
         assert_eq!(s.status_counts(false), (0, 1));
         assert_eq!(s.collection("c:5").unwrap().count, 1);
-        s.set_local_path(31, Some("/roms/ff7-usa.chd"));
+        s.set_local_path(11, Some("/roms/zelda-europe.nes"));
         let downloaded = GameFilter {
             downloaded_only: true,
             ..GameFilter::default()
         };
-        assert_eq!(ids(&s, downloaded), [31]);
-        assert_eq!(s.recent_count(true), 0);
+        assert_eq!(ids(&s, downloaded), [11]);
+        assert_eq!(s.recent_count(true), 1);
         assert_eq!(s.platforms(true)[0].count, 1);
     }
 
     #[test]
-    fn games_tied_by_one_wrong_match_stay_apart_when_each_is_picked() {
+    fn games_tied_by_one_wrong_match_stay_apart_when_their_first_matches_differ() {
         let mut s = Store::open_in_memory().unwrap();
         s.replace_platforms(&[platform(1, "Plus/4")]);
         for (id, title) in [(1, "Atomic Mission"), (2, "Jack Attack"), (3, "Logo")] {
             let siblings: Vec<i64> = [1, 2, 3].into_iter().filter(|&o| o != id).collect();
-            versioned(
-                &mut s,
-                id,
-                1,
-                title,
-                &format!("{title} (USA).bin"),
-                &siblings,
-            );
+            s.upsert_games(&[Rom {
+                fs_name: format!("{title} (USA).bin"),
+                sibling_roms: siblings.iter().map(|&id| SiblingRom { id }).collect(),
+                match_ids: MatchIds {
+                    igdb_id: Some(id),
+                    ra_id: Some(9),
+                    ..MatchIds::default()
+                },
+                ..rom(id, 1, title, "t")
+            }]);
         }
         s.set_picks(&[1, 2, 3]);
         assert_eq!(ids(&s, GameFilter::default()), [1, 2, 3]);
-        for id in [1, 2, 3] {
-            assert_eq!(item(&s, GameFilter::default(), id).versions, 1);
-            assert!(s.versions(id).is_empty());
-        }
     }
 
     #[test]
@@ -2207,7 +2185,7 @@ mod tests {
                      ALTER TABLE platforms DROP COLUMN aliases;
                      ALTER TABLE games DROP COLUMN now_playing; ALTER TABLE games DROP COLUMN backlogged;
                      ALTER TABLE games DROP COLUMN progress;
-                     DROP INDEX games_group; ALTER TABLE games DROP COLUMN group_id;
+                     DROP INDEX games_card; ALTER TABLE games DROP COLUMN card;
                      ALTER TABLE games DROP COLUMN fs_name; ALTER TABLE games DROP COLUMN picked;
                      PRAGMA user_version = 2;",
                 )
