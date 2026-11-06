@@ -2481,8 +2481,8 @@ component ConsolePicker inherits Rectangle {
                         edited(text) => { root.search(text); }
                         accepted(text) => {
                             if text != "" && root.choices.length > 1 {
-                                picker-popup.close();
                                 root.chosen(1);
+                                picker-popup.close();
                             }
                         }
                     }
@@ -2504,8 +2504,9 @@ component ConsolePicker inherits Rectangle {
                             }
                             row-touch := TouchArea {
                                 clicked => {
-                                    picker-popup.close();
+                                    // Closing first would tear the row down before its index is read.
                                     root.chosen(i);
+                                    picker-popup.close();
                                 }
                             }
                         }
