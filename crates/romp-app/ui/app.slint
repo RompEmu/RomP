@@ -1704,7 +1704,8 @@ component GamePage inherits FocusScope {
                                 version-popup := PopupWindow {
                                     y: parent.height + 4px;
                                     width: clamp(version-list.preferred-width, 260px, 420px);
-                                    height: version-list.preferred-height;
+                                    // Some games have dozens of versions, so the menu scrolls rather than run off the window.
+                                    height: min(version-list.preferred-height, 360px);
                                     close-policy: close-on-click-outside;
                                     Rectangle {
                                         width: parent.width;
@@ -1715,16 +1716,24 @@ component GamePage inherits FocusScope {
                                         border-color: Theme.surface-selected;
                                         drop-shadow-blur: 12px;
                                         drop-shadow-color: Theme.shadow;
-                                        version-list := VerticalLayout {
+                                        ScrollView {
                                             width: parent.width;
-                                            padding: 12px;
-                                            spacing: 2px;
-                                            for label[i] in root.versions: VersionRow {
-                                                text: label;
-                                                current: i == root.version-index;
-                                                clicked => {
-                                                    root.choose-version(i);
-                                                    version-popup.close();
+                                            height: parent.height;
+                                            // Opens with the current version in view.
+                                            init => {
+                                                self.content-y = -clamp(root.version-index * 34px, 0px, max(0px, version-list.preferred-height - self.visible-height));
+                                            }
+                                            version-list := VerticalLayout {
+                                                width: parent.width;
+                                                padding: 12px;
+                                                spacing: 2px;
+                                                for label[i] in root.versions: VersionRow {
+                                                    text: label;
+                                                    current: i == root.version-index;
+                                                    clicked => {
+                                                        root.choose-version(i);
+                                                        version-popup.close();
+                                                    }
                                                 }
                                             }
                                         }
