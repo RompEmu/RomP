@@ -276,8 +276,15 @@ impl Controller {
     }
 
     fn save_mappings(&self) {
-        let json = self.mappings.borrow().to_json();
-        self.shared.store.lock().unwrap().set("mappings", &json);
+        let mappings = self.mappings.borrow();
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .set("mappings", &mappings.to_json());
+        if let Some((slug, game)) = self.game_mappings.borrow().as_ref() {
+            *game.borrow_mut() = mappings.for_console(slug);
+        }
     }
 
     pub(super) fn controller_options_changed(&self) {
@@ -318,8 +325,7 @@ impl Controller {
                 .map_or_else(|| tr!("Controller"), |p| p.name)
         };
         ui.set_remap_title(title.into());
-        *self.remap_console.borrow_mut() = None;
-        *self.remap_consoles.borrow_mut() = self
+        let consoles: Vec<(String, String)> = self
             .shared
             .store
             .lock()
@@ -329,6 +335,15 @@ impl Controller {
             .filter(|p| super::game::playable(&p.slug))
             .map(|p| (p.slug, p.name))
             .collect();
+        // A change made for all consoles would be hidden by the running
+        // game's own layer, so its console is the one people mean to change.
+        *self.remap_console.borrow_mut() = self
+            .game_mappings
+            .borrow()
+            .as_ref()
+            .map(|(slug, _)| slug.clone())
+            .filter(|slug| device != SHORTCUTS && consoles.iter().any(|(s, _)| s == slug));
+        *self.remap_consoles.borrow_mut() = consoles;
         *self.remap_device.borrow_mut() = Some(device);
         self.remap_waiting.set(None);
         self.show_remap(None);
