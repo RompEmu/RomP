@@ -1550,6 +1550,7 @@ pub(crate) mod tests {
             file_path: String::new(),
             file_size_bytes: 0,
             sha1_hash: None,
+            category: None,
         };
         assert_eq!(
             client.rom_file_url(3672, &f).as_str(),

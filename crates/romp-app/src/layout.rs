@@ -136,6 +136,51 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
         .map(|(p, _)| Launch::File(p.clone()))
 }
 
+/// Files RomM keeps beside a game that never start it.
+const NOT_PLAYABLE: [&str; 6] = [
+    "manual",
+    "walkthrough",
+    "screenshot",
+    "soundtrack",
+    "patch",
+    "cheat",
+];
+
+/// The files a player can choose to start a multi-file game with, such as a folder of hacks of
+/// one game, or nothing when RomP starts the whole set itself: discs, a playlist, a PS3 game.
+pub fn file_choices(rom: &RomDetail, files: &[PlannedFile]) -> Vec<PathBuf> {
+    if !rom.has_multiple_files {
+        return Vec::new();
+    }
+    let sized: Vec<(PathBuf, u64)> = files
+        .iter()
+        .map(|f| (f.rel_path.clone(), f.file.file_size_bytes.max(0) as u64))
+        .collect();
+    match launch_target(rom, &sized) {
+        Some(Launch::File(path)) if !DISC_ORDER.contains(&ext(&path).as_str()) => {}
+        _ => return Vec::new(),
+    }
+    if rom.platform_slug == crate::rpcs3::PLATFORM {
+        return Vec::new();
+    }
+    let mut choices: Vec<PathBuf> = files
+        .iter()
+        .filter(|f| {
+            f.file
+                .category
+                .as_deref()
+                .is_none_or(|c| !NOT_PLAYABLE.contains(&c))
+        })
+        .map(|f| f.rel_path.clone())
+        .filter(|p| !is_extra(p))
+        .collect();
+    if choices.len() < 2 {
+        return Vec::new();
+    }
+    choices.sort_by_cached_key(|p| p.to_string_lossy().to_lowercase());
+    choices
+}
+
 fn playlist(stem: &str, discs: Vec<PathBuf>) -> Launch {
     let name = format!("{stem}.m3u");
     let name = if safe_component(&name) {
@@ -190,6 +235,7 @@ mod tests {
             file_path: path.into(),
             file_size_bytes: 1,
             sha1_hash: None,
+            category: None,
         }
     }
 
@@ -213,6 +259,53 @@ mod tests {
 
     fn rels(r: &RomDetail) -> Vec<PathBuf> {
         plan(r).unwrap().into_iter().map(|p| p.rel_path).collect()
+    }
+
+    fn choices(files: Vec<RomFile>) -> Vec<PathBuf> {
+        let mut r = rom(true, files);
+        r.fs_path = "roms/snes".into();
+        r.fs_name = "Super Metroid".into();
+        r.platform_slug = "snes".into();
+        let planned = plan(&r).unwrap();
+        file_choices(&r, &planned)
+    }
+
+    #[test]
+    fn a_folder_of_hacks_offers_each_one() {
+        let dir = "roms/snes/Super Metroid";
+        let mut manual = file(4, dir, "Manual.pdf");
+        manual.category = Some("manual".into());
+        let mut patch = file(5, &format!("{dir}/patch"), "Fix.ips");
+        patch.category = Some("patch".into());
+        assert_eq!(
+            choices(vec![
+                file(1, dir, "Super Metroid (Japan, USA).zip"),
+                file(2, &format!("{dir}/hack"), "Super Metroid - Advent.smc"),
+                file(3, dir, "readme.txt"),
+                manual,
+                patch,
+                file(6, dir, "Hyper Metroid.smc"),
+            ]),
+            [
+                PathBuf::from("hack/Super Metroid - Advent.smc"),
+                PathBuf::from("Hyper Metroid.smc"),
+                PathBuf::from("Super Metroid (Japan, USA).zip"),
+            ]
+        );
+    }
+
+    #[test]
+    fn discs_and_lone_games_offer_no_choice() {
+        let dir = "roms/snes/Super Metroid";
+        assert!(choices(vec![
+            file(1, dir, "Game (Disc 1).chd"),
+            file(2, dir, "Game (Disc 2).chd"),
+        ])
+        .is_empty());
+        assert!(choices(vec![file(1, dir, "Game.cue"), file(2, dir, "Game.bin")]).is_empty());
+        assert!(choices(vec![file(1, dir, "Game.smc"), file(2, dir, "readme.txt")]).is_empty());
+        let r = rom(false, vec![file(1, "roms/snes", "Game.smc")]);
+        assert!(file_choices(&r, &plan(&r).unwrap()).is_empty());
     }
 
     #[test]

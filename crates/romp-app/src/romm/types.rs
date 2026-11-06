@@ -347,6 +347,9 @@ pub struct RomFile {
     pub file_path: String,
     pub file_size_bytes: i64,
     pub sha1_hash: Option<String>,
+    /// What RomM filed the file as inside a game's folder: "hack", "manual", "patch"…
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
