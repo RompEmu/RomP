@@ -1244,6 +1244,9 @@ impl Controller {
                 && save_dir.join(crate::saves::AUTO_STATE).exists())
             .then_some(0)
         });
+        let game_mappings = Rc::new(RefCell::new(
+            self.mappings.borrow().for_console(&detail.platform_slug),
+        ));
         let options = GameOptions {
             core,
             rom,
@@ -1268,9 +1271,9 @@ impl Controller {
             load_slot,
             auto_state: reliable,
             states,
-            mappings: Rc::new(RefCell::new(
-                self.mappings.borrow().for_console(&detail.platform_slug),
-            )),
+            // A copy resolved for this console, so the game reads one layout;
+            // save_mappings refreshes it, as the game menu opens Settings.
+            mappings: game_mappings.clone(),
             nintendo: crate::cores::is_nintendo(&detail.platform_slug),
             mouse: core_for_platform(&detail.platform_slug)
                 .is_some_and(|core| crate::cores::uses_mouse(core.id)),
@@ -1336,6 +1339,8 @@ impl Controller {
         match play::launch(options, on_closed, open_controllers) {
             Ok(running) => {
                 *self.running.borrow_mut() = Some(running);
+                *self.game_mappings.borrow_mut() =
+                    Some((detail.platform_slug.clone(), game_mappings));
                 self.game_status(detail.id, String::new());
                 self.record_play(detail.id);
                 *self.playing.borrow_mut() = Some(detail);
@@ -1349,6 +1354,7 @@ impl Controller {
 
     fn game_closed(&self, identity: Option<CoreIdentity>) {
         self.running.borrow_mut().take();
+        self.game_mappings.borrow_mut().take();
         self.end_session();
         self.pump_installs();
         self.save_players();
