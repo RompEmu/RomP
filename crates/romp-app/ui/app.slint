@@ -2497,9 +2497,10 @@ component ConsolePicker inherits Rectangle {
     out property <bool> opened: picker-popup.is-open;
     callback search(string);
     callback chosen(int);
-    height: picker-button.preferred-height;
+    height: 36px;
     picker-button := Button {
         width: parent.width;
+        height: parent.height;
         text: root.current + "  ▾";
         clicked => {
             root.query = "";
@@ -2630,8 +2631,10 @@ component RemapDialog inherits Rectangle {
                 Text { horizontal-alignment: Locale.start; text: root.hint; color: Theme.text-secondary; wrap: word-wrap; }
                 HorizontalLayout {
                     spacing: 12px;
+                    alignment: stretch;
                     if root.console-shown: VerticalLayout {
                         horizontal-stretch: 1;
+                        alignment: start;
                         spacing: 6px;
                         Text { horizontal-alignment: Locale.start; text: @tr("Controls for"); color: Theme.text-secondary; }
                         ConsolePicker {
@@ -2647,9 +2650,11 @@ component RemapDialog inherits Rectangle {
                     }
                     if root.labels-shown: VerticalLayout {
                         horizontal-stretch: 1;
+                        alignment: start;
                         spacing: 6px;
                         Text { horizontal-alignment: Locale.start; text: @tr("Button labels"); color: Theme.text-secondary; }
                         ComboBox {
+                            height: 36px;
                             model: root.label-choices;
                             current-index: root.labels;
                             selected => { root.labels-chosen(self.current-index); }
