@@ -664,6 +664,14 @@ msgid "Consoles appear here once your library has games for them."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid "Search consoles"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "No consoles match"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "Controls for"
 msgstr ""
 
