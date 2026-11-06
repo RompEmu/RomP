@@ -285,6 +285,13 @@ struct Layout {
     pads: BTreeMap<String, BTreeMap<String, String>>,
 }
 
+/// The keyboard, or one pad model, of a layout.
+#[derive(Debug, Clone, Copy)]
+enum Side<'a> {
+    Keyboard,
+    Pad(&'a str),
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Mappings {
@@ -401,6 +408,10 @@ impl Mappings {
 
     /// Hands `text` to `button`; whatever had it before gets the button's old key.
     pub fn set_key(&mut self, button: u32, text: &str) -> Assigned {
+        self.edit_everywhere(Side::Keyboard, |m| m.assign_key(button, text))
+    }
+
+    fn assign_key(&mut self, button: u32, text: &str) -> Assigned {
         if is_reserved(text) {
             return Assigned::Reserved;
         }
@@ -413,14 +424,103 @@ impl Mappings {
 
     /// Hands `text` to `hotkey`; whatever had it before gets the hotkey's old key.
     pub fn set_hotkey(&mut self, hotkey: Hotkey, text: &str) -> Assigned {
-        if is_reserved(text) {
-            return Assigned::Reserved;
+        self.edit_everywhere(Side::Keyboard, |m| {
+            if is_reserved(text) {
+                return Assigned::Reserved;
+            }
+            let text = normalize_key(text);
+            let previous = m.hotkey_key(hotkey);
+            let outcome = m.give_away(&text, previous, None, Some(hotkey));
+            m.hotkeys.insert(hotkey_entry(hotkey).1.into(), text);
+            outcome
+        })
+    }
+
+    /// Runs an all-consoles edit, then mends every console it put two buttons
+    /// on one place in: consoles save only what differs, so the edit can move
+    /// a button a console follows onto a place the console saved.
+    fn edit_everywhere<R>(&mut self, side: Side, edit: impl FnOnce(&mut Self) -> R) -> R {
+        let before: Vec<(String, Mappings)> = self
+            .consoles
+            .keys()
+            .map(|c| (c.clone(), self.for_console(c)))
+            .collect();
+        let outcome = edit(self);
+        for (console, before) in before {
+            self.keep_apart(&console, side, &before);
         }
-        let text = normalize_key(text);
-        let previous = self.hotkey_key(hotkey);
-        let outcome = self.give_away(&text, previous, None, Some(hotkey));
-        self.hotkeys.insert(hotkey_entry(hotkey).1.into(), text);
         outcome
+    }
+
+    /// Gives each clashing button the console follows the place it had
+    /// before, the same swap a console's own edit would make. Each round saves
+    /// one more button, and saved buttons all keep their old, distinct places,
+    /// so it ends; resetting that side of the console is the fallback anyway.
+    fn keep_apart(&mut self, console: &str, side: Side, before: &Mappings) {
+        for _ in 0..=BUTTONS.len() {
+            let now = self.for_console(console);
+            let troubled = now.troubled(side);
+            if troubled.is_empty() {
+                return;
+            }
+            let Some(button) = troubled
+                .into_iter()
+                .find(|b| !self.console_saves(console, side, *b))
+            else {
+                break;
+            };
+            // Its pair goes too, as saving one member moves the other back to
+            // the plain default.
+            for b in [button, now.partner(button)] {
+                if !self.console_saves(console, side, b) {
+                    let place = before.place(side, b);
+                    self.console_side(console, side)
+                        .insert(name(b).into(), place);
+                }
+            }
+        }
+        match side {
+            Side::Keyboard => self.reset_console_keyboard(console),
+            Side::Pad(model) => self.reset_console_pad(console, model),
+        }
+    }
+
+    fn place(&self, side: Side, button: u32) -> String {
+        match side {
+            Side::Keyboard => self.key_for(button),
+            Side::Pad(model) => physical_name(self.pad_button(model, button)),
+        }
+    }
+
+    /// Buttons that share their place with another.
+    fn troubled(&self, side: Side) -> Vec<u32> {
+        let places: Vec<(u32, String)> = BUTTONS
+            .iter()
+            .map(|(b, _)| (*b, self.place(side, *b)))
+            .collect();
+        places
+            .iter()
+            .filter(|(b, p)| !p.is_empty() && places.iter().any(|(o, q)| o != b && q == p))
+            .map(|(b, _)| *b)
+            .collect()
+    }
+
+    fn console_saves(&self, console: &str, side: Side, button: u32) -> bool {
+        self.consoles.get(console).is_some_and(|layout| match side {
+            Side::Keyboard => layout.keyboard.contains_key(name(button)),
+            Side::Pad(model) => layout
+                .pads
+                .get(model)
+                .is_some_and(|m| m.contains_key(name(button))),
+        })
+    }
+
+    fn console_side(&mut self, console: &str, side: Side) -> &mut BTreeMap<String, String> {
+        let layout = self.consoles.entry(console.into()).or_default();
+        match side {
+            Side::Keyboard => &mut layout.keyboard,
+            Side::Pad(model) => layout.pads.entry(model.into()).or_default(),
+        }
     }
 
     fn give_away(
@@ -479,7 +579,7 @@ impl Mappings {
         }
         let mut edited = self.for_console(console);
         edited.spell_out(None);
-        let outcome = edited.set_key(button, text);
+        let outcome = edited.assign_key(button, text);
         self.keep_console_keyboard(console, &edited);
         outcome
     }
@@ -493,7 +593,7 @@ impl Mappings {
     ) {
         let mut edited = self.for_console(console);
         edited.spell_out(Some(model));
-        edited.set_pad_button(model, button, physical);
+        edited.assign_pad_button(model, button, physical);
         self.keep_console_pad(console, model, &edited);
     }
 
@@ -566,17 +666,21 @@ impl Mappings {
     }
 
     pub fn reset_keyboard(&mut self) {
-        self.keyboard.clear();
-        if self.keys_clash() {
-            self.hotkeys.clear();
-        }
+        self.edit_everywhere(Side::Keyboard, |m| {
+            m.keyboard.clear();
+            if m.keys_clash() {
+                m.hotkeys.clear();
+            }
+        });
     }
 
     pub fn reset_hotkeys(&mut self) {
-        self.hotkeys.clear();
-        if self.keys_clash() {
-            self.keyboard.clear();
-        }
+        self.edit_everywhere(Side::Keyboard, |m| {
+            m.hotkeys.clear();
+            if m.keys_clash() {
+                m.keyboard.clear();
+            }
+        });
     }
 
     pub fn pad_button(&self, model: &str, button: u32) -> Button {
@@ -595,6 +699,12 @@ impl Mappings {
     }
 
     pub fn set_pad_button(&mut self, model: &str, button: u32, physical: Button) {
+        self.edit_everywhere(Side::Pad(model), |m| {
+            m.assign_pad_button(model, button, physical);
+        });
+    }
+
+    fn assign_pad_button(&mut self, model: &str, button: u32, physical: Button) {
         let previous = self.pad_button(model, button);
         let other = BUTTONS
             .iter()
@@ -608,8 +718,10 @@ impl Mappings {
     }
 
     pub fn reset_pad(&mut self, model: &str) {
-        self.pads.remove(model);
-        self.labels.remove(model);
+        self.edit_everywhere(Side::Pad(model), |m| {
+            m.pads.remove(model);
+            m.labels.remove(model);
+        });
     }
 
     /// The family whose labels a model was given instead of its own.
@@ -1080,12 +1192,16 @@ mod tests {
         unique.len() == values.len()
     }
 
+    const MODELS: [&str; 2] = ["pad", "other"];
+
     fn no_clashes(m: &Mappings) -> bool {
-        all_distinct(
-            BUTTONS
-                .iter()
-                .map(|(b, _)| physical_name(m.pad_button("pad", *b))),
-        ) && all_distinct(
+        MODELS.iter().all(|model| {
+            all_distinct(
+                BUTTONS
+                    .iter()
+                    .map(|(b, _)| physical_name(m.pad_button(model, *b))),
+            )
+        }) && all_distinct(
             BUTTONS
                 .iter()
                 .map(|(b, _)| m.key_for(*b))
@@ -1124,5 +1240,180 @@ mod tests {
         m.set_console_pad_button("wii", "pad", X, default_physical(B));
         m.set_console_key("wii", X, &default_key(B));
         assert!(!m.to_json().contains("wii"), "{}", m.to_json());
+    }
+
+    fn assert_consoles_apart(m: &Mappings) {
+        for console in m.consoles.keys() {
+            assert!(
+                no_clashes(&m.for_console(console)),
+                "{console}: {}",
+                m.to_json()
+            );
+        }
+    }
+
+    #[test]
+    fn a_later_key_for_everything_never_doubles_up_a_console_key() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, "k");
+        assert_consoles_apart(&m);
+        m.set_key(B, "k");
+        assert_consoles_apart(&m);
+        let nes = m.for_console("nes");
+        assert_eq!(nes.key_for(A), "k");
+        assert_eq!(nes.key_for(B), default_key(B));
+        assert_eq!(m.key_for(B), "k");
+    }
+
+    #[test]
+    fn a_later_pad_button_for_everything_never_doubles_up_a_console_button() {
+        let mut m = Mappings::default();
+        m.set_console_pad_button("snes", "pad", A, Button::RightTrigger);
+        assert_consoles_apart(&m);
+        m.set_pad_button("pad", START, Button::RightTrigger);
+        assert_consoles_apart(&m);
+        let snes = m.for_console("snes");
+        assert_eq!(snes.pad_button("pad", A), Button::RightTrigger);
+        assert_eq!(snes.pad_button("pad", START), Button::Start);
+        assert_eq!(m.pad_button("pad", START), Button::RightTrigger);
+    }
+
+    #[test]
+    fn a_later_pad_button_for_everything_keeps_a_saved_wii_pair_apart() {
+        let mut m = Mappings::default();
+        m.set_console_pad_button("wii", "pad", X, Button::East);
+        let wii = m.for_console("wii");
+        assert_eq!(
+            [X, B, Y, A].map(|b| wii.pad_button("pad", b)),
+            [Button::East, Button::North, Button::South, Button::West]
+        );
+        m.set_pad_button("pad", B, Button::LeftTrigger);
+        assert_consoles_apart(&m);
+        assert_eq!(m.for_console("wii").pad_button("pad", Y), Button::South);
+    }
+
+    #[test]
+    fn putting_a_console_button_back_stores_nothing() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, "k");
+        m.set_console_key("nes", A, &default_key(A));
+        m.set_console_pad_button("nes", "pad", A, Button::LeftTrigger);
+        m.set_console_pad_button("nes", "pad", A, default_physical(A));
+        assert!(!m.to_json().contains("nes"), "{}", m.to_json());
+    }
+
+    #[test]
+    fn resetting_one_console_leaves_the_others_alone() {
+        let mut m = Mappings::default();
+        m.set_console_key("nes", A, "k");
+        m.set_console_key("snes", A, "j");
+        m.set_console_pad_button("nes", "pad", A, Button::LeftTrigger);
+        m.set_console_pad_button("snes", "pad", A, Button::Mode);
+        let snes = m.consoles["snes"].clone();
+        m.reset_console_keyboard("nes");
+        m.reset_console_pad("nes", "pad");
+        assert_eq!(m.consoles["snes"], snes);
+        assert!(!m.consoles.contains_key("nes"));
+    }
+
+    /// A small deterministic generator, so a failing sequence repeats.
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn pick(&mut self, n: usize) -> usize {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (self.0 >> 33) as usize % n
+        }
+    }
+
+    fn random_edit(m: &mut Mappings, rng: &mut Lcg) -> String {
+        const CONSOLES: [&str; 3] = ["nes", "snes", "wii"];
+        const KEYS: [&str; 9] = ["x", "z", "a", "s", "q", "k", "j", "p", "o"];
+        const PADS: [Button; 6] = [
+            Button::South,
+            Button::East,
+            Button::North,
+            Button::LeftTrigger,
+            Button::Start,
+            Button::Mode,
+        ];
+        let button = BUTTONS[rng.pick(6)].0;
+        let console = CONSOLES[rng.pick(CONSOLES.len())];
+        let model = MODELS[rng.pick(MODELS.len())];
+        let key = KEYS[rng.pick(KEYS.len())];
+        let physical = PADS[rng.pick(PADS.len())];
+        let hotkey = HOTKEYS[rng.pick(2)].0;
+        match rng.pick(10) {
+            0 => {
+                m.set_key(button, key);
+                format!("set_key({}, {key})", name(button))
+            }
+            1 => {
+                m.set_console_key(console, button, key);
+                format!("set_console_key({console}, {}, {key})", name(button))
+            }
+            2 => {
+                m.set_pad_button(model, button, physical);
+                format!("set_pad_button({model}, {}, {physical:?})", name(button))
+            }
+            3 => {
+                m.set_console_pad_button(console, model, button, physical);
+                format!(
+                    "set_console_pad_button({console}, {model}, {}, {physical:?})",
+                    name(button)
+                )
+            }
+            4 => {
+                m.set_hotkey(hotkey, key);
+                format!("set_hotkey({hotkey:?}, {key})")
+            }
+            5 => {
+                m.reset_keyboard();
+                "reset_keyboard".into()
+            }
+            6 => {
+                m.reset_hotkeys();
+                "reset_hotkeys".into()
+            }
+            7 => {
+                m.reset_pad(model);
+                format!("reset_pad({model})")
+            }
+            8 => {
+                m.reset_console_keyboard(console);
+                format!("reset_console_keyboard({console})")
+            }
+            _ => {
+                m.reset_console_pad(console, model);
+                format!("reset_console_pad({console}, {model})")
+            }
+        }
+    }
+
+    #[test]
+    fn no_sequence_of_edits_doubles_up_a_button_in_any_console() {
+        for seed in 0..300 {
+            let mut rng = Lcg(seed);
+            let mut m = Mappings::default();
+            let mut steps = Vec::new();
+            for _ in 0..40 {
+                steps.push(random_edit(&mut m, &mut rng));
+                for console in m.consoles.keys().map(String::as_str).chain([""]) {
+                    let c = if console.is_empty() {
+                        m.clone()
+                    } else {
+                        m.for_console(console)
+                    };
+                    assert!(
+                        no_clashes(&c),
+                        "seed {seed}, console {console:?} after {steps:#?}\n{}",
+                        m.to_json()
+                    );
+                }
+            }
+        }
     }
 }
