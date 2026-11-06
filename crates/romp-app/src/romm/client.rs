@@ -1940,6 +1940,21 @@ pub(crate) mod tests {
         assert!(rom.sibling_roms.is_empty());
     }
 
+    #[test]
+    fn rom_parses_match_ids() {
+        let rom: crate::romm::types::Rom = serde_json::from_value(serde_json::json!({
+            "id": 1, "platform_id": 2, "name": "X", "fs_name": "X.bin",
+            "summary": null, "updated_at": "t", "path_cover_small": null,
+            "path_cover_large": null, "fs_size_bytes": 1,
+            "igdb_id": null, "ra_id": 5, "flashpoint_id": "abc-1"
+        }))
+        .unwrap();
+        assert_eq!(rom.match_ids.igdb_id, None);
+        assert_eq!(rom.match_ids.ra_id, Some(5));
+        assert_eq!(rom.match_ids.flashpoint_id.as_deref(), Some("abc-1"));
+        assert_eq!(rom.match_ids.steam_id, None);
+    }
+
     #[tokio::test]
     async fn picked_rom_ids_asks_for_the_grouped_index() {
         let server = MockServer::start().await;

@@ -195,6 +195,31 @@ pub struct Rom {
     pub rom_user: Option<RomUser>,
     #[serde(default)]
     pub sibling_roms: Vec<SiblingRom>,
+    #[serde(flatten)]
+    pub match_ids: MatchIds,
+}
+
+/// The ids metadata providers know a ROM's game by, which RomM groups versions with.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct MatchIds {
+    #[serde(default)]
+    pub igdb_id: Option<i64>,
+    #[serde(default)]
+    pub ss_id: Option<i64>,
+    #[serde(default)]
+    pub moby_id: Option<i64>,
+    #[serde(default)]
+    pub ra_id: Option<i64>,
+    #[serde(default)]
+    pub hasheous_id: Option<i64>,
+    #[serde(default)]
+    pub launchbox_id: Option<i64>,
+    #[serde(default)]
+    pub tgdb_id: Option<i64>,
+    #[serde(default)]
+    pub flashpoint_id: Option<String>,
+    #[serde(default)]
+    pub steam_id: Option<i64>,
 }
 
 /// Another version of the same game, as RomM lists it on a ROM.
@@ -391,6 +416,7 @@ pub(crate) fn rom(id: i64, platform_id: i64, name: &str, updated_at: &str) -> Ro
         created_at: None,
         rom_user: None,
         sibling_roms: Vec::new(),
+        match_ids: MatchIds::default(),
     }
 }
 
