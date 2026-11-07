@@ -1,5 +1,5 @@
 use crate::download::{already_there, download_file, DownloadError, Foreign};
-use crate::layout::{file_choices, launch_target, m3u, plan, safe_component, Launch};
+use crate::layout::{file_choices, files_for, launch_target, m3u, plan, safe_component, Launch};
 use crate::romm::client::Client;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -67,7 +67,13 @@ pub async fn download_files(
     // A file the player chose to start with is all that's needed of the game.
     let pick = pick.filter(|p| choices.iter().any(|c| c == p));
     let files: Vec<_> = match pick {
-        Some(pick) => files.into_iter().filter(|f| f.rel_path == pick).collect(),
+        Some(pick) => {
+            let needed = files_for(pick, &files);
+            files
+                .into_iter()
+                .filter(|f| needed.contains(&f.rel_path))
+                .collect()
+        }
         None => files,
     };
     // RomM's "Install on device" names the files to send: the game, its updates and DLC.
