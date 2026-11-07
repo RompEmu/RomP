@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-31 16:44\n"
+"PO-Revision-Date: 2026-11-05 14:31\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -133,6 +133,16 @@ msgstr "تم التحميل"
 #: crates/romp-app/ui/app.slint
 msgid "favorite"
 msgstr "المفضلة"
+
+#: crates/romp-app/ui/app.slint
+msgid "{n} version"
+msgid_plural "{n} versions"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+msgstr[3] ""
+msgstr[4] ""
+msgstr[5] ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Downloaded"
