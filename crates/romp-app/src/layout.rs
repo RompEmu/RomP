@@ -115,7 +115,7 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
         let Some(mut found) = shallowest_of(wanted) else {
             continue;
         };
-        if found.first().map(&depth) != disc_depth {
+        if found.first().map(depth) != disc_depth {
             continue;
         }
         if found.len() == 1 || wanted == "m3u" {
