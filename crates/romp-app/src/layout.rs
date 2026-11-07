@@ -104,10 +104,20 @@ pub fn launch_target(rom: &RomDetail, files: &[(PathBuf, u64)]) -> Option<Launch
         found.sort_by_cached_key(|p| (disc_number(p).unwrap_or(u32::MAX), p.clone()));
         Some(found)
     };
+    // A disc beside the game's folder wins over one in a sub-folder, such as a translation.
+    let disc_depth = files
+        .iter()
+        .map(|(p, _)| p)
+        .filter(|p| DISC_ORDER.contains(&ext(p).as_str()))
+        .map(&depth)
+        .min();
     for wanted in DISC_ORDER {
         let Some(mut found) = shallowest_of(wanted) else {
             continue;
         };
+        if found.first().map(&depth) != disc_depth {
+            continue;
+        }
         if found.len() == 1 || wanted == "m3u" {
             return Some(Launch::File(found.swap_remove(0)));
         }
@@ -307,6 +317,20 @@ mod tests {
         assert!(choices(vec![file(1, dir, "Game.smc"), file(2, dir, "readme.txt")]).is_empty());
         let r = rom(false, vec![file(1, "roms/snes", "Game.smc")]);
         assert!(file_choices(&r, &plan(&r).unwrap()).is_empty());
+    }
+
+    #[test]
+    fn a_disc_beside_the_game_starts_before_one_in_a_sub_folder() {
+        let r = rom(true, Vec::new());
+        let files = sized(&[
+            PathBuf::from("Tales (Japan).chd"),
+            PathBuf::from("translation/Tales (T-En).cue"),
+            PathBuf::from("translation/Tales (T-En) (Track 1).bin"),
+        ]);
+        assert_eq!(
+            launch_target(&r, &files),
+            Some(Launch::File(PathBuf::from("Tales (Japan).chd")))
+        );
     }
 
     #[test]
