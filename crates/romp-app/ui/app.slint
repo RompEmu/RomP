@@ -403,18 +403,21 @@ component Avatar inherits Rectangle {
 component VersionRow inherits Rectangle {
     in property <string> text;
     in property <bool> current;
+    /// Shown faintly at the end of the row, such as whether it's on this computer.
+    in property <string> note;
     callback clicked();
     min-height: 32px;
     border-radius: Theme.radius;
     background: touch.pressed ? Theme.pressed : root.current ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
     animate background { duration: 100ms; }
     accessible-role: button;
-    accessible-label: root.text;
+    accessible-label: root.note == "" ? root.text : root.text + ", " + root.note;
     accessible-action-default => { root.clicked(); }
     touch := TouchArea { clicked => { root.clicked(); } }
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
+        spacing: 16px;
         Text {
             horizontal-alignment: Locale.start;
             vertical-alignment: center;
@@ -423,6 +426,13 @@ component VersionRow inherits Rectangle {
             font-weight: root.current ? 600 : 400;
             color: Theme.text-strong;
         }
+        if root.note != "": Text {
+            horizontal-stretch: 0;
+            vertical-alignment: center;
+            text: root.note;
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+        }
     }
 }
 
@@ -430,6 +440,8 @@ component VersionRow inherits Rectangle {
 component Dropdown inherits Rectangle {
     in property <[string]> labels;
     in property <int> index;
+    /// Which entries are on this computer, when that's worth showing.
+    in property <[bool]> downloaded;
     callback chosen(int);
     width: label.preferred-width;
     Button {
@@ -484,6 +496,7 @@ component Dropdown inherits Rectangle {
                     for entry[i] in root.labels: VersionRow {
                         text: entry;
                         current: i == root.index;
+                        note: i < root.downloaded.length && root.downloaded[i] ? @tr("Downloaded") : "";
                         clicked => {
                             root.chosen(i);
                             popup.close();
@@ -1551,6 +1564,7 @@ component GamePage inherits FocusScope {
     callback choose-version(int);
     in property <[string]> files;
     in property <int> file-index;
+    in property <[bool]> files-downloaded;
     callback choose-file(int);
 
     property <int> viewing: -1;
@@ -1755,6 +1769,7 @@ component GamePage inherits FocusScope {
                             if root.files.length > 1: Dropdown {
                                 labels: root.files;
                                 index: root.file-index;
+                                downloaded: root.files-downloaded;
                                 chosen(i) => { root.choose-file(i); }
                             }
                         }
@@ -3115,6 +3130,7 @@ export component AppWindow inherits Window {
     callback choose-game-version(int);
     in property <[string]> game-files;
     in property <int> game-file-index;
+    in property <[bool]> game-files-downloaded;
     callback choose-game-file(int);
     in property <int> grid-focus-row: -1;
     in-out property <length> grid-scroll <=> library.scroll-y;
@@ -3338,6 +3354,7 @@ export component AppWindow inherits Window {
             choose-version(index) => { root.choose-game-version(index); }
             files: root.game-files;
             file-index: root.game-file-index;
+            files-downloaded: root.game-files-downloaded;
             choose-file(index) => { root.choose-game-file(index); }
         }
         if root.screen == 4: SettingsPage {

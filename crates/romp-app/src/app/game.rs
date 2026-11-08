@@ -1005,11 +1005,27 @@ impl Controller {
         }
     }
 
+    /// Where a game's files are downloaded to.
+    fn game_files_dir(&self, detail: &GameDetail) -> PathBuf {
+        paths::server_roms_dir(&self.server())
+            .join(&detail.platform_slug)
+            .join(detail.id.to_string())
+    }
+
     fn refresh_file_controls(&self, id: i64) {
-        let (files, chosen) = {
+        let (files, chosen, detail) = {
             let store = self.shared.store.lock().unwrap();
-            (store.file_choices(id), store.chosen_file(id))
+            (
+                store.file_choices(id),
+                store.chosen_file(id),
+                store.game(id),
+            )
         };
+        let dir = detail.map(|d| self.game_files_dir(&d));
+        let downloaded: Vec<bool> = files
+            .iter()
+            .map(|f| dir.as_ref().is_some_and(|dir| dir.join(f).exists()))
+            .collect();
         let index = chosen
             .and_then(|chosen| files.iter().position(|f| *f == chosen))
             .unwrap_or(0);
@@ -1024,6 +1040,7 @@ impl Controller {
                 })
                 .collect();
             ui.set_game_files(ModelRc::new(VecModel::from(labels)));
+            ui.set_game_files_downloaded(ModelRc::new(VecModel::from(downloaded)));
             ui.set_game_file_index(index as i32);
         }
     }
@@ -1047,13 +1064,7 @@ impl Controller {
         else {
             return;
         };
-        let here = Some(
-            paths::server_roms_dir(&self.server())
-                .join(&detail.platform_slug)
-                .join(detail.id.to_string())
-                .join(&file),
-        )
-        .filter(|path| path.exists());
+        let here = Some(self.game_files_dir(&detail).join(&file)).filter(|path| path.exists());
         {
             let mut store = self.shared.store.lock().unwrap();
             store.choose_file(detail.id, &file);
