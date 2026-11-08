@@ -363,6 +363,15 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 17 {
+            // Looked up while games with files in sub-folders were wrongly found to have none.
+            conn.execute_batch(
+                "BEGIN;
+                 DELETE FROM kv WHERE key LIKE 'file_choices:%';
+                 PRAGMA user_version = 17;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
@@ -1912,6 +1921,18 @@ mod tests {
         s.set_in_game_save_record(5, "Advent", "def", 200);
         assert_eq!(s.in_game_save_record(5, "").unwrap().md5, "abc");
         assert_eq!(s.in_game_save_record(5, "Advent").unwrap().md5, "def");
+    }
+
+    #[test]
+    fn v16_database_looks_up_every_games_files_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v16.db");
+        {
+            let s = Store::open(&path).unwrap();
+            s.set_file_choices(5, &[]);
+            s.conn.execute_batch("PRAGMA user_version = 16;").unwrap();
+        }
+        assert!(!Store::open(&path).unwrap().knows_file_choices(5));
     }
 
     #[test]
