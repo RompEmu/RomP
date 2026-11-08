@@ -176,7 +176,9 @@ fn is_track(p: &Path, files: &[PlannedFile]) -> bool {
 /// translations or a folder of hacks of one game, the one RomP starts by itself first; or
 /// nothing when RomP starts the whole set itself: several discs, a PS3 game.
 pub fn file_choices(rom: &RomDetail, files: &[PlannedFile]) -> Vec<PathBuf> {
-    if !rom.has_multiple_files || rom.platform_slug == crate::rpcs3::PLATFORM {
+    // RomM counts only the files at the top of a game's folder as multiple, so a game with
+    // translations or hacks in sub-folders is still worth looking through.
+    if files.len() < 2 || rom.platform_slug == crate::rpcs3::PLATFORM {
         return Vec::new();
     }
     let sized: Vec<(PathBuf, u64)> = files
@@ -347,6 +349,23 @@ mod tests {
                 PathBuf::from("translation/Tales (T-En).chd"),
             ]
         );
+    }
+
+    #[test]
+    fn a_game_with_one_file_on_top_offers_those_in_its_sub_folders() {
+        let dir = "roms/psx/Tales";
+        let r = rom(
+            false,
+            vec![
+                file(1, dir, "Tales (Japan).chd"),
+                file(2, &format!("{dir}/translation"), "Tales (T-En).chd"),
+            ],
+        );
+        let names: Vec<_> = file_choices(&r, &plan(&r).unwrap())
+            .iter()
+            .map(|p| p.file_name().unwrap().to_owned())
+            .collect();
+        assert_eq!(names, ["Tales (Japan).chd", "Tales (T-En).chd"]);
     }
 
     #[test]
