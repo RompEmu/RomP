@@ -111,6 +111,11 @@ msgid "Try again"
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+msgid "Downloaded"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 msgid "{n} game"
 msgid_plural "{n} games"
 msgstr[0] ""
@@ -133,10 +138,6 @@ msgid "{n} version"
 msgid_plural "{n} versions"
 msgstr[0] ""
 msgstr[1] ""
-
-#: crates/romp-app/ui/app.slint
-msgid "Downloaded"
-msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "On server"
