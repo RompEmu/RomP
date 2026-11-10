@@ -1073,7 +1073,8 @@ impl Controller {
                 here.as_deref().map(|p| p.to_string_lossy()).as_deref(),
             );
         }
-        self.refresh_game_page(false);
+        // The page's copy of the game still points at the previous file.
+        self.refresh_game_page(true);
         if let Some(detail) = self.current_game() {
             self.show_save_slots(&detail);
         }
