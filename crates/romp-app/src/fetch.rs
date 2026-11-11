@@ -64,8 +64,13 @@ pub async fn download_files(
         return Err(DownloadError::Foreign(found));
     }
     let choices = file_choices(&rom, &files);
-    // A file the player chose to start with is all that's needed of the game.
+    // A file the player chose to start with is all that's needed of the game, and before they
+    // choose, the one RomP starts by itself: a folder can hold dozens of hacks or disc sets.
     let pick = pick.filter(|p| choices.iter().any(|c| c == p));
+    let pick = match only {
+        Some(_) => pick,
+        None => pick.or(choices.first().map(PathBuf::as_path)),
+    };
     let files: Vec<_> = match pick {
         Some(pick) => {
             let needed = files_for(pick, &files);
@@ -287,6 +292,45 @@ mod tests {
             done.choices,
             [PathBuf::from("Hyper.smc"), PathBuf::from("Original.zip")]
         );
+    }
+
+    #[tokio::test]
+    async fn before_a_choice_only_the_file_romp_starts_comes_down() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 7, "platform_id": 3, "platform_slug": "snes", "fs_name": "Metroid", "fs_path": "roms/snes",
+                "has_multiple_files": true,
+                "files": [
+                    {"id": 1, "file_name": "Metroid.zip", "file_path": "roms/snes/Metroid", "file_size_bytes": 4, "sha1_hash": null},
+                    {"id": 2, "file_name": "Hyper.smc", "file_path": "roms/snes/Metroid/hack", "file_size_bytes": 3, "sha1_hash": null}
+                ]})))
+            .mount(&server)
+            .await;
+        for (id, body, times) in [("1", "zip!", 1), ("2", "hak", 0)] {
+            Mock::given(method("GET"))
+                .and(query_param("file_ids", id))
+                .respond_with(ResponseTemplate::new(200).set_body_string(body))
+                .expect(times)
+                .mount(&server)
+                .await;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/")).with_token("t".into());
+        let done = download_files(
+            &client,
+            7,
+            dir.path(),
+            None,
+            None,
+            &|_, _| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(done.launch, dir.path().join("snes/7/Metroid.zip"));
+        assert_eq!(done.choices.len(), 2);
     }
 
     #[tokio::test]
