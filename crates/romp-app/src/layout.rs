@@ -164,6 +164,29 @@ fn folder(p: &Path) -> &Path {
     p.parent().unwrap_or(Path::new(""))
 }
 
+/// Discs and their tracks, which a playlist beside them starts.
+const DISC_MEDIA: [&str; 12] = [
+    "cue", "gdi", "ccd", "cdi", "chd", "iso", "pbp", "mds", "bin", "img", "raw", "sub",
+];
+
+fn is_playlist(p: &Path) -> bool {
+    ext(p) == "m3u"
+}
+
+/// Inside a folder or named with a leading dot, where sets keep the discs their playlist starts.
+fn is_hidden(p: &Path) -> bool {
+    p.components()
+        .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+}
+
+/// Whether `p` is a disc that a playlist in its folder starts, so it isn't a set of its own.
+fn in_playlist_folder(p: &Path, files: &[PlannedFile]) -> bool {
+    DISC_MEDIA.contains(&ext(p).as_str())
+        && files
+            .iter()
+            .any(|f| is_playlist(&f.rel_path) && folder(&f.rel_path) == folder(p))
+}
+
 /// Whether `p` is a track of a disc whose sheet is among `files`, so it doesn't start alone.
 fn is_track(p: &Path, files: &[PlannedFile]) -> bool {
     TRACKS.contains(&ext(p).as_str())
@@ -174,7 +197,8 @@ fn is_track(p: &Path, files: &[PlannedFile]) -> bool {
 
 /// The files a player can choose to start a multi-file game with, such as a game with its
 /// translations or a folder of hacks of one game, the one RomP starts by itself first; or
-/// nothing when RomP starts the whole set itself: several discs, a PS3 game.
+/// nothing when RomP starts the whole set itself: several discs, a PS3 game. A playlist stands
+/// for its discs, which share its saves.
 pub fn file_choices(rom: &RomDetail, files: &[PlannedFile]) -> Vec<PathBuf> {
     // RomM counts only the files at the top of a game's folder as multiple, so a game with
     // translations or hacks in sub-folders is still worth looking through.
@@ -197,7 +221,9 @@ pub fn file_choices(rom: &RomDetail, files: &[PlannedFile]) -> Vec<PathBuf> {
                 .is_none_or(|c| !NOT_PLAYABLE.contains(&c))
         })
         .map(|f| f.rel_path.clone())
-        .filter(|p| !is_extra(p) && ext(p) != "m3u" && !is_track(p, files))
+        .filter(|p| {
+            !is_extra(p) && !is_hidden(p) && !is_track(p, files) && !in_playlist_folder(p, files)
+        })
         .collect();
     if choices.len() < 2 {
         return Vec::new();
@@ -392,6 +418,39 @@ mod tests {
             files_for(Path::new("Tales (Japan).chd"), &planned),
             [PathBuf::from("Tales (Japan).chd")]
         );
+    }
+
+    #[test]
+    fn each_playlist_is_one_choice_without_its_discs() {
+        let dir = "roms/snes/Super Metroid";
+        let t = format!("{dir}/translation");
+        assert_eq!(
+            choices(vec![
+                file(1, dir, "Game.m3u"),
+                file(2, &format!("{dir}/.Game"), "Game (Disc 1).chd"),
+                file(3, &format!("{dir}/.Game"), "Game (Disc 2).chd"),
+                file(4, &t, "Game (T-En).m3u"),
+                file(5, &t, "Game (T-En) (Disc 1).cue"),
+                file(6, &t, "Game (T-En) (Disc 1).bin"),
+                file(7, &t, "Game (T-En) (Disc 2).chd"),
+                file(8, dir, "._Game.m3u"),
+            ]),
+            [
+                PathBuf::from("Game.m3u"),
+                PathBuf::from("translation/Game (T-En).m3u"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_lone_playlist_offers_no_choice() {
+        let dir = "roms/snes/Super Metroid";
+        assert!(choices(vec![
+            file(1, dir, "Game.m3u"),
+            file(2, dir, "Game (Disc 1).chd"),
+            file(3, dir, "Game (Disc 2).chd"),
+        ])
+        .is_empty());
     }
 
     #[test]
