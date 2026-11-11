@@ -311,6 +311,20 @@ pub fn playlist_files(m3u: &Path, text: &str, files: &[PlannedFile]) -> Vec<Path
     needed
 }
 
+/// Whether `file` of a game downloaded to `dir` can start: a playlist needs what it names, as
+/// a download stopped part way leaves it without some of its discs.
+pub fn ready(dir: &Path, file: &Path) -> bool {
+    let path = dir.join(file);
+    if !is_playlist(file) {
+        return path.exists();
+    }
+    std::fs::read(&path).is_ok_and(|bytes| {
+        playlist_entries(file, &String::from_utf8_lossy(&bytes))
+            .iter()
+            .all(|entry| dir.join(entry).exists())
+    })
+}
+
 fn playlist(stem: &str, discs: Vec<PathBuf>) -> Launch {
     let name = format!("{stem}.m3u");
     let name = if safe_component(&name) {
@@ -566,6 +580,18 @@ mod tests {
             playlist_files(m3u, "elsewhere.chd\n", &files),
             playlist_files(m3u, ".T/T (Disc 1).cue\n.T/T (Disc 2).chd\n", &files),
         );
+    }
+
+    #[test]
+    fn a_playlist_is_ready_once_its_discs_are() {
+        let dir = tempfile::tempdir().unwrap();
+        let m3u = Path::new("translation/T.m3u");
+        std::fs::create_dir_all(dir.path().join("translation/.T")).unwrap();
+        assert!(!ready(dir.path(), m3u));
+        std::fs::write(dir.path().join(m3u), ".T/T (Disc 1).chd\n").unwrap();
+        assert!(!ready(dir.path(), m3u));
+        std::fs::write(dir.path().join("translation/.T/T (Disc 1).chd"), "").unwrap();
+        assert!(ready(dir.path(), m3u));
     }
 
     #[test]

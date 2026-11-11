@@ -1024,7 +1024,10 @@ impl Controller {
         let dir = detail.map(|d| self.game_files_dir(&d));
         let downloaded: Vec<bool> = files
             .iter()
-            .map(|f| dir.as_ref().is_some_and(|dir| dir.join(f).exists()))
+            .map(|f| {
+                dir.as_ref()
+                    .is_some_and(|dir| crate::layout::ready(dir, Path::new(f)))
+            })
             .collect();
         let index = chosen
             .and_then(|chosen| files.iter().position(|f| *f == chosen))
@@ -1064,7 +1067,8 @@ impl Controller {
         else {
             return;
         };
-        let here = Some(self.game_files_dir(&detail).join(&file)).filter(|path| path.exists());
+        let dir = self.game_files_dir(&detail);
+        let here = crate::layout::ready(&dir, Path::new(&file)).then(|| dir.join(&file));
         {
             let mut store = self.shared.store.lock().unwrap();
             store.choose_file(detail.id, &file);
