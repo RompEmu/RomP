@@ -304,11 +304,19 @@ component Connect inherits SetupFrame {
             color: Theme.text-subtle;
         }
         if root.error != "": Text { horizontal-alignment: Locale.start; text: root.error; font-size: Theme.font-small; color: Theme.danger; wrap: word-wrap; }
-        if root.keychain-missing: Text { horizontal-alignment: Locale.start;
-            text: @tr("This computer has no keychain, so your sign-in will be kept in a file in RomP's data folder that only your user account can read.");
-            font-size: Theme.font-small;
-            color: Theme.text-subtle;
-            wrap: word-wrap;
+        if root.keychain-missing: Rectangle {
+            background: Theme.surface-muted;
+            border-radius: Theme.radius;
+            VerticalLayout {
+                padding: 12px;
+                Text { horizontal-alignment: Locale.start;
+                    text: @tr("This computer has no keychain, so your sign-in will be kept in a file in RomP's data folder that only your user account can read.");
+                    font-size: Theme.font-small;
+                    color: Theme.text-secondary;
+                    wrap: word-wrap;
+                    line-height-factor: 1.3;
+                }
+            }
         }
     }
     Row {
