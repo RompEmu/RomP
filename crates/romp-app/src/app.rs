@@ -16,7 +16,7 @@ mod whats_new;
 
 use crate::cores::Cores;
 use crate::covers::Covers;
-use crate::credentials::{Keychain, SignIns, TokenStore};
+use crate::credentials::{FileSecrets, Keychain, SignIns, TokenStore, WithFileFallback};
 use crate::grid::{row_count, row_range, CoverSlots, RecentRows, RECENT_ROWS};
 use crate::restore::{LastView, Observed, Placement, Sidebar, SIDEBAR_KEY, VIEW_KEY, WINDOW_KEY};
 use crate::romm::client::{check_version, server_candidates, Client, Error};
@@ -184,7 +184,10 @@ fn open_store() -> rusqlite::Result<Store> {
 
 pub fn run() -> anyhow::Result<()> {
     crate::vulkan::start_probe();
-    let sign_ins = SignIns::new(Keychain);
+    let sign_ins = SignIns::new(WithFileFallback::new(
+        Keychain,
+        FileSecrets::new(paths::data_dir().join("sign-ins.json")),
+    ));
     let shared = Shared {
         rt: Runtime::new()?,
         store: Arc::new(Mutex::new(open_store()?)),
