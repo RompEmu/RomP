@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub trait TokenStore: Send + Sync {
@@ -34,6 +36,132 @@ impl Secrets for Keychain {
         if let Ok(entry) = keyring::Entry::new(service, account) {
             let _ = entry.delete_credential();
         }
+    }
+}
+
+/// Sign-ins kept in a file only its owner can read, for computers with no keychain to keep them in
+/// (Steam Deck's game mode and other handhelds run no Secret Service).
+pub struct FileSecrets {
+    path: PathBuf,
+}
+
+impl FileSecrets {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    fn key(service: &str, account: &str) -> String {
+        format!("{service}\n{account}")
+    }
+
+    fn read(&self) -> Result<BTreeMap<String, String>, String> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(text) => serde_json::from_str(&text).map_err(|e| e.to_string()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn write(&self, items: &BTreeMap<String, String>) -> Result<(), String> {
+        if items.is_empty() {
+            let _ = std::fs::remove_file(&self.path);
+            return Ok(());
+        }
+        let json = serde_json::to_string(items).map_err(|e| e.to_string())?;
+        if let Some(dir) = self.path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        // Written beside the real file and renamed over it, so a crash never leaves it half-written.
+        let temp = self.path.with_extension("tmp");
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        std::io::Write::write_all(
+            &mut options.open(&temp).map_err(|e| e.to_string())?,
+            json.as_bytes(),
+        )
+        .and_then(|()| std::fs::rename(&temp, &self.path))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp);
+            e.to_string()
+        })
+    }
+}
+
+impl Secrets for FileSecrets {
+    fn get(&self, service: &str, account: &str) -> Result<Option<String>, String> {
+        Ok(self.read()?.get(&Self::key(service, account)).cloned())
+    }
+
+    fn set(&self, service: &str, account: &str, value: &str) -> Result<(), String> {
+        let mut items = self.read()?;
+        items.insert(Self::key(service, account), value.into());
+        self.write(&items)
+    }
+
+    fn delete(&self, service: &str, account: &str) {
+        if let Ok(mut items) = self.read() {
+            if items.remove(&Self::key(service, account)).is_some() {
+                let _ = self.write(&items);
+            }
+        }
+    }
+}
+
+/// The keychain when there is one, and a file when it can't be used. Once the keychain has failed
+/// it isn't written to again in this run, since a keychain that couldn't be read may still hold
+/// sign-ins that a write would replace.
+pub struct WithFileFallback<P: Secrets> {
+    keychain: P,
+    file: FileSecrets,
+    keychain_failed: AtomicBool,
+}
+
+impl<P: Secrets> WithFileFallback<P> {
+    pub fn new(keychain: P, file: FileSecrets) -> Self {
+        Self {
+            keychain,
+            file,
+            keychain_failed: AtomicBool::new(false),
+        }
+    }
+
+    fn keychain_failed(&self, error: &str) {
+        if !self.keychain_failed.swap(true, Ordering::SeqCst) {
+            tracing::warn!("keychain unavailable, keeping sign-ins in a file instead: {error}");
+        }
+    }
+}
+
+impl<P: Secrets> Secrets for WithFileFallback<P> {
+    fn get(&self, service: &str, account: &str) -> Result<Option<String>, String> {
+        if !self.keychain_failed.load(Ordering::SeqCst) {
+            match self.keychain.get(service, account) {
+                Ok(Some(value)) => return Ok(Some(value)),
+                Ok(None) => {}
+                Err(e) => self.keychain_failed(&e),
+            }
+        }
+        self.file.get(service, account)
+    }
+
+    fn set(&self, service: &str, account: &str, value: &str) -> Result<(), String> {
+        if !self.keychain_failed.load(Ordering::SeqCst) {
+            match self.keychain.set(service, account, value) {
+                Ok(()) => {
+                    self.file.delete(service, account);
+                    return Ok(());
+                }
+                Err(e) => self.keychain_failed(&e),
+            }
+        }
+        self.file.set(service, account, value)
+    }
+
+    fn delete(&self, service: &str, account: &str) {
+        self.keychain.delete(service, account);
+        self.file.delete(service, account);
     }
 }
 
@@ -309,5 +437,82 @@ mod tests {
         assert!(secrets.item(SERVICE, ACCOUNT).is_some());
         sign_ins.retro_achievements().delete("beshr");
         assert_eq!(secrets.item(SERVICE, ACCOUNT), None);
+    }
+
+    struct NoKeychain;
+
+    impl Secrets for NoKeychain {
+        fn get(&self, _: &str, _: &str) -> Result<Option<String>, String> {
+            Err("no secret service".into())
+        }
+        fn set(&self, _: &str, _: &str, _: &str) -> Result<(), String> {
+            Err("no secret service".into())
+        }
+        fn delete(&self, _: &str, _: &str) {}
+    }
+
+    fn in_file(dir: &tempfile::TempDir) -> FileSecrets {
+        FileSecrets::new(dir.path().join("sign-ins.json"))
+    }
+
+    #[test]
+    fn without_a_keychain_sign_ins_are_kept_in_a_file_across_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = SignIns::new(WithFileFallback::new(NoKeychain, in_file(&dir)));
+        first.romm().save("http://a/", "romm").unwrap();
+        first.retro_achievements().save("beshr", "ra").unwrap();
+
+        let reopened = SignIns::new(WithFileFallback::new(NoKeychain, in_file(&dir)));
+        assert_eq!(reopened.romm().load("http://a/").as_deref(), Some("romm"));
+        assert_eq!(
+            reopened.retro_achievements().load("beshr").as_deref(),
+            Some("ra")
+        );
+        reopened.romm().delete("http://a/");
+        reopened.retro_achievements().delete("beshr");
+        assert!(!dir.path().join("sign-ins.json").exists());
+    }
+
+    #[test]
+    fn a_working_keychain_is_used_and_leaves_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let secrets = MemorySecrets::default();
+        let sign_ins = SignIns::new(WithFileFallback::new(secrets.clone(), in_file(&dir)));
+        sign_ins.romm().save("http://a/", "romm").unwrap();
+        assert!(secrets.item(SERVICE, ACCOUNT).is_some());
+        assert!(!dir.path().join("sign-ins.json").exists());
+    }
+
+    #[test]
+    fn a_keychain_that_cant_be_read_is_never_written_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let secrets = MemorySecrets::default();
+        SignIns::new(secrets.clone())
+            .romm()
+            .save("http://a/", "romm")
+            .unwrap();
+        let stored = secrets.item(SERVICE, ACCOUNT);
+
+        secrets.lock(true);
+        let sign_ins = SignIns::new(WithFileFallback::new(secrets.clone(), in_file(&dir)));
+        sign_ins.retro_achievements().save("beshr", "ra").unwrap();
+        assert_eq!(secrets.item(SERVICE, ACCOUNT), stored);
+        assert_eq!(
+            sign_ins.retro_achievements().load("beshr").as_deref(),
+            Some("ra")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_file_is_readable_by_its_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        in_file(&dir).set("Romp", "a", "token").unwrap();
+        let mode = std::fs::metadata(dir.path().join("sign-ins.json"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 }
