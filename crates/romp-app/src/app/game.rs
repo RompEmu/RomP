@@ -1216,7 +1216,13 @@ impl Controller {
 
     pub(super) fn start_game(&self, detail: GameDetail, rom: PathBuf, jit: bool, core: PathBuf) {
         self.preparing.set(false);
-        let save_dir = self.game_saves(&detail).map_or_else(
+        let saves = self.game_saves(&detail);
+        if let Some(game) = &saves {
+            if let Err(e) = crate::saves::make_save_folder(game) {
+                tracing::warn!("making {}'s save folder: {e}", detail.title);
+            }
+        }
+        let save_dir = saves.map_or_else(
             || paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
             |game| game.dir,
         );

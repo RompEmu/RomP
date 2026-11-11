@@ -264,6 +264,15 @@ pub fn variant_of(file: &str) -> String {
     }
 }
 
+/// Makes the folder a game's in-game save goes in, as ARMSX2 won't make its memory card's: the
+/// game then finds no card inserted, and has nothing to save to.
+pub fn make_save_folder(game: &GameSaves) -> std::io::Result<()> {
+    match game.dir.join(&game.save_file).parent() {
+        Some(folder) => std::fs::create_dir_all(folder),
+        None => Ok(()),
+    }
+}
+
 /// The file a core keeps its in-game saves in, relative to the game's save folder, and the
 /// emulator name it syncs under.
 pub fn in_game_save(core_id: &str, dir: &Path, rom: Option<&Path>) -> (String, String) {
@@ -1361,6 +1370,23 @@ mod tests {
         std::fs::create_dir_all(root.path().join("3")).unwrap();
         std::fs::write(root.path().join("3/Stonekeep.pure.zip"), b"zip").unwrap();
         assert_eq!(games_with_saves(root.path()), [3]);
+    }
+
+    #[test]
+    fn a_memory_card_has_its_folder_before_the_game_starts() {
+        let root = tempfile::tempdir().unwrap();
+        let card = GameSaves {
+            rom_id: 7,
+            dir: root.path().join("7"),
+            title: "Silent Hill 2".into(),
+            emulator: "armsx2".into(),
+            save_file: ARMSX2_CARD.into(),
+            save_emulator: PS2_CARD_EMULATOR.into(),
+            variant: None,
+        };
+        make_save_folder(&card).unwrap();
+        assert!(root.path().join("7/pcsx2/memcards").is_dir());
+        assert!(!root.path().join("7").join(ARMSX2_CARD).exists());
     }
 
     #[test]
