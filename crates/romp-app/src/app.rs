@@ -483,9 +483,25 @@ impl Controller {
                     });
                     let shown = server.unwrap_or_default();
                     ui.set_server_url(shown.trim_end_matches('/').into());
+                    self.check_keychain();
                 }
             }
         }
+    }
+
+    /// Asked off the UI thread: with no keychain service running, the answer can take a while.
+    fn check_keychain(&self) {
+        let tokens = self.shared.tokens.clone();
+        self.shared.rt.spawn(async move {
+            let available = tokio::task::spawn_blocking(move || tokens.keychain_available())
+                .await
+                .unwrap_or(true);
+            on_ui(move |c| {
+                if let Some(ui) = c.ui() {
+                    ui.set_keychain_missing(!available);
+                }
+            });
+        });
     }
 
     fn connect(&self) {

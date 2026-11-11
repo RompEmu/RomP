@@ -281,6 +281,7 @@ component Connect inherits SetupFrame {
     in property <string> error;
     in property <bool> busy;
     in property <bool> can-go-back;
+    in property <bool> keychain-missing;
     callback connect();
     callback back();
     step: 1;
@@ -303,6 +304,12 @@ component Connect inherits SetupFrame {
             color: Theme.text-subtle;
         }
         if root.error != "": Text { horizontal-alignment: Locale.start; text: root.error; font-size: Theme.font-small; color: Theme.danger; wrap: word-wrap; }
+        if root.keychain-missing: Text { horizontal-alignment: Locale.start;
+            text: @tr("This computer has no keychain, so your sign-in will be kept in a file in RomP's data folder that only your user account can read.");
+            font-size: Theme.font-small;
+            color: Theme.text-subtle;
+            wrap: word-wrap;
+        }
     }
     Row {
         spacing: 10px;
@@ -3080,6 +3087,7 @@ export component AppWindow inherits Window {
 
     in-out property <string> server-url;
     in property <string> connect-error;
+    in property <bool> keychain-missing;
     in property <bool> busy;
     callback connect();
 
@@ -3360,6 +3368,7 @@ export component AppWindow inherits Window {
         has-icon: root.has-app-icon;
         server-url <=> root.server-url;
         error: root.connect-error;
+        keychain-missing: root.keychain-missing;
         busy: root.busy;
         can-go-back: root.first-run;
         connect => { root.connect(); }
