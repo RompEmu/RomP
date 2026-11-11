@@ -7,12 +7,21 @@ pub trait TokenStore: Send + Sync {
     fn load(&self, account: &str) -> Option<String>;
     fn save(&self, account: &str, token: &str) -> Result<(), String>;
     fn delete(&self, account: &str);
+
+    /// Whether sign-ins have a keychain to go in, rather than a file.
+    fn keychain_available(&self) -> bool {
+        true
+    }
 }
 
 pub trait Secrets: Send + Sync {
     fn get(&self, service: &str, account: &str) -> Result<Option<String>, String>;
     fn set(&self, service: &str, account: &str, value: &str) -> Result<(), String>;
     fn delete(&self, service: &str, account: &str);
+
+    fn keychain_available(&self) -> bool {
+        true
+    }
 }
 
 pub struct Keychain;
@@ -163,6 +172,17 @@ impl<P: Secrets> Secrets for WithFileFallback<P> {
         self.keychain.delete(service, account);
         self.file.delete(service, account);
     }
+
+    /// Asks the keychain for the sign-ins item, which is read at sign-in anyway, so a first run
+    /// finds out before the player has typed an address.
+    fn keychain_available(&self) -> bool {
+        if !self.keychain_failed.load(Ordering::SeqCst) {
+            if let Err(e) = self.keychain.get(SERVICE, ACCOUNT) {
+                self.keychain_failed(&e);
+            }
+        }
+        !self.keychain_failed.load(Ordering::SeqCst)
+    }
 }
 
 const SERVICE: &str = "Romp";
@@ -204,6 +224,10 @@ impl SignIns {
             secrets: Box::new(secrets),
             cache: Mutex::new(None),
         })
+    }
+
+    pub fn keychain_available(&self) -> bool {
+        self.secrets.keychain_available()
     }
 
     pub fn romm(self: &Arc<Self>) -> Arc<dyn TokenStore> {
@@ -296,6 +320,10 @@ impl TokenStore for SignInsOf {
 
     fn delete(&self, account: &str) {
         self.sign_ins.delete(self.kind, account);
+    }
+
+    fn keychain_available(&self) -> bool {
+        self.sign_ins.keychain_available()
     }
 }
 
@@ -501,6 +529,19 @@ mod tests {
             sign_ins.retro_achievements().load("beshr").as_deref(),
             Some("ra")
         );
+    }
+
+    #[test]
+    fn a_missing_keychain_is_told_before_anything_is_saved() {
+        let dir = tempfile::tempdir().unwrap();
+        let without = SignIns::new(WithFileFallback::new(NoKeychain, in_file(&dir)));
+        assert!(!without.keychain_available());
+        assert!(!dir.path().join("sign-ins.json").exists());
+        let with = SignIns::new(WithFileFallback::new(
+            MemorySecrets::default(),
+            in_file(&dir),
+        ));
+        assert!(with.keychain_available());
     }
 
     #[cfg(unix)]

@@ -72,6 +72,12 @@ msgid "RomP works with RomM 5.0 or newer."
 msgstr ""
 
 #: crates/romp-app/ui/app.slint
+msgid ""
+"This computer has no keychain, so your sign-in will be kept in a file in "
+"RomP's data folder that only your user account can read."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Back"
 msgstr ""
