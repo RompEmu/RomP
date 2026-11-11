@@ -372,6 +372,15 @@ impl Store {
                  COMMIT;",
             )?;
         }
+        if version < 18 {
+            // Looked up while a game's playlists were left out and their discs offered one by one.
+            conn.execute_batch(
+                "BEGIN;
+                 DELETE FROM kv WHERE key LIKE 'file_choices:%';
+                 PRAGMA user_version = 18;
+                 COMMIT;",
+            )?;
+        }
         Ok(Self { conn })
     }
 
