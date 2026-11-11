@@ -1,5 +1,8 @@
 use crate::download::{already_there, download_file, DownloadError, Foreign};
-use crate::layout::{file_choices, files_for, launch_target, m3u, plan, safe_component, Launch};
+use crate::layout::{
+    file_choices, files_for, is_playlist, launch_target, m3u, plan, playlist_files, safe_component,
+    Launch, PlannedFile,
+};
 use crate::romm::client::Client;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -71,9 +74,17 @@ pub async fn download_files(
         Some(_) => pick,
         None => pick.or(choices.first().map(PathBuf::as_path)),
     };
+    let dir = roms_dir.join(&rom.platform_slug).join(rom.id.to_string());
+    let mut fetched = false;
     let files: Vec<_> = match pick {
         Some(pick) => {
-            let needed = files_for(pick, &files);
+            let needed = if is_playlist(pick) {
+                let text;
+                (text, fetched) = read_playlist(client, rom.id, &dir, pick, &files, cancel).await?;
+                playlist_files(pick, &text, &files)
+            } else {
+                files_for(pick, &files)
+            };
             files
                 .into_iter()
                 .filter(|f| needed.contains(&f.rel_path))
@@ -92,13 +103,11 @@ pub async fn download_files(
     if files.is_empty() {
         return Err(DownloadError::Io("nothing to download".into()));
     }
-    let dir = roms_dir.join(&rom.platform_slug).join(rom.id.to_string());
     let total: u64 = files
         .iter()
         .map(|f| f.file.file_size_bytes.max(0) as u64)
         .sum();
     let mut done = 0u64;
-    let mut fetched = false;
     for planned in &files {
         let base = done;
         let dest = dir.join(&planned.rel_path);
@@ -141,6 +150,39 @@ pub async fn download_files(
         fetched,
         choices,
     })
+}
+
+/// Downloads the playlist `m3u` ahead of the rest, since it says which of the game's files it
+/// starts, and gives its text and whether it had to be fetched.
+async fn read_playlist(
+    client: &Client,
+    rom_id: i64,
+    dir: &Path,
+    m3u: &Path,
+    files: &[PlannedFile],
+    cancel: &AtomicBool,
+) -> Result<(String, bool), DownloadError> {
+    let Some(planned) = files.iter().find(|f| f.rel_path == m3u) else {
+        return Ok((String::new(), false));
+    };
+    let dest = dir.join(m3u);
+    let size = Some(planned.file.file_size_bytes.max(0) as u64);
+    let sha1 = verifiable_sha1(&planned.file.file_name, planned.file.sha1_hash.as_deref());
+    let fetched = !already_there(&dest, sha1, size).await;
+    download_file(
+        client,
+        client.rom_file_url(rom_id, &planned.file),
+        &dest,
+        sha1,
+        size,
+        &|_| {},
+        cancel,
+    )
+    .await?;
+    let bytes = tokio::fs::read(&dest)
+        .await
+        .map_err(|e| DownloadError::Io(e.to_string()))?;
+    Ok((String::from_utf8_lossy(&bytes).into_owned(), fetched))
 }
 
 #[cfg(test)]
@@ -331,6 +373,60 @@ mod tests {
         .unwrap();
         assert_eq!(done.launch, dir.path().join("snes/7/Metroid.zip"));
         assert_eq!(done.choices.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_playlist_comes_down_with_the_discs_it_names() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/roms/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 7, "platform_id": 32, "platform_slug": "psx", "fs_name": "Arc", "fs_path": "roms/psx",
+                "has_multiple_files": true,
+                "files": [
+                    {"id": 1, "file_name": "Arc.m3u", "file_path": "roms/psx/Arc", "file_size_bytes": 3, "sha1_hash": null},
+                    {"id": 2, "file_name": "Arc (Disc 1).chd", "file_path": "roms/psx/Arc/.Arc", "file_size_bytes": 3, "sha1_hash": null},
+                    {"id": 3, "file_name": "T.m3u", "file_path": "roms/psx/Arc/translation", "file_size_bytes": 17, "sha1_hash": null},
+                    {"id": 4, "file_name": "T (Disc 1).chd", "file_path": "roms/psx/Arc/translation/.T", "file_size_bytes": 3, "sha1_hash": null},
+                    {"id": 5, "file_name": "T (Disc 2).chd", "file_path": "roms/psx/Arc/translation/.T", "file_size_bytes": 3, "sha1_hash": null}
+                ]})))
+            .mount(&server)
+            .await;
+        for (id, body, times) in [
+            ("1", "x", 0),
+            ("2", "one", 0),
+            ("3", ".T/T (Disc 2).chd", 1),
+            ("4", "t-1", 0),
+            ("5", "t-2", 1),
+        ] {
+            Mock::given(method("GET"))
+                .and(query_param("file_ids", id))
+                .respond_with(ResponseTemplate::new(200).set_body_string(body))
+                .expect(times)
+                .mount(&server)
+                .await;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let client = Client::new(base_of(&server, "/")).with_token("t".into());
+        let done = download_files(
+            &client,
+            7,
+            dir.path(),
+            None,
+            Some(Path::new("translation/T.m3u")),
+            &|_, _| {},
+            &AtomicBool::new(false),
+        )
+        .await
+        .unwrap();
+        let game_dir = dir.path().join("psx/7");
+        assert_eq!(done.launch, game_dir.join("translation/T.m3u"));
+        assert!(done.fetched);
+        assert!(game_dir.join("translation/.T/T (Disc 2).chd").exists());
+        assert_eq!(
+            done.choices,
+            [PathBuf::from("Arc.m3u"), PathBuf::from("translation/T.m3u")]
+        );
     }
 
     #[tokio::test]

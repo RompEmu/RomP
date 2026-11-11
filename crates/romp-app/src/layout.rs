@@ -169,7 +169,7 @@ const DISC_MEDIA: [&str; 12] = [
     "cue", "gdi", "ccd", "cdi", "chd", "iso", "pbp", "mds", "bin", "img", "raw", "sub",
 ];
 
-fn is_playlist(p: &Path) -> bool {
+pub fn is_playlist(p: &Path) -> bool {
     ext(p) == "m3u"
 }
 
@@ -243,6 +243,72 @@ pub fn files_for(pick: &Path, files: &[PlannedFile]) -> Vec<PathBuf> {
         })
         .cloned()
         .collect()
+}
+
+/// The files a playlist at `m3u` names, as paths in the game's folder: one a line, except
+/// comments, written with either slash, and with RetroArch's "|label" after the file. A line
+/// that would leave the game's folder names nothing.
+pub fn playlist_entries(m3u: &Path, text: &str) -> Vec<PathBuf> {
+    text.lines()
+        .map(|line| line.trim_start_matches('\u{feff}').trim())
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| {
+            let name = line.split('|').next()?.trim().replace('\\', "/");
+            let mut rel = folder(m3u).to_path_buf();
+            for part in Path::new(&name).components() {
+                match part {
+                    Component::Normal(part) => rel.push(part),
+                    Component::CurDir => {}
+                    Component::ParentDir if rel.pop() => {}
+                    _ => return None,
+                }
+            }
+            safe(&rel).then_some(rel)
+        })
+        .collect()
+}
+
+/// The files that starting the playlist `m3u` needs: it, and the files it names with their
+/// tracks. When it names none that RomM has, the discs a set keeps beside its playlist, in a
+/// `.Name` folder or in a `Name` folder.
+pub fn playlist_files(m3u: &Path, text: &str, files: &[PlannedFile]) -> Vec<PathBuf> {
+    let named: Vec<&PathBuf> = playlist_entries(m3u, text)
+        .iter()
+        .filter_map(|entry| {
+            let entry = entry.to_string_lossy().to_lowercase();
+            files
+                .iter()
+                .map(|f| &f.rel_path)
+                .find(|p| p.to_string_lossy().to_lowercase() == entry)
+        })
+        .collect();
+    let discs: Vec<&PathBuf> = if named.is_empty() {
+        let stem = m3u.file_stem().unwrap_or_default().to_string_lossy();
+        let home = folder(m3u);
+        let homes = [
+            home.to_path_buf(),
+            home.join(format!(".{stem}")),
+            home.join(&*stem),
+        ];
+        files
+            .iter()
+            .map(|f| &f.rel_path)
+            .filter(|p| {
+                DISC_MEDIA.contains(&ext(p).as_str()) && homes.iter().any(|h| h == folder(p))
+            })
+            .collect()
+    } else {
+        named
+    };
+    let mut needed = vec![m3u.to_path_buf()];
+    for disc in discs {
+        for p in files_for(disc, files) {
+            if !needed.contains(&p) {
+                needed.push(p);
+            }
+        }
+    }
+    needed
 }
 
 fn playlist(stem: &str, discs: Vec<PathBuf>) -> Launch {
@@ -439,6 +505,66 @@ mod tests {
                 PathBuf::from("Game.m3u"),
                 PathBuf::from("translation/Game (T-En).m3u"),
             ]
+        );
+    }
+
+    fn planned(dir: &str, names: &[&str]) -> Vec<PlannedFile> {
+        let mut r = rom(true, Vec::new());
+        r.fs_name = "Game".into();
+        r.files = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let (sub, name) = n.rsplit_once('/').map_or(("", *n), |(d, n)| (d, n));
+                let path = if sub.is_empty() {
+                    dir.to_string()
+                } else {
+                    format!("{dir}/{sub}")
+                };
+                file(i as i64, &path, name)
+            })
+            .collect();
+        plan(&r).unwrap()
+    }
+
+    #[test]
+    fn a_playlist_names_its_files_the_ways_sets_write_them() {
+        let text = "\u{feff}#EXTM3U\r\n.T\\T (Disc 1).cue\r\n./T (Disc 2).chd|Disc 2\r\n\r\n../../x.chd\n/etc/passwd\n";
+        assert_eq!(
+            playlist_entries(Path::new("translation/T.m3u"), text),
+            [
+                PathBuf::from("translation/.T/T (Disc 1).cue"),
+                PathBuf::from("translation/T (Disc 2).chd"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_playlist_comes_down_with_what_it_names_and_nothing_else() {
+        let files = planned(
+            "roms/psx/Game",
+            &[
+                "Game.m3u",
+                ".Game/Game (Disc 1).chd",
+                "translation/T.m3u",
+                "translation/.T/T (Disc 1).cue",
+                "translation/.T/T (Disc 1).bin",
+                "translation/.T/T (Disc 2).CHD",
+            ],
+        );
+        let m3u = Path::new("translation/T.m3u");
+        assert_eq!(
+            playlist_files(m3u, ".T/T (Disc 1).cue\n.T/T (Disc 2).chd\n", &files),
+            [
+                PathBuf::from("translation/T.m3u"),
+                PathBuf::from("translation/.T/T (Disc 1).cue"),
+                PathBuf::from("translation/.T/T (Disc 1).bin"),
+                PathBuf::from("translation/.T/T (Disc 2).CHD"),
+            ]
+        );
+        assert_eq!(
+            playlist_files(m3u, "elsewhere.chd\n", &files),
+            playlist_files(m3u, ".T/T (Disc 1).cue\n.T/T (Disc 2).chd\n", &files),
         );
     }
 
