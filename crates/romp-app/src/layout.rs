@@ -268,6 +268,14 @@ pub fn playlist_entries(m3u: &Path, text: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+/// A path's parts in lower case, to compare paths whatever their slashes, as on Windows RomM's
+/// folders keep theirs and the file name joins with the other kind.
+fn lowercase_parts(p: &Path) -> Vec<String> {
+    p.components()
+        .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+        .collect()
+}
+
 /// The files that starting the playlist `m3u` needs: it, and the files it names with their
 /// tracks. When it names none that RomM has, the discs a set keeps beside its playlist, in a
 /// `.Name` folder or in a `Name` folder.
@@ -275,11 +283,11 @@ pub fn playlist_files(m3u: &Path, text: &str, files: &[PlannedFile]) -> Vec<Path
     let named: Vec<&PathBuf> = playlist_entries(m3u, text)
         .iter()
         .filter_map(|entry| {
-            let entry = entry.to_string_lossy().to_lowercase();
+            let entry = lowercase_parts(entry);
             files
                 .iter()
                 .map(|f| &f.rel_path)
-                .find(|p| p.to_string_lossy().to_lowercase() == entry)
+                .find(|p| lowercase_parts(p) == entry)
         })
         .collect();
     let discs: Vec<&PathBuf> = if named.is_empty() {
