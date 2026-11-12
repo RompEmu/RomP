@@ -53,6 +53,14 @@ pub fn name(button: u32) -> &'static str {
         .map_or("?", |(_, n)| n)
 }
 
+/// How many controller buttons the game menu's combination takes.
+pub const MENU_COMBO_SIZE: std::ops::RangeInclusive<usize> = 2..=3;
+
+/// Guide is left out: the combination exists for controllers where Guide is taken by something else.
+fn is_physical(button: Button) -> bool {
+    button != Button::Mode && PHYSICAL.contains(&button)
+}
+
 fn physical_name(button: Button) -> String {
     format!("{button:?}")
 }
@@ -310,6 +318,8 @@ pub struct Mappings {
     hotkeys: BTreeMap<String, String>,
     pads: BTreeMap<String, BTreeMap<String, String>>,
     labels: BTreeMap<String, String>,
+    /// Physical buttons held together to open the game menu; empty leaves it to Guide and Select + Start.
+    menu_combo: Vec<String>,
     pub nintendo_labels: bool,
     pub stick_dpad: bool,
     consoles: BTreeMap<String, Layout>,
@@ -727,6 +737,37 @@ impl Mappings {
                 m.keyboard.clear();
             }
         });
+        self.menu_combo.clear();
+    }
+
+    /// The buttons that open the game menu when held together, or none while Guide and
+    /// Select + Start do. A saved combination that no longer reads as one counts as none, so a
+    /// hand-edited file can't leave the menu with no way to open it.
+    pub fn menu_combo(&self) -> Vec<Button> {
+        let buttons: Option<Vec<Button>> = self
+            .menu_combo
+            .iter()
+            .map(|name| physical_named(name))
+            .collect();
+        buttons
+            .filter(|b| MENU_COMBO_SIZE.contains(&b.len()))
+            .unwrap_or_default()
+    }
+
+    /// Whether `buttons` could be saved: the menu opens by two or three held together, never one
+    /// press that a game needs.
+    pub fn set_menu_combo(&mut self, buttons: &[Button]) -> bool {
+        let mut unique: Vec<Button> = Vec::new();
+        for button in buttons {
+            if !unique.contains(button) {
+                unique.push(*button);
+            }
+        }
+        if !MENU_COMBO_SIZE.contains(&unique.len()) || unique.iter().any(|b| !is_physical(*b)) {
+            return false;
+        }
+        self.menu_combo = unique.into_iter().map(physical_name).collect();
+        true
     }
 
     pub fn pad_button(&self, model: &str, button: u32) -> Button {
@@ -1513,5 +1554,32 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_menu_combination_is_two_or_three_buttons_and_resets_with_the_shortcuts() {
+        let mut m = Mappings::default();
+        assert!(m.menu_combo().is_empty());
+        assert!(!m.set_menu_combo(&[Button::LeftThumb]));
+        assert!(!m.set_menu_combo(&[Button::LeftThumb, Button::LeftThumb]));
+        assert!(!m.set_menu_combo(&[Button::Mode, Button::Select]));
+        assert!(!m.set_menu_combo(&[Button::South, Button::East, Button::West, Button::North]));
+        assert!(m.menu_combo().is_empty());
+
+        assert!(m.set_menu_combo(&[Button::LeftThumb, Button::RightThumb]));
+        assert_eq!(m.menu_combo(), [Button::LeftThumb, Button::RightThumb]);
+        let saved = Mappings::from_json(Some(&m.to_json()));
+        assert_eq!(saved.menu_combo(), [Button::LeftThumb, Button::RightThumb]);
+
+        m.reset_hotkeys();
+        assert!(m.menu_combo().is_empty());
+    }
+
+    #[test]
+    fn a_saved_combination_that_is_not_one_counts_as_none() {
+        let one = Mappings::from_json(Some(r#"{"menu_combo":["LeftThumb"]}"#));
+        assert!(one.menu_combo().is_empty());
+        let unknown = Mappings::from_json(Some(r#"{"menu_combo":["LeftThumb","Nope"]}"#));
+        assert!(unknown.menu_combo().is_empty());
     }
 }
