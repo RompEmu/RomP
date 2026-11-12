@@ -110,6 +110,10 @@ pub struct Client {
     token: Option<String>,
 }
 
+/// Looking up the name counts toward this, and macOS can take about five seconds to look up a
+/// `.local` name, so a shorter limit gives up on a server that is reachable.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+
 impl Client {
     pub fn new(base: Url) -> Self {
         Self::with_request_timeout(base, Duration::from_secs(30))
@@ -117,12 +121,12 @@ impl Client {
 
     pub(crate) fn with_request_timeout(base: Url, timeout: Duration) -> Self {
         let http = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(5))
+            .connect_timeout(CONNECT_TIMEOUT)
             .timeout(timeout)
             .build()
             .expect("http client");
         let transfer = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(5))
+            .connect_timeout(CONNECT_TIMEOUT)
             .read_timeout(Duration::from_secs(30))
             .build()
             .expect("http client");
