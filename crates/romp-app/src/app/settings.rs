@@ -3,6 +3,7 @@ use crate::achievements::popups;
 use crate::console_settings::{self, Chosen};
 use crate::cores::core_for_platform;
 use crate::details::human_size;
+use crate::gamepads::Button;
 use crate::i18n::translate;
 use crate::mapping::{self, Assigned, BUTTONS, HOTKEYS};
 use crate::pad_labels::{Family, CHOICES};
@@ -23,6 +24,50 @@ const SECTION_CONSOLES: i32 = 4;
 const SECTION_LOOKS: i32 = 5;
 
 pub(super) const SHORTCUTS: &str = "shortcuts";
+
+/// Which buttons are held while a menu combination is chosen. It waits for the controller to
+/// be let go first, so the press that opened the row isn't taken as part of the combination.
+#[derive(Default)]
+pub(super) struct MenuComboCapture {
+    armed: bool,
+    pad: Option<String>,
+    buttons: Vec<Button>,
+}
+
+impl MenuComboCapture {
+    fn restart(&mut self) {
+        *self = Self::default();
+    }
+
+    /// Takes what each controller holds now, and gives the buttons held together once they're let go.
+    fn update(&mut self, held: &[(String, Vec<Button>)]) -> Option<Vec<Button>> {
+        let down = held.iter().find(|(_, buttons)| !buttons.is_empty());
+        if !self.armed {
+            self.armed = down.is_none();
+            return None;
+        }
+        match down {
+            Some((pad, buttons)) => {
+                if self.pad.as_ref() != Some(pad) {
+                    self.pad = Some(pad.clone());
+                    self.buttons.clear();
+                }
+                for button in buttons {
+                    if !self.buttons.contains(button) {
+                        self.buttons.push(*button);
+                    }
+                }
+                None
+            }
+            None if self.pad.is_some() => {
+                let buttons = std::mem::take(&mut self.buttons);
+                self.pad = None;
+                Some(buttons)
+            }
+            None => None,
+        }
+    }
+}
 
 const KEYBOARD_HINT: &str =
     crate::gettext_noop!("Choose a button, then press the key you want for it.");
@@ -362,7 +407,7 @@ impl Controller {
         let waiting = self.remap_waiting.get();
         let mappings = self.mappings.borrow();
         if device == SHORTCUTS {
-            let rows: Vec<RemapRow> = HOTKEYS
+            let mut rows: Vec<RemapRow> = HOTKEYS
                 .iter()
                 .enumerate()
                 .map(|(i, (hotkey, _, label))| RemapRow {
@@ -371,13 +416,29 @@ impl Controller {
                     waiting: waiting == Some(i as u32),
                 })
                 .collect();
+            let combo = mappings.menu_combo();
+            let menu_waiting = waiting == Some(HOTKEYS.len() as u32);
+            rows.push(RemapRow {
+                name: tr!("Game menu (controller)").into(),
+                binding: if combo.is_empty() {
+                    tr!("Guide, or Select + Start")
+                } else {
+                    let family = self.gamepads.borrow().family_in_use(&mappings);
+                    crate::pad_labels::combo_name(family.unwrap_or_default(), &combo)
+                }
+                .into(),
+                waiting: menu_waiting,
+            });
             ui.set_remap_rows(ModelRc::new(VecModel::from(rows)));
             ui.set_remap_waiting(waiting.is_some());
-            ui.set_remap_hint(
-                notice
-                    .map_or_else(|| translate(SHORTCUTS_HINT), str::to_string)
-                    .into(),
-            );
+            let hint = match notice {
+                Some(notice) => notice.to_string(),
+                None if menu_waiting => {
+                    tr!("Hold two or three controller buttons together, then let go. Esc cancels.")
+                }
+                None => translate(SHORTCUTS_HINT),
+            };
+            ui.set_remap_hint(hint.into());
             ui.set_remap_labels_shown(false);
             ui.set_remap_console_shown(false);
             return;
@@ -493,12 +554,14 @@ impl Controller {
         let shortcuts = self.remap_device.borrow().as_deref() == Some(SHORTCUTS);
         let button = usize::try_from(index).ok().and_then(|i| {
             if shortcuts {
-                (i < HOTKEYS.len()).then_some(i as u32)
+                // The row after the keyboard shortcuts is the controller's game menu combination.
+                (i <= HOTKEYS.len()).then_some(i as u32)
             } else {
                 self.remap_buttons().get(i).map(|(b, _)| *b)
             }
         });
         self.remap_waiting.set(button);
+        self.menu_combo_capture.borrow_mut().restart();
         self.gamepads.borrow_mut().take_presses();
         self.show_remap(None);
     }
@@ -516,7 +579,8 @@ impl Controller {
         if device != KEYBOARD && device != SHORTCUTS {
             return;
         }
-        if device == SHORTCUTS && mapping::is_modifier(&text) {
+        if device == SHORTCUTS && (mapping::is_modifier(&text) || button as usize >= HOTKEYS.len())
+        {
             return;
         }
         let console = self.remap_console.borrow().clone();
@@ -568,7 +632,13 @@ impl Controller {
         else {
             return;
         };
-        if device == KEYBOARD || device == SHORTCUTS {
+        if device == SHORTCUTS {
+            if button as usize == HOTKEYS.len() {
+                self.capture_menu_combo();
+            }
+            return;
+        }
+        if device == KEYBOARD {
             return;
         }
         let model = mapping::model_of(&device).to_string();
@@ -589,6 +659,26 @@ impl Controller {
         self.remap_waiting.set(None);
         self.save_mappings();
         self.show_remap(None);
+    }
+
+    fn capture_menu_combo(&self) {
+        let held = {
+            let mut gamepads = self.gamepads.borrow_mut();
+            gamepads.poll();
+            gamepads.held()
+        };
+        let Some(buttons) = self.menu_combo_capture.borrow_mut().update(&held) else {
+            return;
+        };
+        if self.mappings.borrow_mut().set_menu_combo(&buttons) {
+            self.remap_waiting.set(None);
+            self.save_mappings();
+            self.show_remap(None);
+        } else {
+            self.show_remap(Some(&tr!(
+                "That takes two or three buttons held together. Try again."
+            )));
+        }
     }
 
     pub(super) fn remap_reset(&self) {
@@ -832,7 +922,7 @@ fn matching_consoles(consoles: &[(String, String)], query: &str) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::{matching_consoles, remappable_on};
+    use super::{matching_consoles, remappable_on, Button, MenuComboCapture};
 
     #[test]
     fn standalone_emulators_only_take_a_keyboard_layout() {
@@ -876,5 +966,42 @@ mod tests {
     #[test]
     fn a_search_that_matches_nothing_lists_nothing() {
         assert!(matching_consoles(&consoles(), "dreamcast").is_empty());
+    }
+
+    fn held(pad: &str, buttons: &[Button]) -> Vec<(String, Vec<Button>)> {
+        vec![(pad.to_string(), buttons.to_vec())]
+    }
+
+    #[test]
+    fn a_menu_combination_is_what_was_held_together_once_it_is_let_go() {
+        let mut capture = MenuComboCapture::default();
+        assert_eq!(capture.update(&held("a", &[])), None);
+        assert_eq!(capture.update(&held("a", &[Button::LeftThumb])), None);
+        let both = [Button::LeftThumb, Button::RightThumb];
+        assert_eq!(capture.update(&held("a", &both)), None);
+        assert_eq!(capture.update(&held("a", &[Button::RightThumb])), None);
+        assert_eq!(capture.update(&held("a", &[])), Some(both.to_vec()));
+        assert_eq!(capture.update(&held("a", &[])), None);
+    }
+
+    #[test]
+    fn the_press_that_chose_the_row_is_not_part_of_the_combination() {
+        let mut capture = MenuComboCapture::default();
+        assert_eq!(capture.update(&held("a", &[Button::South])), None);
+        assert_eq!(capture.update(&held("a", &[])), None);
+        assert_eq!(capture.update(&held("a", &[Button::Select])), None);
+        assert_eq!(capture.update(&held("a", &[])), Some(vec![Button::Select]));
+    }
+
+    #[test]
+    fn buttons_of_two_controllers_are_not_mixed() {
+        let mut capture = MenuComboCapture::default();
+        capture.update(&held("a", &[]));
+        capture.update(&held("a", &[Button::LeftThumb]));
+        capture.update(&held("b", &[Button::Select, Button::Start]));
+        assert_eq!(
+            capture.update(&held("b", &[])),
+            Some(vec![Button::Select, Button::Start])
+        );
     }
 }

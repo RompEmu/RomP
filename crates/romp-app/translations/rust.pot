@@ -415,6 +415,18 @@ msgid "Shortcuts"
 msgstr ""
 
 #: crates/romp-app/src/app/settings.rs
+msgid "Game menu (controller)"
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "Guide, or Select + Start"
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "Hold two or three controller buttons together, then let go. Esc cancels."
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
 msgid "Automatic ({})"
 msgstr ""
 
@@ -436,6 +448,10 @@ msgstr ""
 
 #: crates/romp-app/src/app/settings.rs
 msgid "{0} is a shortcut key. Choose a different key."
+msgstr ""
+
+#: crates/romp-app/src/app/settings.rs
+msgid "That takes two or three buttons held together. Try again."
 msgstr ""
 
 #: crates/romp-app/src/app/settings.rs
