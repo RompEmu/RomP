@@ -13,6 +13,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Fixed
 
+- On a Mac, RomP connects to a RomM server by its .local name (such as romm.local) when macOS takes a few seconds to look the name up, instead of reporting that it could not reach the server. ([#51](https://github.com/RompEmu/RomP/issues/51))
 - On a computer with no keychain, such as a Steam Deck in game mode, RomP keeps the RomM and RetroAchievements sign-ins in a file in its data folder that only your user account can read, instead of failing to save them. The sign-in screen says so before you sign in. ([#45](https://github.com/RompEmu/RomP/issues/45)) Thanks to @Altalus for reporting it.
 - PS2 games on a Mac have a memory card to save to from the first time they're played. The emulator wouldn't make the card's folder itself, so a new game found no card inserted. Thanks to @Altalus for finding it and the fix.
 - On Windows with an NVIDIA graphics card, GameCube and Wii games show their picture, instead of a black screen with sound. Where Vulkan can't give them a surface to draw to, they run with OpenGL instead. ([#42](https://github.com/RompEmu/RomP/issues/42))
