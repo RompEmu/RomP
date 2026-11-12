@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-31 16:44\n"
+"PO-Revision-Date: 2026-11-12 15:04\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
@@ -76,6 +76,10 @@ msgid "RomP works with RomM 5.0 or newer."
 msgstr "يعمل رومبي مع RomM 5.0 أو أحدث."
 
 #: crates/romp-app/ui/app.slint
+msgid "This computer has no keychain, so your sign-in will be kept in a file in RomP's data folder that only your user account can read."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Back"
 msgstr "الرجوع"
@@ -113,6 +117,11 @@ msgid "Try again"
 msgstr "حاول مرة أخرى"
 
 #: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+msgid "Downloaded"
+msgstr "نازل"
+
+#: crates/romp-app/ui/app.slint
 msgid "{n} game"
 msgid_plural "{n} games"
 msgstr[0] "ألعاب {n}"
@@ -135,8 +144,14 @@ msgid "favorite"
 msgstr "المفضلة"
 
 #: crates/romp-app/ui/app.slint
-msgid "Downloaded"
-msgstr "نازل"
+msgid "{n} version"
+msgid_plural "{n} versions"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+msgstr[3] ""
+msgstr[4] ""
+msgstr[5] ""
 
 #: crates/romp-app/ui/app.slint
 msgid "On server"
@@ -637,6 +652,18 @@ msgstr "كيف يتم رسم كل لعبة من ألعاب وحدة التحكم
 #: crates/romp-app/ui/app.slint
 msgid "Consoles appear here once your library has games for them."
 msgstr "ستظهر أجهزة الألعاب هنا بمجرد أن تضم مكتبتك ألعابًا لها."
+
+#: crates/romp-app/ui/app.slint
+msgid "Search consoles"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "No consoles match"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Controls for"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Button labels"
