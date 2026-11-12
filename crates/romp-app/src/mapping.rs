@@ -26,7 +26,7 @@ pub const BUTTONS: [(u32, &str); 16] = [
     (RIGHT, gettext_noop!("Right")),
 ];
 
-const PHYSICAL: [Button; 17] = [
+pub const PHYSICAL: [Button; 17] = [
     Button::South,
     Button::East,
     Button::West,
@@ -57,7 +57,7 @@ pub fn name(button: u32) -> &'static str {
 pub const MENU_COMBO_SIZE: std::ops::RangeInclusive<usize> = 2..=3;
 
 /// Guide is left out: the combination exists for controllers where Guide is taken by something else.
-fn is_physical(button: Button) -> bool {
+pub fn is_physical(button: Button) -> bool {
     button != Button::Mode && PHYSICAL.contains(&button)
 }
 

@@ -42,7 +42,9 @@ pub struct PadInput {
     pub state: PadState,
     /// What menus see, which remaps and the Nintendo swap leave alone.
     pub menu: PadState,
-    pub guide: bool,
+    /// Whether this controller is held on what opens the game menu: the combination the player
+    /// chose, or else Guide, or Select and Start together.
+    pub opens_menu: bool,
 }
 
 /// A controller's buttons by where they sit. The names are the ones saved in mappings.
@@ -461,12 +463,34 @@ impl Gamepads {
                     axes: state.axes,
                 });
                 let state = game_state(state, mappings, nintendo, family);
+                let combo = mappings.menu_combo();
+                let opens_menu = if combo.is_empty() {
+                    let held = |b: u32| state.buttons & 1 << b != 0;
+                    pad.pressed(Button::Mode) || (held(input::SELECT) && held(input::START))
+                } else {
+                    combo.iter().all(|b| pad.pressed(*b))
+                };
                 PadInput {
                     key,
                     state,
                     menu,
-                    guide: pad.pressed(Button::Mode),
+                    opens_menu,
                 }
+            })
+            .collect()
+    }
+
+    /// The buttons each controller has down that a menu combination can use.
+    pub fn held(&self) -> Vec<(String, Vec<Button>)> {
+        self.keys()
+            .into_iter()
+            .zip(self.pads())
+            .map(|(key, pad)| {
+                let held = mapping::PHYSICAL
+                    .into_iter()
+                    .filter(|b| mapping::is_physical(*b) && pad.pressed(*b))
+                    .collect();
+                (key, held)
             })
             .collect()
     }

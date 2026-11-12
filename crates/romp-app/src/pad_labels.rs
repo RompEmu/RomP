@@ -90,6 +90,15 @@ pub enum Badge {
 }
 
 /// The button's name as its maker prints or calls it.
+/// Buttons held together, named as `family` names them: "L3 + R3".
+pub fn combo_name(family: Family, buttons: &[Button]) -> String {
+    buttons
+        .iter()
+        .map(|b| crate::i18n::translate(name(family, *b)))
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
+
 pub fn name(family: Family, button: Button) -> &'static str {
     use Button::*;
     use Family::*;
@@ -190,6 +199,16 @@ pub fn badge(family: Family, button: Button) -> Badge {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_combination_is_named_with_the_buttons_of_its_family() {
+        let both_sticks = [Button::LeftThumb, Button::RightThumb];
+        assert_eq!(combo_name(Family::Ps5, &both_sticks), "L3 + R3");
+        assert_eq!(
+            combo_name(Family::Xbox, &[Button::Select, Button::South]),
+            "View + A"
+        );
+    }
 
     #[test]
     fn each_family_names_buttons_as_its_maker_does() {
