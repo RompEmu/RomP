@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
-"PO-Revision-Date: 2026-10-31 16:44\n"
+"PO-Revision-Date: 2026-11-12 15:04\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
@@ -76,6 +76,10 @@ msgid "RomP works with RomM 5.0 or newer."
 msgstr "RomP trabaja con RomM 5.0 o posterior."
 
 #: crates/romp-app/ui/app.slint
+msgid "This computer has no keychain, so your sign-in will be kept in a file in RomP's data folder that only your user account can read."
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
 #: crates/romp-app/ui/app.slint
 msgid "Back"
 msgstr "Atrás"
@@ -113,6 +117,11 @@ msgid "Try again"
 msgstr "Inténtalo de nuevo"
 
 #: crates/romp-app/ui/app.slint
+#: crates/romp-app/ui/app.slint
+msgid "Downloaded"
+msgstr "Descargado"
+
+#: crates/romp-app/ui/app.slint
 msgid "{n} game"
 msgid_plural "{n} games"
 msgstr[0] "Partida {n}"
@@ -131,8 +140,10 @@ msgid "favorite"
 msgstr "favorito"
 
 #: crates/romp-app/ui/app.slint
-msgid "Downloaded"
-msgstr "Descargado"
+msgid "{n} version"
+msgid_plural "{n} versions"
+msgstr[0] ""
+msgstr[1] ""
 
 #: crates/romp-app/ui/app.slint
 msgid "On server"
@@ -633,6 +644,18 @@ msgstr "Cómo se dibujan los juegos de cada consola. En un juego, Busca en el me
 #: crates/romp-app/ui/app.slint
 msgid "Consoles appear here once your library has games for them."
 msgstr "Las consolas aparecen aquí una vez que tu biblioteca tiene juegos para ellos."
+
+#: crates/romp-app/ui/app.slint
+msgid "Search consoles"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "No consoles match"
+msgstr ""
+
+#: crates/romp-app/ui/app.slint
+msgid "Controls for"
+msgstr ""
 
 #: crates/romp-app/ui/app.slint
 msgid "Button labels"
