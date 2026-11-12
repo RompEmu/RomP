@@ -1176,10 +1176,7 @@ impl Game {
     }
 
     fn pads(&self, inputs: &[crate::gamepads::PadInput]) {
-        let combo = inputs.iter().any(|p| {
-            let held = |b: u32| p.state.buttons & 1 << b != 0;
-            p.guide || (held(input::SELECT) && held(input::START))
-        });
+        let combo = inputs.iter().any(|p| p.opens_menu);
         if combo && !self.menu_combo.get() {
             self.toggle_menu();
         }
@@ -1515,12 +1512,15 @@ pub fn launch(
                 known.retain(|k| keys.contains(k));
                 first_poll = false;
                 let inputs = pads.states(&mappings.borrow(), nintendo);
-                let guide = crate::i18n::translate(
-                    pads.family_in_use(&mappings.borrow())
-                        .map_or("Guide", |family| {
-                            crate::pad_labels::name(family, crate::gamepads::Button::Mode)
-                        }),
-                );
+                let family = pads.family_in_use(&mappings.borrow());
+                let combo = mappings.borrow().menu_combo();
+                let guide = if combo.is_empty() {
+                    crate::i18n::translate(family.map_or("Guide", |family| {
+                        crate::pad_labels::name(family, crate::gamepads::Button::Mode)
+                    }))
+                } else {
+                    crate::pad_labels::combo_name(family.unwrap_or_default(), &combo)
+                };
                 if ui.get_guide_name() != guide.as_str() {
                     ui.set_guide_name(guide.into());
                 }
