@@ -21,21 +21,33 @@ jobs:
     name: Format, dependencies, spelling and workflows
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt
-      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
+      - uses: taiki-e/install-action@v2.90.0
         with:
-          tool: cargo-deny,cargo-machete,typos,zizmor,slint-tr-extractor@1.18.1,xtr@0.1.11
+          tool: cargo-deny,cargo-machete,typos,zizmor@1.32.0,slint-tr-extractor@1.18.1,xtr@0.1.11
       - name: Install actionlint
         run: |
           curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash \
             | bash -s -- 1.7.12 "$CARGO_HOME/bin"
       - run: make fmt-check deny machete typos workflows translations-check
+
+  lockfile:
+    name: Workflow lockfile
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: gh extension install github/gh-actions-lock --pin v0.4.1
+      - run: gh actions-lock --verify
 
   check:
     name: Clippy and tests (${{ matrix.name }})
@@ -51,14 +63,14 @@ jobs:
           - name: Linux
             os: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: clippy
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: Swatinem/rust-cache@v2.9.3
       - name: Install Linux libraries
         if: runner.os == 'Linux'
         run: |
