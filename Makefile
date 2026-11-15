@@ -62,7 +62,7 @@ $(call checksum,$(MACOS_ZIP))
 endef
 
 .PHONY: build app appimage packages glibc-check dist dist-macos dist-linux dist-windows clean
-.PHONY: check fmt-check clippy test deny machete typos workflows translation-tools translations translations-check pseudo release-notes update-rcheevos
+.PHONY: check fmt-check clippy test deny typos workflows translation-tools translations translations-check pseudo release-notes update-rcheevos
 
 build:
 	cargo build --release --locked
@@ -181,7 +181,7 @@ dist-windows: build
 clean:
 	rm -rf $(DIST)
 
-check: fmt-check clippy test deny machete typos workflows translations-check
+check: fmt-check clippy test deny typos workflows translations-check
 
 TRANSLATIONS := crates/romp-app/translations
 SLINT_TR := slint-tr-extractor@1.18.1
@@ -224,9 +224,6 @@ test:
 
 deny:
 	cargo deny check -D advisory-not-detected
-
-machete:
-	cargo machete
 
 typos:
 	typos

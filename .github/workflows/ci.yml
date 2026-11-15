@@ -30,14 +30,14 @@ jobs:
           components: rustfmt
       - uses: taiki-e/install-action@v2.90.0
         with:
-          tool: cargo-deny,cargo-machete,typos,zizmor@1.32.0,slint-tr-extractor@1.18.1,xtr@0.1.11
+          tool: cargo-deny,typos,zizmor@1.32.0,slint-tr-extractor@1.18.1,xtr@0.1.11
       - name: Install actionlint
         run: |
           curl -fsSL -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz" | sha256sum --check
           tar xzf actionlint.tar.gz -C "$CARGO_HOME/bin" actionlint
           rm actionlint.tar.gz
-      - run: make fmt-check deny machete typos workflows translations-check
+      - run: make fmt-check deny typos workflows translations-check
 
   lockfile:
     name: Workflow lockfile

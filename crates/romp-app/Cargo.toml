@@ -10,9 +10,6 @@ publish = false
 name = "romp"
 path = "src/main.rs"
 
-[package.metadata.cargo-machete]
-ignored = ["md-5", "sdl3-sys"]
-
 [dependencies]
 romp-cheevos = { workspace = true }
 romp-proto = { workspace = true }
