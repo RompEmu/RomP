@@ -6,11 +6,11 @@ workflows:
     '.github/workflows/build.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.2'
-        - 'dtolnay/rust-toolchain@stable'
+        - 'dtolnay/rust-toolchain@master'
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/ci.yml':
         - 'actions/checkout@v7.0.1'
-        - 'dtolnay/rust-toolchain@stable'
+        - 'dtolnay/rust-toolchain@master'
         - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2.90.0'
     '.github/workflows/nightly.yml':
@@ -46,9 +46,9 @@ dependencies:
         commit: 'sha1-5b9790df740c85af5412a3a3a91b24988d5d324f'
         owner_id: 861398
         repo_id: 258521306
-    'dtolnay/rust-toolchain@stable':
-        ref: 'stable'
-        commit: 'sha1-b725eda525362e7cf34af9a7243cac1e3f01a7ec'
+    'dtolnay/rust-toolchain@master':
+        ref: 'master'
+        commit: 'sha1-df2a88e9fe4098bad09cb42c3dec7187f15861fc'
         owner_id: 1940490
         repo_id: 260749683
     'swatinem/rust-cache@v2.9.3':
