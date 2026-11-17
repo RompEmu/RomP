@@ -12,7 +12,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@master'
         - 'swatinem/rust-cache@v2.9.3'
-        - 'taiki-e/install-action@v2.90.0'
+        - 'taiki-e/install-action@v2.90.3'
     '.github/workflows/nightly.yml':
         - 'actions/download-artifact@v8.0.2'
     '.github/workflows/release.yml':
@@ -24,7 +24,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
     '.github/workflows/translations.yml':
         - 'actions/checkout@v7.0.1'
-        - 'crowdin/github-action@v3.5.1'
+        - 'crowdin/github-action@v3.6.0'
 dependencies:
     'actions/checkout@v7.0.1':
         ref: 'v7.0.1'
@@ -41,9 +41,9 @@ dependencies:
         commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         owner_id: 44036562
         repo_id: 192625955
-    'crowdin/github-action@v3.5.1':
-        ref: 'v3.5.1'
-        commit: 'sha1-5b9790df740c85af5412a3a3a91b24988d5d324f'
+    'crowdin/github-action@v3.6.0':
+        ref: 'v3.6.0'
+        commit: 'sha1-d651c77756acbe11a31d77a6fb79d8a239e1e05a'
         owner_id: 861398
         repo_id: 258521306
     'dtolnay/rust-toolchain@master':
@@ -56,8 +56,8 @@ dependencies:
         commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.90.0':
-        ref: 'v2.90.0'
-        commit: 'sha1-b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2'
+    'taiki-e/install-action@v2.90.3':
+        ref: 'v2.90.3'
+        commit: 'sha1-cfdb7ed4ccc7c7dce37759eae89dc5674b469b39'
         owner_id: 43724913
         repo_id: 442947557
