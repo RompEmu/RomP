@@ -42,22 +42,29 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
 }
 
 pub struct StateManager {
-    dir: PathBuf,
+    save_dir: PathBuf,
+    states_dir: PathBuf,
     last_saved_sram: Option<Vec<u8>>,
     last_check: Instant,
 }
 
 impl StateManager {
-    pub fn new(dir: &Path) -> Self {
+    pub fn new(save_dir: &Path, states_dir: &Path) -> Self {
+        let _ = std::fs::create_dir_all(states_dir);
         Self {
-            dir: dir.to_path_buf(),
+            save_dir: save_dir.to_path_buf(),
+            states_dir: states_dir.to_path_buf(),
             last_saved_sram: None,
             last_check: Instant::now(),
         }
     }
 
     fn sram_path(&self) -> PathBuf {
-        self.dir.join("game.srm")
+        self.save_dir.join("game.srm")
+    }
+
+    fn states_dir(&self) -> &Path {
+        &self.states_dir
     }
 
     pub fn load_initial_sram(&mut self, core: &mut lr::Core, frontend: &mut Frontend) {
@@ -118,7 +125,10 @@ impl StateManager {
                 return false;
             }
         };
-        match write_atomic(&self.dir.join(slot_file_name(slot)), trimmed(&data)) {
+        match write_atomic(
+            &self.states_dir().join(slot_file_name(slot)),
+            trimmed(&data),
+        ) {
             Ok(()) => true,
             Err(e) => {
                 warn!("write state: {e}");
@@ -143,7 +153,7 @@ impl StateManager {
         core: &mut lr::Core,
         frontend: &mut Frontend,
     ) -> Result<(), String> {
-        let data = std::fs::read(self.dir.join(slot_file_name(slot)))
+        let data = std::fs::read(self.states_dir().join(slot_file_name(slot)))
             .map_err(|e| format!("read state: {e}"))?;
         let data = padded(data, core.serialize_size(frontend));
         core.unserialize(&data, frontend)

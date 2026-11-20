@@ -82,6 +82,16 @@ impl Controller {
             || crate::paths::game_save_dir(&crate::paths::data_dir(), &self.server(), detail.id),
             |game| game.dir.clone(),
         );
+        let chosen = self.console_choices();
+        let core_id = crate::console_settings::chosen_core(&chosen, &detail.platform_slug)
+            .map(|c| c.id)
+            .unwrap_or("");
+        let state_dir = if core_id.is_empty() {
+            dir.clone()
+        } else {
+            dir.join(core_id)
+        };
+        let _ = std::fs::create_dir_all(&state_dir);
         let now = std::time::SystemTime::now();
         let paired = self.sync_device().is_some();
         let (record, pending) = {
@@ -106,10 +116,11 @@ impl Controller {
             _ => None,
         };
         // An emulator whose states don't bring a game back gets no state slots, only its save.
-        let states = crate::cores::core_for_platform(&detail.platform_slug)
+        let chosen = self.console_choices();
+        let states = crate::console_settings::chosen_core(&chosen, &detail.platform_slug)
             .is_none_or(|core| crate::cores::saves_states(core.id));
         let state_slots = if states {
-            slots::read(&dir, slots::AUTO..=crate::input::SLOTS)
+            slots::read(&state_dir, slots::AUTO..=crate::input::SLOTS)
         } else {
             Vec::new()
         };

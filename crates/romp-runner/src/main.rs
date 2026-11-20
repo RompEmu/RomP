@@ -55,8 +55,17 @@ fn send_discs(link: &Link, core: &mut lr::Core, frontend: &mut Frontend) {
 }
 
 /// Achievement progress is kept beside the save state it belongs to.
-fn progress_path(save_dir: &std::path::Path, slot: u8) -> PathBuf {
-    save_dir.join(format!("{}.achievements", state::slot_file_name(slot)))
+fn progress_path(states_dir: &std::path::Path, slot: u8) -> PathBuf {
+    states_dir.join(format!("{}.achievements", state::slot_file_name(slot)))
+}
+
+/// The emulator core's id, taken from the folder its library lives in.
+fn core_id(core_path: &std::path::Path) -> String {
+    core_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 fn parse_option(s: &str) -> Result<(String, String), String> {
@@ -130,6 +139,8 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let _ = frame::unlink(&args.frames);
     std::fs::create_dir_all(&args.save_dir)?;
     std::fs::create_dir_all(&args.system_dir)?;
+    sandbox::create_core_cache_dirs(&args.core, &args.system_dir)
+        .context("creating the core's cache folder")?;
     lr::set_core_dirs(Some(&args.system_dir), Some(&args.save_dir));
 
     let vulkan_library = args.vulkan.then(hw_vulkan::library_path);
@@ -214,7 +225,14 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     romp_cheevos::set_core_memory(memory_data, memory_size);
     let mut achievements: Option<Achievements> = None;
 
-    let mut saves = StateManager::new(&args.save_dir);
+    let core_id = core_id(&args.core);
+    let states_dir = if core_id.is_empty() {
+        args.save_dir.clone()
+    } else {
+        args.save_dir.join(&core_id)
+    };
+    std::fs::create_dir_all(&states_dir).context("creating the core's save-state folder")?;
+    let mut saves = StateManager::new(&args.save_dir, &states_dir);
     saves.load_initial_sram(&mut core, frontend);
     // Some cores initialise lazily on the first run, and some boot on a thread of their own
     // and refuse a state until they have, so loading is retried for a while.
@@ -301,7 +319,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                 AppMsg::SaveSlot(slot) => {
                     let ok = saves.save_state(slot, &mut core, frontend);
                     if let (true, Some(a)) = (ok, &mut achievements) {
-                        a.save_progress(&progress_path(&args.save_dir, slot));
+                        a.save_progress(&progress_path(&states_dir, slot));
                     }
                     link.send(&RunnerMsg::StateWritten { slot, ok });
                 }
@@ -309,7 +327,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     let blocked = achievements.as_ref().is_some_and(Achievements::hardcore);
                     let ok = !blocked && saves.load_state(slot, &mut core, frontend);
                     if let (true, Some(a)) = (ok, &mut achievements) {
-                        a.load_progress(&progress_path(&args.save_dir, slot));
+                        a.load_progress(&progress_path(&states_dir, slot));
                     }
                     link.send(&RunnerMsg::StateLoaded { slot, ok });
                     send_discs(link, &mut core, frontend);
