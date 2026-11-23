@@ -147,6 +147,8 @@ unsafe extern "C" fn tell(handle: *mut FileHandle) -> i64 {
         .map_or(-1, |p| p as i64)
 }
 
+/// Returns 0 on success and -1 on failure, as libretro.h and RetroArch do, not the new
+/// position: minizip (FinalBurn Neo) and vice-libretro treat anything else as a failed seek.
 unsafe extern "C" fn seek(handle: *mut FileHandle, offset: i64, whence: c_int) -> i64 {
     let to = match whence {
         SEEK_START => match u64::try_from(offset) {
@@ -159,7 +161,7 @@ unsafe extern "C" fn seek(handle: *mut FileHandle, offset: i64, whence: c_int) -
     };
     unsafe { file(handle) }
         .and_then(|f| f.seek(to).ok())
-        .map_or(-1, |p| p as i64)
+        .map_or(-1, |_| 0)
 }
 
 unsafe extern "C" fn read(handle: *mut FileHandle, buffer: *mut u8, len: u64) -> i64 {
@@ -317,12 +319,15 @@ mod tests {
 
             let f = open(name.as_ptr(), ACCESS_READ, 0);
             assert_eq!(size(f), 11);
-            assert_eq!(seek(f, 6, SEEK_START), 6);
+            assert_eq!(seek(f, 6, SEEK_START), 0);
+            assert_eq!(tell(f), 6);
             let mut buffer = [0u8; 16];
             assert_eq!(read(f, buffer.as_mut_ptr(), 16), 5);
             assert_eq!(&buffer[..5], b"world");
             assert_eq!(tell(f), 11);
-            assert_eq!(seek(f, -5, SEEK_END), 6);
+            assert_eq!(seek(f, -5, SEEK_END), 0);
+            assert_eq!(tell(f), 6);
+            assert_eq!(seek(f, -7, SEEK_CURRENT), -1);
             assert_eq!(CStr::from_ptr(get_path(f)), name.as_c_str());
             close(f);
 

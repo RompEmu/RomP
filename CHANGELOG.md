@@ -8,6 +8,10 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 - PlayStation games can run on SwanStation instead of Beetle PSX HW, chosen under **Emulator core** in the Consoles part of Settings. The memory card follows the game between the two, on RomM too, while each keeps its own save states. Achievements work best with Beetle. Thanks to @Meesayen for bringing in SwanStation.
 
+### Fixed
+
+- Arcade, Neo Geo and CPS games play with FinalBurn Neo, and Commodore 64 tapes open in VICE, instead of FinalBurn Neo reporting missing romsets and VICE failing to open the file. RomP told these emulators a successful seek in files had failed. ([#55](https://github.com/RompEmu/RomP/issues/55), [#56](https://github.com/RompEmu/RomP/issues/56))
+
 ## [0.22.0] - 2026-11-15
 
 ### Added
