@@ -37,8 +37,12 @@ pub(super) fn conflict_text(conflict: &SramConflict) -> String {
     )
 }
 
-pub(super) fn version_key(rom_id: i64) -> String {
-    format!("core_version:{rom_id}")
+/// The default emulator's key is the one RomP used before a platform had a second emulator.
+pub(super) fn version_key(game: &GameSaves) -> String {
+    match &game.states_core {
+        Some(core) => format!("core_version:{}:{core}", game.rom_id),
+        None => format!("core_version:{}", game.rom_id),
+    }
 }
 
 async fn sync_game(
@@ -193,16 +197,16 @@ impl Controller {
     }
 
     pub(super) fn after_play(&self, detail: GameDetail, identity: Option<CoreIdentity>) {
+        let Some(game) = self.game_saves(&detail) else {
+            return;
+        };
         if let Some((_, version)) = &identity {
             self.shared
                 .store
                 .lock()
                 .unwrap()
-                .set(&version_key(detail.id), version);
+                .set(&version_key(&game), version);
         }
-        let Some(game) = self.game_saves(&detail) else {
-            return;
-        };
         let Some(device) = self.sync_device() else {
             self.shared.store.lock().unwrap().add_pending(detail.id);
             return self.game_status(
@@ -264,20 +268,22 @@ impl Controller {
         if busy {
             return;
         }
-        let jobs: Vec<(GameSaves, Option<String>)> = {
+        let details: Vec<GameDetail> = {
             let store = self.shared.store.lock().unwrap();
             store
                 .pending()
                 .into_iter()
-                .filter_map(|id| {
-                    let detail = store.game(id)?;
-                    Some((detail, store.get(&version_key(id))))
-                })
-                .collect::<Vec<_>>()
-        }
-        .into_iter()
-        .filter_map(|(detail, version)| Some((self.game_saves(&detail)?, version)))
-        .collect();
+                .filter_map(|id| store.game(id))
+                .collect()
+        };
+        let jobs: Vec<(GameSaves, Option<String>)> = details
+            .iter()
+            .filter_map(|detail| self.game_saves(detail))
+            .map(|game| {
+                let version = self.shared.store.lock().unwrap().get(&version_key(&game));
+                (game, version)
+            })
+            .collect();
         if jobs.is_empty() {
             return;
         }
@@ -316,5 +322,27 @@ mod tests {
             local_updated_at: None,
         });
         assert!(text.contains("Server: 2026-09-26 10:00:00 UTC"));
+    }
+
+    fn psx_game(states_core: Option<&str>) -> GameSaves {
+        GameSaves {
+            rom_id: 7,
+            dir: "games/7".into(),
+            title: "Crash".into(),
+            emulator: states_core.unwrap_or("mednafen_psx_hw").into(),
+            save_file: saves::SRAM_FILE.into(),
+            save_emulator: states_core.unwrap_or("mednafen_psx_hw").into(),
+            variant: None,
+            states_core: states_core.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn each_emulator_remembers_its_own_version() {
+        assert_eq!(version_key(&psx_game(None)), "core_version:7");
+        assert_eq!(
+            version_key(&psx_game(Some("swanstation"))),
+            "core_version:7:swanstation"
+        );
     }
 }
