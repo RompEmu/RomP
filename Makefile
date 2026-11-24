@@ -217,7 +217,7 @@ fmt-check:
 	cargo fmt --all --check
 
 clippy:
-	CARGO_BUILD_WARNINGS=deny CARGO_INCREMENTAL=0 cargo clippy --workspace --all-targets --locked -- -D warnings
+	CARGO_INCREMENTAL=0 cargo clippy --workspace --all-targets --locked --config 'build.warnings="deny"' -- -D warnings
 
 test:
 	CARGO_INCREMENTAL=0 cargo test --workspace --locked
