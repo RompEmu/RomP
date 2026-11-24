@@ -633,6 +633,9 @@ async fn download_into(
 ) -> Result<SramOutcome, Error> {
     let bytes = client.download_save(save_id, device_id, None).await?;
     let outcome = install_download(game, &bytes)?;
+    if !matches!(outcome, SramOutcome::Downloaded { .. }) {
+        return Ok(outcome);
+    }
     if let Err(e) = client
         .confirm_save_download(save_id, device_id, &content_hash(&bytes))
         .await
@@ -642,7 +645,16 @@ async fn download_into(
     Ok(outcome)
 }
 
+/// A PlayStation card of another size reads as a blank one, so the card here is kept instead.
 pub fn install_download(game: &GameSaves, bytes: &[u8]) -> Result<SramOutcome, Error> {
+    if PSX_CARD_EMULATORS.contains(&game.save_emulator.as_str()) && bytes.len() != PS1_CARD_BYTES {
+        tracing::warn!(
+            "{}'s memory card on RomM is {} bytes, not a PlayStation card's {PS1_CARD_BYTES}",
+            game.title,
+            bytes.len()
+        );
+        return Ok(SramOutcome::InSync);
+    }
     let io_err = |e: io::Error| Error::Decode(format!("could not write the save: {e}"));
     let backup = backup(&game.dir, &game.save_file).map_err(io_err)?;
     replace_file(&game.sram_path(), bytes).map_err(io_err)?;
@@ -947,6 +959,21 @@ mod tests {
             variant: variant.map(Into::into),
             states_core: states_core.map(Into::into),
         }
+    }
+
+    #[test]
+    fn a_playstation_card_of_the_wrong_size_isnt_installed() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut game = state_game(dir.path(), None, Some("swanstation"));
+        game.save_emulator = "swanstation".into();
+        let card = dir.path().join(&game.save_file);
+        std::fs::write(&card, b"mine").unwrap();
+        let outcome = install_download(&game, &[1; 1000]).unwrap();
+        assert_eq!(outcome, SramOutcome::InSync);
+        assert_eq!(std::fs::read(&card).unwrap(), b"mine");
+        let outcome = install_download(&game, &vec![2; PS1_CARD_BYTES]).unwrap();
+        assert!(matches!(outcome, SramOutcome::Downloaded { .. }));
+        assert_eq!(std::fs::read(&card).unwrap(), vec![2; PS1_CARD_BYTES]);
     }
 
     #[test]
