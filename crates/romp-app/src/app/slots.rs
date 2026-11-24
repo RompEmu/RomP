@@ -78,9 +78,21 @@ impl Controller {
     fn render_save_slots(&self, detail: &GameDetail, server: &ServerSaves) {
         let Some(ui) = self.ui() else { return };
         let game = self.game_saves(detail);
-        let dir = game.as_ref().map_or_else(
-            || crate::paths::game_save_dir(&crate::paths::data_dir(), &self.server(), detail.id),
-            |game| game.dir.clone(),
+        let chosen = self.console_choices();
+        let core = crate::console_settings::chosen_core(&chosen, &detail.platform_slug);
+        let states_dir = game.as_ref().map_or_else(
+            || {
+                let dir = crate::paths::game_save_dir(
+                    &crate::paths::data_dir(),
+                    &self.server(),
+                    detail.id,
+                );
+                match core {
+                    Some(core) => saves::states_dir(&dir, &detail.platform_slug, core.id),
+                    None => dir,
+                }
+            },
+            saves::GameSaves::states_dir,
         );
         let now = std::time::SystemTime::now();
         let paired = self.sync_device().is_some();
@@ -106,10 +118,9 @@ impl Controller {
             _ => None,
         };
         // An emulator whose states don't bring a game back gets no state slots, only its save.
-        let states = crate::cores::core_for_platform(&detail.platform_slug)
-            .is_none_or(|core| crate::cores::saves_states(core.id));
+        let states = core.is_none_or(|core| crate::cores::saves_states(core.id));
         let state_slots = if states {
-            slots::read(&dir, slots::AUTO..=crate::input::SLOTS)
+            slots::read(&states_dir, slots::AUTO..=crate::input::SLOTS)
         } else {
             Vec::new()
         };

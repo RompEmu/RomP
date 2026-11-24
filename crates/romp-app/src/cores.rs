@@ -309,13 +309,6 @@ pub fn choices_for_platform(slug: &str) -> impl Iterator<Item = &'static CoreInf
 }
 
 /// The core chosen for a platform, or its default when none is chosen or the choice is gone.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the console settings and launch pick up the choice in the next commits"
-    )
-)]
 pub fn core_for_platform_with(slug: &str, chosen: Option<&str>) -> Option<&'static CoreInfo> {
     chosen
         .and_then(|id| choices_for_platform(slug).find(|core| core.id == id))
