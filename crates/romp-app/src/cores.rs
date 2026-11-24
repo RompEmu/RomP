@@ -475,8 +475,12 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
             ("puae_immediate_blits", "immediate"),
         ],
         "mednafen_psx_hw" => &[("beetle_psx_analog_toggle", "enabled")],
-        // OpenGL always works; Vulkan replaces it where this computer has it.
-        "swanstation" => &[("swanstation_GPU_Renderer", "OpenGL")],
+        "swanstation" => &[
+            // OpenGL always works; Vulkan replaces it where this computer has it.
+            ("swanstation_GPU_Renderer", "OpenGL"),
+            // The card in save RAM is the game.srm Beetle PSX reads too.
+            ("swanstation_MemoryCards_Card1Type", "Libretro"),
+        ],
         "vice_x64sc" | "vice_xvic" | "vice_xplus4" | "vice_x128" => {
             &[("vice_drive_true_emulation", "disabled")]
         }
@@ -903,6 +907,10 @@ mod tests {
             [if vulkan { "Vulkan" } else { "OpenGL" }],
             "one renderer choice, Vulkan replacing OpenGL"
         );
+        assert!(swanstation.contains(&(
+            "swanstation_MemoryCards_Card1Type".into(),
+            "Libretro".into()
+        )));
         assert!(default_options("mednafen_psx_hw")
             .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
         assert_eq!(download_base(&ARMSX2), ARMSX2_RELEASE);
