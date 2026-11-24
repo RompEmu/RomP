@@ -28,6 +28,8 @@ struct Args {
     #[arg(long)]
     save_dir: PathBuf,
     #[arg(long)]
+    states_dir: PathBuf,
+    #[arg(long)]
     socket: PathBuf,
     #[arg(long)]
     frames: String,
@@ -55,8 +57,8 @@ fn send_discs(link: &Link, core: &mut lr::Core, frontend: &mut Frontend) {
 }
 
 /// Achievement progress is kept beside the save state it belongs to.
-fn progress_path(save_dir: &std::path::Path, slot: u8) -> PathBuf {
-    save_dir.join(format!("{}.achievements", state::slot_file_name(slot)))
+fn progress_path(states_dir: &std::path::Path, slot: u8) -> PathBuf {
+    states_dir.join(format!("{}.achievements", state::slot_file_name(slot)))
 }
 
 fn parse_option(s: &str) -> Result<(String, String), String> {
@@ -129,6 +131,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let mut frames = FrameWriter::open(&args.frames).context("open frame buffer")?;
     let _ = frame::unlink(&args.frames);
     std::fs::create_dir_all(&args.save_dir)?;
+    std::fs::create_dir_all(&args.states_dir)?;
     std::fs::create_dir_all(&args.system_dir)?;
     lr::set_core_dirs(Some(&args.system_dir), Some(&args.save_dir));
 
@@ -214,7 +217,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     romp_cheevos::set_core_memory(memory_data, memory_size);
     let mut achievements: Option<Achievements> = None;
 
-    let mut saves = StateManager::new(&args.save_dir);
+    let mut saves = StateManager::new(&args.save_dir, &args.states_dir);
     saves.load_initial_sram(&mut core, frontend);
     // Some cores initialise lazily on the first run, and some boot on a thread of their own
     // and refuse a state until they have, so loading is retried for a while.
@@ -301,7 +304,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                 AppMsg::SaveSlot(slot) => {
                     let ok = saves.save_state(slot, &mut core, frontend);
                     if let (true, Some(a)) = (ok, &mut achievements) {
-                        a.save_progress(&progress_path(&args.save_dir, slot));
+                        a.save_progress(&progress_path(&args.states_dir, slot));
                     }
                     link.send(&RunnerMsg::StateWritten { slot, ok });
                 }
@@ -309,7 +312,7 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                     let blocked = achievements.as_ref().is_some_and(Achievements::hardcore);
                     let ok = !blocked && saves.load_state(slot, &mut core, frontend);
                     if let (true, Some(a)) = (ok, &mut achievements) {
-                        a.load_progress(&progress_path(&args.save_dir, slot));
+                        a.load_progress(&progress_path(&args.states_dir, slot));
                     }
                     link.send(&RunnerMsg::StateLoaded { slot, ok });
                     send_discs(link, &mut core, frontend);

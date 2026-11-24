@@ -39,6 +39,7 @@ pub struct GameOptions {
     pub core: PathBuf,
     pub rom: PathBuf,
     pub save_dir: PathBuf,
+    pub states_dir: PathBuf,
     pub title: String,
     pub jit: bool,
     pub vulkan: bool,
@@ -145,6 +146,7 @@ pub fn run(
             smoke,
             core,
             rom,
+            states_dir: save_dir.clone(),
             save_dir,
             title,
             jit,
@@ -242,7 +244,7 @@ struct Game {
     achievement_list: RefCell<Vec<romp_proto::msg::AchievementInfo>>,
     hardcore: Cell<bool>,
     states: bool,
-    save_dir: PathBuf,
+    states_dir: PathBuf,
     slots_open: Cell<bool>,
     slots_focus: Cell<u8>,
     slots_load: Cell<bool>,
@@ -711,7 +713,7 @@ impl Game {
 
     fn loadable(&self, slot: u8) -> bool {
         !self.hardcore.get()
-            && crate::slots::read(&self.save_dir, [slot])
+            && crate::slots::read(&self.states_dir, [slot])
                 .first()
                 .is_some_and(|info| !info.is_empty())
     }
@@ -719,7 +721,7 @@ impl Game {
     fn show_slots(&self) {
         let now = std::time::SystemTime::now();
         let current = self.controls.borrow().slot();
-        let cards: Vec<crate::SlotCard> = crate::slots::read(&self.save_dir, 1..=input::SLOTS)
+        let cards: Vec<crate::SlotCard> = crate::slots::read(&self.states_dir, 1..=input::SLOTS)
             .iter()
             .map(|info| crate::slots::card(info, now, Some(current)))
             .collect();
@@ -740,7 +742,7 @@ impl Game {
     }
 
     fn load_from(&self, slot: u8) {
-        let saved = crate::slots::read(&self.save_dir, [slot]);
+        let saved = crate::slots::read(&self.states_dir, [slot]);
         if saved.first().is_none_or(crate::slots::SlotInfo::is_empty) {
             return;
         }
@@ -754,7 +756,7 @@ impl Game {
 
     /// Writes a slot's picture off the UI thread; `thumbnail_written` hears when it's there.
     fn write_thumbnail(&self, slot: u8, picture: image::RgbaImage) {
-        let path = crate::slots::thumbnail_path(&self.save_dir, slot);
+        let path = crate::slots::thumbnail_path(&self.states_dir, slot);
         let done = self.thumbnails.0.clone();
         std::thread::spawn(move || {
             if let Err(e) = picture.save_with_format(&path, image::ImageFormat::Png) {
@@ -1322,6 +1324,7 @@ pub fn launch(
         rom: opts.rom,
         system_dir: paths::system_dir(),
         save_dir: opts.save_dir.clone(),
+        states_dir: opts.states_dir.clone(),
         jit: opts.jit,
         vulkan: opts.vulkan,
         load_slot: opts.load_slot,
@@ -1446,7 +1449,7 @@ pub fn launch(
             achievement_list: RefCell::default(),
             hardcore: Cell::new(hardcore),
             states,
-            save_dir: opts.save_dir.clone(),
+            states_dir: opts.states_dir.clone(),
             slots_open: Cell::new(false),
             slots_focus: Cell::new(1),
             slots_load: Cell::new(false),
@@ -1481,7 +1484,7 @@ pub fn launch(
         let mut first_poll = true;
         let resumed = opts.load_slot == Some(0);
         let launched = std::time::Instant::now();
-        let save_dir = opts.save_dir.clone();
+        let states_dir = opts.states_dir.clone();
         move || {
             let Some(game) = weak.upgrade() else { return };
             let ui = game.primary();
@@ -1629,7 +1632,7 @@ pub fn launch(
                 if let (Some(smoke), SessionEvent::Runner(RunnerMsg::StateWritten { slot, ok })) =
                     (&game.smoke, &event)
                 {
-                    game.smoke_step(smoke.borrow().state_written(*slot, *ok, &save_dir));
+                    game.smoke_step(smoke.borrow().state_written(*slot, *ok, &states_dir));
                 }
                 if let (Some(smoke), SessionEvent::Ended { code, .. }) = (&game.smoke, &event) {
                     if *code != Some(0) {
@@ -1677,7 +1680,7 @@ pub fn launch(
                     && matches!(event, SessionEvent::Ended { code, .. } if code != Some(0));
                 handle_event(ui, event, &game.finish, &started);
                 if failed_resume {
-                    if let Err(e) = crate::saves::set_aside_auto_state(&save_dir) {
+                    if let Err(e) = crate::saves::set_aside_auto_state(&states_dir) {
                         tracing::warn!("setting aside the automatic save: {e}");
                     }
                     ui.set_status(

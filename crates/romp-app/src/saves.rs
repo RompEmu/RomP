@@ -242,10 +242,6 @@ pub struct GameSaves {
     pub states_core: Option<String>,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used once the runner gets --states-dir")
-)]
 pub fn states_dir(game_dir: &Path, platform: &str, core_id: &str) -> PathBuf {
     if crate::cores::is_default_core(platform, core_id) {
         game_dir.to_path_buf()
@@ -1530,7 +1526,7 @@ mod tests {
             assert_eq!(hack.record_variant(), "Super Metroid - Advent");
             assert_eq!(hack.remote_sram_name(), "Super Metroid - Advent.srm");
             assert_eq!(
-                state_remote_name(&hack.state_key("auto"), "snes9x", "1.63"),
+                state_remote_name(&hack.state_remote_key("auto"), "snes9x", "1.63"),
                 "Super-Metroid---Advent-auto.snes9x.1-63.state"
             );
         }

@@ -27,6 +27,7 @@ pub struct SessionConfig {
     pub rom: PathBuf,
     pub system_dir: PathBuf,
     pub save_dir: PathBuf,
+    pub states_dir: PathBuf,
     pub jit: bool,
     pub vulkan: bool,
     pub load_slot: Option<u8>,
@@ -61,6 +62,8 @@ pub fn runner_args(cfg: &SessionConfig, socket: &Path, frames: &str) -> Vec<OsSt
         cfg.system_dir.clone().into_os_string(),
         "--save-dir".into(),
         cfg.save_dir.clone().into_os_string(),
+        "--states-dir".into(),
+        cfg.states_dir.clone().into_os_string(),
         "--socket".into(),
         socket.as_os_str().to_owned(),
         "--frames".into(),
@@ -274,6 +277,7 @@ mod tests {
             rom: "/roms/Pokémon \"Blue\" (USA).gb".into(),
             system_dir: "/data/system".into(),
             save_dir: "/data/saves/7".into(),
+            states_dir: "/data/saves/7".into(),
             jit: false,
             vulkan: false,
             load_slot: None,
@@ -299,6 +303,8 @@ mod tests {
             "/data/system",
             "--save-dir",
             "/data/saves/7",
+            "--states-dir",
+            "/data/saves/7",
             "--socket",
             "/tmp/c.sock",
             "--frames",
@@ -313,6 +319,15 @@ mod tests {
         .map(OsString::from)
         .collect();
         assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn states_dir_is_passed_to_the_runner() {
+        let mut cfg = config("/bin/runner".into());
+        cfg.states_dir = "/data/saves/7/swanstation".into();
+        let args = runner_args(&cfg, Path::new("/tmp/c.sock"), "/romp-1");
+        let at = args.iter().position(|a| a == "--states-dir").unwrap();
+        assert_eq!(args[at + 1], OsString::from("/data/saves/7/swanstation"));
     }
 
     #[test]

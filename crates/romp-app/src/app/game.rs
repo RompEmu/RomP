@@ -1228,6 +1228,10 @@ impl Controller {
             || paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
             |game| game.dir,
         );
+        let states_dir = core_for_platform(&detail.platform_slug).map_or_else(
+            || save_dir.clone(),
+            |core| crate::saves::states_dir(&save_dir, &detail.platform_slug, core.id),
+        );
         let prefs = self.prefs.get();
         let states = core_for_platform(&detail.platform_slug)
             .is_none_or(|core| crate::cores::saves_states(core.id));
@@ -1241,7 +1245,7 @@ impl Controller {
             (reliable
                 && prefs.resume
                 && !hardcore
-                && save_dir.join(crate::saves::AUTO_STATE).exists())
+                && states_dir.join(crate::saves::AUTO_STATE).exists())
             .then_some(0)
         });
         let game_mappings = Rc::new(RefCell::new(
@@ -1251,6 +1255,7 @@ impl Controller {
             core,
             rom,
             save_dir,
+            states_dir,
             title: detail.title.clone(),
             jit,
             vulkan: core_for_platform(&detail.platform_slug)
