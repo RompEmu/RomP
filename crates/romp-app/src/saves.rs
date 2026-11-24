@@ -512,7 +512,7 @@ pub fn server_saves(
         .then(|| {
             server
                 .iter()
-                .filter(|s| s.emulator.as_deref() != Some(emulator))
+                .filter(|s| !owns(emulator, s.emulator.as_deref()))
                 .max_by_key(|s| at(s).unwrap_or(i64::MIN))
         })
         .flatten()
@@ -525,9 +525,7 @@ pub fn server_saves(
             at: at(s).unwrap_or(0) / 1000,
         });
     ServerSaves {
-        ours: server
-            .iter()
-            .any(|s| s.emulator.as_deref() == Some(emulator)),
+        ours: server.iter().any(|s| owns(emulator, s.emulator.as_deref())),
         other,
     }
 }
@@ -563,8 +561,19 @@ pub fn for_emulator(
 ) -> Vec<crate::romm::types::RemoteSave> {
     server
         .into_iter()
-        .filter(|s| s.emulator.as_deref() == Some(emulator))
+        .filter(|s| owns(emulator, s.emulator.as_deref()))
         .collect()
+}
+
+const PSX_CARD_EMULATORS: [&str; 2] = ["mednafen_psx_hw", "swanstation"];
+
+/// Both PlayStation cores read and write the same memory card, so each treats the other's saves as its own.
+fn shares_card(a: &str, b: &str) -> bool {
+    a == b || (PSX_CARD_EMULATORS.contains(&a) && PSX_CARD_EMULATORS.contains(&b))
+}
+
+fn owns(emulator: &str, tag: Option<&str>) -> bool {
+    tag.is_some_and(|t| shares_card(emulator, t))
 }
 
 /// With no record of the last sync, a save here matching the server's newest counts as synced.
@@ -1131,6 +1140,22 @@ mod tests {
         ];
         let ours: Vec<i64> = for_emulator(server, "mgba").iter().map(|s| s.id).collect();
         assert_eq!(ours, [20]);
+    }
+
+    #[test]
+    fn a_beetle_card_is_swanstations_own() {
+        let beetle = remote(1, "mednafen_psx_hw", "2026-10-08T09:42:18+00:00");
+        let ours = for_emulator(vec![beetle.clone()], "swanstation");
+        assert_eq!(ours.iter().map(|s| s.id).collect::<Vec<_>>(), [1]);
+        let saves = server_saves(&[beetle], "psx", "swanstation");
+        assert!(saves.ours);
+        assert_eq!(saves.other, None);
+    }
+
+    #[test]
+    fn other_consoles_still_match_one_emulator() {
+        let snes = remote(1, "snes9x", "2026-10-08T09:42:18+00:00");
+        assert!(for_emulator(vec![snes], "bsnes").is_empty());
     }
 
     #[test]
