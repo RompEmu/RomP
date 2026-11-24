@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-11-12 21:02\n"
+"PO-Revision-Date: 2026-11-24 21:28\n"
 "Last-Translator: \n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
@@ -801,6 +801,14 @@ msgstr ""
 #: crates/romp-app/src/bios.rs
 msgid "This game needs BIOS files your server doesn't have: {}. Add them to this platform's firmware in RomM."
 msgstr "Ce jeu a besoin de fichiers BIOS que votre serveur n'a pas : {}. Ajoutez-les au firmware de cette plateforme dans RomM."
+
+#: crates/romp-app/src/console_settings.rs
+msgid "Emulator core"
+msgstr ""
+
+#: crates/romp-app/src/console_settings.rs
+msgid "Swaps the emulator that runs this console's games. Achievements work best with Beetle."
+msgstr ""
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Higher is sharper and needs a faster computer."
