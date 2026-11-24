@@ -1,4 +1,27 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Cores that write into the system folder keep their data in a subfolder, so the sandbox can
+/// let them write there without opening the whole folder: (core id, subfolder).
+const SYSTEM_CACHE_DIRS: [(&str, &str); 1] = [("swanstation", "swanstation")];
+
+/// Where a core keeps data it writes outside its save folder, if it does.
+pub fn core_cache_dir(core_path: &Path, system_dir: &Path) -> Option<PathBuf> {
+    let stem = core_path.file_stem()?.to_str()?;
+    let id = stem.strip_suffix("_libretro").unwrap_or(stem);
+    SYSTEM_CACHE_DIRS
+        .iter()
+        .find(|(name, _)| *name == id)
+        .map(|(_, folder)| system_dir.join(folder))
+}
+
+/// Creates those folders before the sandbox takes hold, which only lets a core write inside one
+/// that already exists.
+pub fn create_core_cache_dirs(core_path: &Path, system_dir: &Path) -> std::io::Result<()> {
+    match core_cache_dir(core_path, system_dir) {
+        Some(dir) => std::fs::create_dir_all(dir),
+        None => Ok(()),
+    }
+}
 
 pub struct SandboxParams<'a> {
     pub rom_path: &'a Path,
@@ -65,6 +88,9 @@ fn build_profile(p: &SandboxParams<'_>) -> String {
     } else {
         tightened_file_read(p)
     };
+    let core_cache = core_cache_dir(p.core_path, p.system_dir)
+        .map(|dir| format!("  (subpath {})\n", sbpl_string(&dir)))
+        .unwrap_or_default();
     format!(
         r#"(version 1)
 (deny default)
@@ -78,7 +104,7 @@ fn build_profile(p: &SandboxParams<'_>) -> String {
 (allow file-write*
   (subpath {save})
   (subpath {caches})
-  (subpath "/private/tmp")
+{core_cache}  (subpath "/private/tmp")
   (subpath "/private/var/folders"))
 (allow file-write-data
   (literal "/dev/null")
@@ -256,6 +282,48 @@ mod tests {
         assert!(writes.contains("saves/42"));
         assert!(!writes.contains("Romp/system"));
         assert!(!writes.contains("cores"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn only_the_cores_own_cache_folder_is_writable_in_the_system_folder() {
+        let p = build_profile(&SandboxParams {
+            rom_path: Path::new("/r/g.cue"),
+            core_path: Path::new(
+                "/Users/t/Library/Application Support/Romp/cores/swanstation/swanstation_libretro.dylib",
+            ),
+            socket_path: Path::new("/tmp/romp-1.sock"),
+            system_dir: Path::new("/Users/t/Library/Application Support/Romp/system"),
+            save_dir: Path::new("/Users/t/Library/Application Support/Romp/saves/1"),
+            home_dir: Path::new("/Users/t"),
+            vulkan_library: None,
+            needs_jit: true,
+            permissive_mach: false,
+            permissive_read: false,
+        });
+        let writes = &p[p.find("(allow file-write*").unwrap()..];
+        let writes = &writes[..writes.find("))").unwrap()];
+        assert!(writes.contains("Romp/system/swanstation\""));
+        assert!(!writes.contains("Romp/system\""));
+    }
+
+    #[test]
+    fn core_cache_dir_is_named_by_core_id() {
+        let system = Path::new("/s");
+        for lib in [
+            "/c/swanstation/swanstation_libretro.dll",
+            "/c/swanstation/swanstation_libretro.so",
+            "/c/swanstation/swanstation_libretro.dylib",
+        ] {
+            assert_eq!(
+                core_cache_dir(Path::new(lib), system),
+                Some(PathBuf::from("/s/swanstation"))
+            );
+        }
+        assert_eq!(
+            core_cache_dir(Path::new("/c/snes9x/snes9x_libretro.so"), system),
+            None
+        );
     }
 
     #[test]

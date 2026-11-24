@@ -29,7 +29,16 @@ const LOW_INTEGRITY_LABEL: &str = "S:(ML;OICI;NW;;;LW)";
 pub fn apply(params: &SandboxParams<'_>) -> anyhow::Result<()> {
     let scratch = crate::archive::scratch_dir(&std::process::id().to_string());
     std::fs::create_dir_all(&scratch)?;
-    for dir in [params.save_dir, scratch.as_path()] {
+    // A core that keeps a cache in the system folder gets only its own subfolder writable.
+    let cache = crate::sandbox::core_cache_dir(params.core_path, params.system_dir);
+    for dir in [
+        Some(params.save_dir),
+        Some(scratch.as_path()),
+        cache.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
         allow_low_integrity_writes(dir)?;
     }
     confine_to_job()?;
