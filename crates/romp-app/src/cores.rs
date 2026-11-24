@@ -322,13 +322,6 @@ pub fn core_for_platform_with(slug: &str, chosen: Option<&str>) -> Option<&'stat
         .or_else(|| core_for_platform(slug))
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the console settings and launch pick up the choice in the next commits"
-    )
-)]
 pub fn is_default_core(slug: &str, core_id: &str) -> bool {
     core_for_platform(slug).is_some_and(|core| core.id == core_id)
 }

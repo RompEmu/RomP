@@ -237,6 +237,21 @@ pub struct GameSaves {
     /// For a multi-file game started with a file other than the one RomP picks, that file's
     /// name: its saves and states are its own, in their own folder and RomM slot.
     pub variant: Option<String>,
+    /// The emulator whose states these are, when it isn't the platform's default: its states
+    /// live in a folder of their own, as a state from one emulator can't be loaded by another.
+    pub states_core: Option<String>,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "used once the runner gets --states-dir")
+)]
+pub fn states_dir(game_dir: &Path, platform: &str, core_id: &str) -> PathBuf {
+    if crate::cores::is_default_core(platform, core_id) {
+        game_dir.to_path_buf()
+    } else {
+        game_dir.join(core_id)
+    }
 }
 
 /// The name a file a game was started with gives its saves: the file name without extension,
@@ -361,11 +376,26 @@ impl GameSaves {
         self.variant.as_deref().unwrap_or("")
     }
 
-    /// A state slot as recorded here and named on RomM, kept apart for each file.
-    fn state_key(&self, slot: &str) -> String {
+    /// A state slot as named on RomM, kept apart for each file. RomM names carry the emulator.
+    fn state_remote_key(&self, slot: &str) -> String {
         match &self.variant {
             Some(variant) => format!("{variant}/{slot}"),
             None => slot.to_string(),
+        }
+    }
+
+    /// A state slot as recorded here, kept apart for each file and each emulator.
+    fn state_key(&self, slot: &str) -> String {
+        match &self.states_core {
+            Some(core) => format!("{core}/{}", self.state_remote_key(slot)),
+            None => self.state_remote_key(slot),
+        }
+    }
+
+    pub fn states_dir(&self) -> PathBuf {
+        match &self.states_core {
+            Some(core) => self.dir.join(core),
+            None => self.dir.clone(),
         }
     }
 
@@ -729,14 +759,18 @@ pub async fn resolve_sram(
 }
 
 pub fn games_with_saves(server_saves: &Path) -> Vec<i64> {
+    let has_states = |dir: &Path| {
+        STATE_SLOTS
+            .iter()
+            .any(|slot| dir.join(format!("{slot}.state")).exists())
+    };
     let has_save = |dir: &Path| {
         dir.join(SRAM_FILE).exists()
             || dir.join(ARMSX2_CARD).exists()
             || !memory_cards(dir).is_empty()
             || !newest_ending(dir, DOS_SAVE).is_empty()
-            || STATE_SLOTS
-                .iter()
-                .any(|slot| dir.join(format!("{slot}.state")).exists())
+            || has_states(dir)
+            || crate::cores::all_cores().any(|core| has_states(&dir.join(core.id)))
     };
     std::fs::read_dir(server_saves)
         .into_iter()
@@ -761,7 +795,7 @@ pub fn delete_state(
     game: &GameSaves,
     slot: &str,
 ) -> io::Result<()> {
-    let dir = &game.dir;
+    let dir = &game.states_dir();
     let rom_id = game.rom_id;
     let file = format!("{slot}.state");
     backup(dir, &file)?;
@@ -804,10 +838,11 @@ pub async fn sync_states(
     let remote = client.states(game.rom_id).await?;
     let io_err = |e: io::Error| Error::Decode(format!("could not write a save state: {e}"));
     let mut report = StateReport::default();
+    let dir = game.states_dir();
     for slot in STATE_SLOTS {
         let file = format!("{slot}.state");
-        let path = game.dir.join(&file);
-        let name = state_remote_name(&game.state_key(slot), &game.emulator, core_version);
+        let path = dir.join(&file);
+        let name = state_remote_name(&game.state_remote_key(slot), &game.emulator, core_version);
         let server = remote.iter().find(|r| r.file_name == name);
         let local = std::fs::read(&path).ok();
         let key = game.state_key(slot);
@@ -852,12 +887,12 @@ pub async fn sync_states(
         let recorded = if upload {
             if let Some(srv) = server.filter(|_| remote_changed) {
                 let bytes = client.download_state(srv.id).await?;
-                backup_bytes(&game.dir, &format!("server-{file}"), &bytes).map_err(io_err)?;
+                backup_bytes(&dir, &format!("server-{file}"), &bytes).map_err(io_err)?;
             }
             let bytes = local.expect("local state to upload");
             let md5 = md5_hex(&bytes);
             let picture_name = format!("{slot}.png");
-            let picture = std::fs::read(game.dir.join(&picture_name))
+            let picture = std::fs::read(dir.join(&picture_name))
                 .ok()
                 .map(|png| (picture_name, png));
             let saved = client
@@ -872,9 +907,9 @@ pub async fn sync_states(
         } else {
             let srv = server.expect("remote state to download");
             let bytes = client.download_state(srv.id).await?;
-            backup(&game.dir, &file).map_err(io_err)?;
+            backup(&dir, &file).map_err(io_err)?;
             replace_file(&path, &bytes).map_err(io_err)?;
-            let picture_path = game.dir.join(format!("{slot}.png"));
+            let picture_path = dir.join(format!("{slot}.png"));
             let picture = match &srv.screenshot {
                 Some(shot) => client.download_screenshot(shot.id).await.ok(),
                 None => None,
@@ -903,6 +938,60 @@ pub async fn sync_states(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_core_keeps_states_at_the_root() {
+        let d = Path::new("games/5");
+        assert_eq!(states_dir(d, "psx", "mednafen_psx_hw"), d);
+        assert_eq!(states_dir(d, "psx", "swanstation"), d.join("swanstation"));
+    }
+
+    fn state_game(dir: &Path, variant: Option<&str>, states_core: Option<&str>) -> GameSaves {
+        GameSaves {
+            rom_id: 5,
+            dir: dir.to_path_buf(),
+            title: "Crash".into(),
+            emulator: states_core.unwrap_or("mednafen_psx_hw").into(),
+            save_file: "memcard.mcd".into(),
+            save_emulator: "mednafen_psx_hw".into(),
+            variant: variant.map(Into::into),
+            states_core: states_core.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn default_core_state_keys_are_unchanged() {
+        let d = Path::new("games/5");
+        assert_eq!(state_game(d, None, None).state_key("auto"), "auto");
+        assert_eq!(
+            state_game(d, Some("Disc 2"), None).state_key("auto"),
+            "Disc 2/auto"
+        );
+    }
+
+    #[test]
+    fn other_core_state_keys_are_prefixed() {
+        let d = Path::new("games/5");
+        let game = state_game(d, None, Some("swanstation"));
+        assert_eq!(game.state_key("auto"), "swanstation/auto");
+        assert_eq!(game.states_dir(), d.join("swanstation"));
+        let disc = state_game(d, Some("Disc 2"), Some("swanstation"));
+        assert_eq!(disc.state_key("auto"), "swanstation/Disc 2/auto");
+        assert_eq!(disc.state_remote_key("auto"), "Disc 2/auto");
+        assert_eq!(
+            state_remote_name(&game.state_remote_key("auto"), "swanstation", "v1"),
+            state_remote_name("auto", "swanstation", "v1")
+        );
+    }
+
+    #[test]
+    fn games_with_saves_sees_another_cores_states() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join("5").join("swanstation");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("auto.state"), b"S").unwrap();
+        assert_eq!(games_with_saves(root.path()), vec![5]);
+    }
 
     #[test]
     fn the_in_game_save_says_where_it_stands_with_romm() {
@@ -1086,6 +1175,7 @@ mod tests {
             save_file: SRAM_FILE.into(),
             save_emulator: "snes9x".into(),
             variant: None,
+            states_core: None,
         };
         remember_synced(&store, &game);
         assert_eq!(store.lock().unwrap().in_game_save_record(5, ""), None);
@@ -1360,6 +1450,7 @@ mod tests {
             save_file: "Strike Commander (1993).pure.zip".into(),
             save_emulator: "dosbox_pure".into(),
             variant: None,
+            states_core: None,
         };
         assert_eq!(game.remote_sram_name(), "Strike Commander (1993).zip");
     }
@@ -1383,6 +1474,7 @@ mod tests {
             save_file: ARMSX2_CARD.into(),
             save_emulator: PS2_CARD_EMULATOR.into(),
             variant: None,
+            states_core: None,
         };
         make_save_folder(&card).unwrap();
         assert!(root.path().join("7/pcsx2/memcards").is_dir());
@@ -1419,6 +1511,7 @@ mod tests {
                 save_file: SRAM_FILE.into(),
                 save_emulator: "snes9x".into(),
                 variant: None,
+                states_core: None,
             }
         }
 
@@ -1430,6 +1523,7 @@ mod tests {
             assert_eq!(original.state_key("auto"), "auto");
             let hack = GameSaves {
                 variant: Some(variant_of("hack/Super Metroid - Advent.smc")),
+                states_core: None,
                 ..original
             };
             assert_eq!(hack.sram_slot(), "Super Metroid - Advent");
@@ -1865,6 +1959,7 @@ mod tests {
                 save_file: SRAM_FILE.into(),
                 save_emulator: "snes9x".into(),
                 variant: None,
+                states_core: None,
             }
         }
 
@@ -1977,6 +2072,36 @@ mod tests {
                 std::fs::read(dir.path().join("slot-2.state")).unwrap(),
                 b"REMOTE"
             );
+        }
+
+        #[tokio::test]
+        async fn sync_downloads_another_cores_state_into_its_folder() {
+            let server = MockServer::start().await;
+            remote(
+                &server,
+                json!([state_json(4, "slot-2.swanstation.1-63.state", "t2")]),
+            )
+            .await;
+            Mock::given(method("GET"))
+                .and(path("/api/states/4/content"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(b"REMOTE".to_vec()))
+                .mount(&server)
+                .await;
+            let dir = tempfile::tempdir().unwrap();
+            let other = GameSaves {
+                emulator: "swanstation".into(),
+                states_core: Some("swanstation".into()),
+                ..game(dir.path())
+            };
+            let report = sync_states(&client(&server), &store(), &other, "1.63")
+                .await
+                .unwrap();
+            assert_eq!(report.downloaded, 1);
+            assert_eq!(
+                std::fs::read(dir.path().join("swanstation").join("slot-2.state")).unwrap(),
+                b"REMOTE"
+            );
+            assert!(!dir.path().join("slot-2.state").exists());
         }
 
         #[tokio::test]

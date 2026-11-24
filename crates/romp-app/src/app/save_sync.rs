@@ -1,5 +1,5 @@
 use super::{on_ui, Controller};
-use crate::cores::core_for_platform;
+use crate::cores::{core_for_platform, is_default_core};
 use crate::paths;
 use crate::play::CoreIdentity;
 use crate::romm::client::{Client, Error};
@@ -133,6 +133,8 @@ impl Controller {
             save_file,
             save_emulator,
             variant,
+            states_core: (!is_default_core(&detail.platform_slug, core.id))
+                .then(|| core.id.to_string()),
         })
     }
 
