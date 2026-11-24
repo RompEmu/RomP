@@ -64,6 +64,36 @@ async fn sync_game(
     Ok(sram)
 }
 
+fn saves_for(
+    detail: &GameDetail,
+    core: &'static CoreInfo,
+    base: PathBuf,
+    variant: Option<String>,
+) -> GameSaves {
+    let dir = match &variant {
+        Some(variant) => base.join(crate::saves::VARIANTS).join(variant),
+        None => base,
+    };
+    if core.id == "melondsds" {
+        if let Err(e) = crate::saves::adopt_desmume_saves(&dir) {
+            tracing::warn!("moving {}'s DeSmuME save to melonDS: {e}", detail.title);
+        }
+    }
+    let rom = detail.local_path.as_deref().map(std::path::Path::new);
+    let (save_file, save_emulator) = crate::saves::in_game_save(core.id, &dir, rom);
+    GameSaves {
+        rom_id: detail.id,
+        dir,
+        title: detail.title.clone(),
+        emulator: core.id.to_string(),
+        save_file,
+        save_emulator,
+        variant,
+        states_core: (!is_default_core(&detail.platform_slug, core.id))
+            .then(|| core.id.to_string()),
+    }
+}
+
 impl Controller {
     pub(super) fn sync_device(&self) -> Option<String> {
         let store = self.shared.store.lock().unwrap();
@@ -111,6 +141,11 @@ impl Controller {
     pub(super) fn game_saves(&self, detail: &GameDetail) -> Option<GameSaves> {
         let core =
             crate::console_settings::chosen_core(&self.console_choices(), &detail.platform_slug)?;
+        Some(self.game_saves_for(detail, core))
+    }
+
+    /// A game's saves as `core` keeps them, whichever emulator is chosen now.
+    pub(super) fn game_saves_for(&self, detail: &GameDetail, core: &'static CoreInfo) -> GameSaves {
         let variant = self
             .shared
             .store
@@ -119,28 +154,7 @@ impl Controller {
             .chosen_file(detail.id)
             .map(|file| crate::saves::variant_of(&file));
         let base = paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id);
-        let dir = match &variant {
-            Some(variant) => base.join(crate::saves::VARIANTS).join(variant),
-            None => base,
-        };
-        if core.id == "melondsds" {
-            if let Err(e) = crate::saves::adopt_desmume_saves(&dir) {
-                tracing::warn!("moving {}'s DeSmuME save to melonDS: {e}", detail.title);
-            }
-        }
-        let rom = detail.local_path.as_deref().map(std::path::Path::new);
-        let (save_file, save_emulator) = crate::saves::in_game_save(core.id, &dir, rom);
-        Some(GameSaves {
-            rom_id: detail.id,
-            dir,
-            title: detail.title.clone(),
-            emulator: core.id.to_string(),
-            save_file,
-            save_emulator,
-            variant,
-            states_core: (!is_default_core(&detail.platform_slug, core.id))
-                .then(|| core.id.to_string()),
-        })
+        saves_for(detail, core, base, variant)
     }
 
     pub(super) fn clear_conflict(&self) {
@@ -165,11 +179,9 @@ impl Controller {
         let Some(pending) = self.pending_launch.borrow_mut().take() else {
             return;
         };
-        let (Some(client), Some(device), Some(game)) = (
-            self.client.borrow().clone(),
-            self.sync_device(),
-            self.game_saves(&pending.detail),
-        ) else {
+        let game = self.game_saves_for(&pending.detail, pending.core);
+        let (Some(client), Some(device)) = (self.client.borrow().clone(), self.sync_device())
+        else {
             self.preparing.set(false);
             if let Some(ui) = self.ui() {
                 ui.set_save_conflict(false);
@@ -196,8 +208,13 @@ impl Controller {
         });
     }
 
-    pub(super) fn after_play(&self, detail: GameDetail, identity: Option<CoreIdentity>) {
-        let Some(game) = self.game_saves(&detail) else {
+    pub(super) fn after_play(
+        &self,
+        detail: GameDetail,
+        core: Option<&'static CoreInfo>,
+        identity: Option<CoreIdentity>,
+    ) {
+        let Some(game) = core.map(|core| self.game_saves_for(&detail, core)) else {
             return;
         };
         if let Some((_, version)) = &identity {
@@ -343,6 +360,55 @@ mod tests {
         assert_eq!(
             version_key(&psx_game(Some("swanstation"))),
             "core_version:7:swanstation"
+        );
+    }
+
+    fn psx_detail() -> GameDetail {
+        GameDetail {
+            id: 7,
+            title: "Crash".into(),
+            platform_id: 1,
+            platform_slug: "psx".into(),
+            platform: "PlayStation".into(),
+            platform_category: None,
+            summary: None,
+            size_bytes: 0,
+            cover_small: None,
+            cover_large: None,
+            local_path: None,
+            meta: Default::default(),
+            screenshots: Vec::new(),
+            version_file: None,
+        }
+    }
+
+    #[test]
+    fn saves_follow_the_emulator_given() {
+        let base = std::path::Path::new("games/7");
+        let core = |id| {
+            crate::cores::choices_for_platform("psx")
+                .find(|c| c.id == id)
+                .unwrap()
+        };
+        let beetle = saves_for(&psx_detail(), core("mednafen_psx_hw"), base.into(), None);
+        assert_eq!(beetle.emulator, "mednafen_psx_hw");
+        assert_eq!(beetle.states_dir(), base);
+        assert_eq!(version_key(&beetle), "core_version:7");
+        let swan = saves_for(&psx_detail(), core("swanstation"), base.into(), None);
+        assert_eq!(swan.emulator, "swanstation");
+        assert_eq!(swan.states_dir(), base.join("swanstation"));
+        assert_eq!(version_key(&swan), "core_version:7:swanstation");
+        let disc = saves_for(
+            &psx_detail(),
+            core("swanstation"),
+            base.into(),
+            Some("Disc 2".into()),
+        );
+        assert_eq!(
+            disc.states_dir(),
+            base.join(saves::VARIANTS)
+                .join("Disc 2")
+                .join("swanstation")
         );
     }
 }
