@@ -79,9 +79,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libasound2-dev libegl-dev libfontconfig1-dev libpulse-dev libudev-dev libwayland-dev libxkbcommon-dev
+      # Passed as --config, not the environment: cubeb-sys builds cubeb-pulse with a cargo of its
+      # own, which would inherit the environment and fail on that crate's warnings.
       - name: Clippy
-        env:
-          CARGO_BUILD_WARNINGS: deny
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked --config 'build.warnings="deny"' -- -D warnings
       - name: Tests
         run: cargo test --workspace --locked
