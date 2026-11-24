@@ -214,7 +214,7 @@ impl Controller {
         let version = store
             .lock()
             .unwrap()
-            .get(&super::save_sync::version_key(detail.id));
+            .get(&super::save_sync::version_key(&game));
         let (Some(client), Some(version)) = (self.client.borrow().clone(), version) else {
             return;
         };
