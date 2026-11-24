@@ -81,17 +81,7 @@ impl Controller {
         let chosen = self.console_choices();
         let core = crate::console_settings::chosen_core(&chosen, &detail.platform_slug);
         let states_dir = game.as_ref().map_or_else(
-            || {
-                let dir = crate::paths::game_save_dir(
-                    &crate::paths::data_dir(),
-                    &self.server(),
-                    detail.id,
-                );
-                match core {
-                    Some(core) => saves::states_dir(&dir, &detail.platform_slug, core.id),
-                    None => dir,
-                }
-            },
+            || crate::paths::game_save_dir(&crate::paths::data_dir(), &self.server(), detail.id),
             saves::GameSaves::states_dir,
         );
         let now = std::time::SystemTime::now();

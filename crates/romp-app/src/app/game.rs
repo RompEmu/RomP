@@ -654,7 +654,7 @@ impl Controller {
         let id = detail.id;
         let sync = self
             .sync_device()
-            .zip(self.game_saves(&detail))
+            .map(|device| (device, self.game_saves_for(&detail, core)))
             .filter(|_| !offline);
         let store = self.shared.store.clone();
         self.shared.rt.spawn(async move {
@@ -982,7 +982,7 @@ impl Controller {
     }
 
     fn external_closed(&self, id: i64, name: &str, code: Option<i32>, log: Vec<String>) {
-        self.game_closed(None);
+        self.game_closed(None, None);
         if code != Some(0) {
             let detail = log.last().cloned().unwrap_or_default();
             tracing::warn!("{name} exited with {code:?}:\n{}", log.join("\n"));
@@ -1226,17 +1226,12 @@ impl Controller {
         core_path: PathBuf,
     ) {
         self.preparing.set(false);
-        let saves = self.game_saves(&detail);
-        if let Some(game) = &saves {
-            if let Err(e) = crate::saves::make_save_folder(game) {
-                tracing::warn!("making {}'s save folder: {e}", detail.title);
-            }
+        let saves = self.game_saves_for(&detail, core);
+        if let Err(e) = crate::saves::make_save_folder(&saves) {
+            tracing::warn!("making {}'s save folder: {e}", detail.title);
         }
-        let save_dir = saves.map_or_else(
-            || paths::game_save_dir(&paths::data_dir(), &self.server(), detail.id),
-            |game| game.dir,
-        );
-        let states_dir = crate::saves::states_dir(&save_dir, &detail.platform_slug, core.id);
+        let states_dir = saves.states_dir();
+        let save_dir = saves.dir;
         let prefs = self.prefs.get();
         let states = crate::cores::saves_states(core.id);
         let reliable = states && crate::cores::resumes_reliably(core.id);
@@ -1329,8 +1324,9 @@ impl Controller {
             },
         };
         let on_closed = move |identity| {
-            let _ =
-                slint::invoke_from_event_loop(move || with_controller(|c| c.game_closed(identity)));
+            let _ = slint::invoke_from_event_loop(move || {
+                with_controller(|c| c.game_closed(Some(core), identity));
+            });
         };
         let open_controllers = || {
             let _ = slint::invoke_from_event_loop(|| with_controller(|c| c.open_players()));
@@ -1351,7 +1347,7 @@ impl Controller {
         }
     }
 
-    fn game_closed(&self, identity: Option<CoreIdentity>) {
+    fn game_closed(&self, core: Option<&'static CoreInfo>, identity: Option<CoreIdentity>) {
         self.running.borrow_mut().take();
         self.game_mappings.borrow_mut().take();
         self.end_session();
@@ -1370,7 +1366,7 @@ impl Controller {
             self.refresh_romm_achievements();
         }
         if let Some(detail) = playing {
-            self.after_play(detail, identity);
+            self.after_play(detail, core, identity);
         }
     }
 

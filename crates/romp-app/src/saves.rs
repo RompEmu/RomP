@@ -242,14 +242,6 @@ pub struct GameSaves {
     pub states_core: Option<String>,
 }
 
-pub fn states_dir(game_dir: &Path, platform: &str, core_id: &str) -> PathBuf {
-    if crate::cores::is_default_core(platform, core_id) {
-        game_dir.to_path_buf()
-    } else {
-        game_dir.join(core_id)
-    }
-}
-
 /// The name a file a game was started with gives its saves: the file name without extension,
 /// safe as a folder name and short enough for a RomM slot.
 pub fn variant_of(file: &str) -> String {
@@ -944,13 +936,6 @@ pub async fn sync_states(
 mod tests {
     use super::*;
 
-    #[test]
-    fn default_core_keeps_states_at_the_root() {
-        let d = Path::new("games/5");
-        assert_eq!(states_dir(d, "psx", "mednafen_psx_hw"), d);
-        assert_eq!(states_dir(d, "psx", "swanstation"), d.join("swanstation"));
-    }
-
     fn state_game(dir: &Path, variant: Option<&str>, states_core: Option<&str>) -> GameSaves {
         GameSaves {
             rom_id: 5,
@@ -1544,7 +1529,6 @@ mod tests {
             assert_eq!(original.state_key("auto"), "auto");
             let hack = GameSaves {
                 variant: Some(variant_of("hack/Super Metroid - Advent.smc")),
-                states_core: None,
                 ..original
             };
             assert_eq!(hack.sram_slot(), "Super Metroid - Advent");
