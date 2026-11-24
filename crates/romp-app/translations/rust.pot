@@ -803,6 +803,14 @@ msgid "This game needs BIOS files your server doesn't have: {}. Add them to this
 msgstr ""
 
 #: crates/romp-app/src/console_settings.rs
+msgid "Emulator core"
+msgstr ""
+
+#: crates/romp-app/src/console_settings.rs
+msgid "Swaps the emulator that runs this console's games. Achievements work best with Beetle."
+msgstr ""
+
+#: crates/romp-app/src/console_settings.rs
 msgid "Higher is sharper and needs a faster computer."
 msgstr ""
 
