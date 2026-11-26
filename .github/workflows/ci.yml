@@ -28,7 +28,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - uses: taiki-e/install-action@v2.90.3
+      - uses: taiki-e/install-action@v2.90.6
         with:
           tool: cargo-deny,typos,zizmor@1.32.0,slint-tr-extractor@1.18.1,xtr@0.1.11
       - name: Install actionlint
