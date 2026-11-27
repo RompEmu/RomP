@@ -2980,7 +2980,7 @@ component AboutDialog inherits Rectangle {
     }
     Rectangle {
         width: min(420px, parent.width - 32px);
-        height: min(500px, parent.height - 32px);
+        height: min(540px, parent.height - 32px);
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: Theme.surface;
@@ -3005,6 +3005,7 @@ component AboutDialog inherits Rectangle {
                 alignment: center;
                 padding-left: 32px;
                 padding-right: 32px;
+                padding-top: 16px;
                 Row {
                     alignment: center;
                     AppTile { size: 72px; icon: root.icon; has-icon: root.has-icon; }
