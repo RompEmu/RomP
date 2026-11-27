@@ -119,6 +119,22 @@ fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u
     })
 }
 
+const NVIDIA: u32 = 0x10de;
+
+/// NVIDIA packs its driver version its own way; the rest follow Vulkan's.
+fn driver_version(vendor_id: u32, raw: u32) -> String {
+    if vendor_id == NVIDIA {
+        format!("{}.{}.{}", raw >> 22, (raw >> 14) & 0xff, (raw >> 6) & 0xff)
+    } else {
+        format!(
+            "{}.{}.{}",
+            vk::api_version_major(raw),
+            vk::api_version_minor(raw),
+            vk::api_version_patch(raw)
+        )
+    }
+}
+
 /// Keep enumeration order for equally suitable devices, but avoid software rendering when possible.
 fn preferred_gpu(devices: &[(vk::PhysicalDeviceType, bool)]) -> Option<usize> {
     devices
@@ -279,6 +295,12 @@ impl HwVulkanContext {
         } else {
             vk::SurfaceKHR::null()
         };
+        let made = match (surface == vk::SurfaceKHR::null(), headless) {
+            (true, _) => "none",
+            (false, true) => "headless",
+            (false, false) => "hidden window",
+        };
+        tracing::info!(surface = made, "Vulkan instance created");
         if surface == vk::SurfaceKHR::null() {
             tracing::warn!(
                 "no Vulkan surface: cores that present through one, such as Dolphin, show no picture"
@@ -399,9 +421,23 @@ impl HwVulkanContext {
             device_id = properties.device_id,
             api = %format!("{}.{}.{}", vk::api_version_major(properties.api_version),
                 vk::api_version_minor(properties.api_version), vk::api_version_patch(properties.api_version)),
+            driver_version = %driver_version(properties.vendor_id, properties.driver_version),
             queue_family = context.queue_family_index,
             "Vulkan device selected"
         );
+        if properties.api_version >= vk::API_VERSION_1_2 {
+            let mut driver = vk::PhysicalDeviceDriverProperties::default();
+            let mut all = vk::PhysicalDeviceProperties2::default().push_next(&mut driver);
+            unsafe {
+                self.instance
+                    .get_physical_device_properties2(context.gpu, &mut all);
+            }
+            tracing::info!(
+                driver = %driver.driver_name_as_c_str().unwrap_or_default().to_string_lossy(),
+                info = %driver.driver_info_as_c_str().unwrap_or_default().to_string_lossy(),
+                "Vulkan driver"
+            );
+        }
         let device = unsafe { ash::Device::load(self.instance.fp_v1_0(), context.device) };
         let pool = unsafe {
             device.create_command_pool(
@@ -1039,6 +1075,15 @@ mod tests {
         ];
         assert_eq!(readback_memory(&types, !0), Some((1, false)));
         assert_eq!(readback_memory(&[F::HOST_VISIBLE], 1), Some((0, false)));
+    }
+
+    #[test]
+    fn driver_versions_read_as_the_vendor_writes_them() {
+        assert_eq!(driver_version(NVIDIA, (572 << 22) | (83 << 14)), "572.83.0");
+        assert_eq!(
+            driver_version(0x1002, vk::make_api_version(0, 2, 0, 302)),
+            "2.0.302"
+        );
     }
 
     #[test]
