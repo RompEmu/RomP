@@ -1472,6 +1472,24 @@ component Library inherits Rectangle {
 }
 
 
+// A layout adds up a word-wrapped Text as if it sat on one line, which leaves a scrolling page
+// short of its end. This takes its width first and its height from that, so the lines count.
+component WrappedText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size;
+    in property <brush> text-color;
+    height: label.preferred-height;
+    label := Text {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        text: root.text;
+        font-size: root.font-size;
+        color: root.text-color;
+        wrap: word-wrap;
+        horizontal-alignment: Locale.start;
+    }
+}
 component SectionTitle inherits Text { horizontal-alignment: Locale.start;
     font-size: Theme.font-title;
     font-weight: 700;
@@ -1666,9 +1684,9 @@ component GamePage inherits FocusScope {
                             color: Theme.accent;
                         }
                         Text { horizontal-alignment: Locale.start; text: root.title; font-size: Theme.font-display; font-weight: 800; wrap: word-wrap; }
-                        Text { horizontal-alignment: Locale.start; text: root.subtitle; font-size: Theme.font-subtitle; color: Theme.text-muted; wrap: word-wrap; }
-                        if root.stats != "": Text { horizontal-alignment: Locale.start; text: root.stats; font-size: Theme.font-body; color: Theme.text-muted; wrap: word-wrap; }
-                        if root.reason != "": Text { horizontal-alignment: Locale.start; text: root.reason; font-size: Theme.font-body; color: Theme.accent; wrap: word-wrap; }
+                        WrappedText { text: root.subtitle; font-size: Theme.font-subtitle; text-color: Theme.text-muted; }
+                        if root.stats != "": WrappedText { text: root.stats; font-size: Theme.font-body; text-color: Theme.text-muted; }
+                        if root.reason != "": WrappedText { text: root.reason; font-size: Theme.font-body; text-color: Theme.accent; }
                         Row {
                             padding-top: 8px;
                             alignment: start;
@@ -1788,7 +1806,7 @@ component GamePage inherits FocusScope {
                                 chosen(i) => { root.choose-file(i); }
                             }
                         }
-                        if root.status != "": Text { horizontal-alignment: Locale.start; text: root.status; color: Theme.text-secondary; wrap: word-wrap; }
+                        if root.status != "": WrappedText { text: root.status; text-color: Theme.text-secondary; }
                         if root.conflict: Rectangle {
                             border-radius: 8px;
                             background: Theme.warning-surface;
@@ -1808,11 +1826,32 @@ component GamePage inherits FocusScope {
                         VerticalLayout {
                             padding-top: 16px;
                             spacing: 11px;
-                            for fact in root.facts: HorizontalLayout {
-                                spacing: 18px;
-                                if !Locale.rtl: Text { horizontal-alignment: Locale.start; text: fact.label; width: 150px; font-size: Theme.font-body-large; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.1; }
-                                Text { horizontal-alignment: Locale.start; text: fact.value; font-size: Theme.font-body-large; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; line-height-factor: 1.1; }
-                                if Locale.rtl: Text { horizontal-alignment: Locale.start; text: fact.label; width: 150px; font-size: Theme.font-body-large; color: Theme.text-muted; wrap: word-wrap; line-height-factor: 1.1; }
+                            // Each text gets its width before its height is measured, so a fact
+                            // that wraps counts for all its lines in how far the page scrolls.
+                            for fact in root.facts: Rectangle {
+                                height: max(fact-label.preferred-height, fact-value.preferred-height);
+                                fact-label := Text {
+                                    x: Locale.rtl ? parent.width - self.width : 0;
+                                    y: 0;
+                                    width: 150px;
+                                    horizontal-alignment: Locale.start;
+                                    text: fact.label;
+                                    font-size: Theme.font-body-large;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                    line-height-factor: 1.1;
+                                }
+                                fact-value := Text {
+                                    x: Locale.rtl ? 0 : 168px;
+                                    y: 0;
+                                    width: max(0px, parent.width - 168px);
+                                    horizontal-alignment: Locale.start;
+                                    text: fact.value;
+                                    font-size: Theme.font-body-large;
+                                    color: Theme.text;
+                                    wrap: word-wrap;
+                                    line-height-factor: 1.1;
+                                }
                             }
                         }
                     }
@@ -1831,11 +1870,15 @@ component GamePage inherits FocusScope {
                 if root.summary != "": VerticalLayout {
                     spacing: 12px;
                     SectionTitle { text: @tr("Overview"); }
-                    HorizontalLayout {
-                        alignment: Locale.rtl ? LayoutAlignment.end : LayoutAlignment.start;
-                        Text { horizontal-alignment: Locale.start;
+                    // The width comes first, so the paragraph's lines count in how far the page scrolls.
+                    Rectangle {
+                        height: summary-text.preferred-height;
+                        summary-text := Text {
+                            x: Locale.rtl ? parent.width - self.width : 0;
+                            y: 0;
+                            width: min(parent.width, 720px);
+                            horizontal-alignment: Locale.start;
                             text: root.summary;
-                            max-width: 720px;
                             wrap: word-wrap;
                             font-size: Theme.font-subtitle;
                             line-height-factor: 1.3;
@@ -2021,24 +2064,6 @@ component Panel inherits Rectangle {
 }
 
 /// A setting's name and explanation, on the side its row starts from.
-// A layout adds up a word-wrapped Text as if it sat on one line, which leaves a scrolling page
-// short of its end. This takes its width first and its height from that, so the lines count.
-component WrappedText inherits Rectangle {
-    in property <string> text;
-    in property <length> font-size;
-    in property <brush> text-color;
-    height: label.preferred-height;
-    label := Text {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        text: root.text;
-        font-size: root.font-size;
-        color: root.text-color;
-        wrap: word-wrap;
-        horizontal-alignment: Locale.start;
-    }
-}
 component SettingText inherits VerticalLayout {
     in property <string> label;
     in property <string> detail;
