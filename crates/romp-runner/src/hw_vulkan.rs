@@ -124,15 +124,18 @@ fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u
 const FAILED_COPIES: u32 = 30;
 
 const NVIDIA: u32 = 0x10de;
+const APPLE: u32 = 0x106b;
 
 /// A lost device stays lost, so there's nothing to wait for.
 fn is_device_lost(error: &anyhow::Error) -> bool {
     error.downcast_ref::<vk::Result>() == Some(&vk::Result::ERROR_DEVICE_LOST)
 }
 
-/// NVIDIA packs its driver version its own way; the rest follow Vulkan's.
+/// NVIDIA and MoltenVK each pack the driver version their own way; the rest follow Vulkan's.
 fn driver_version(vendor_id: u32, raw: u32) -> String {
-    if vendor_id == NVIDIA {
+    if vendor_id == APPLE {
+        format!("{}.{}.{}", raw / 10000, raw / 100 % 100, raw % 100)
+    } else if vendor_id == NVIDIA {
         format!("{}.{}.{}", raw >> 22, (raw >> 14) & 0xff, (raw >> 6) & 0xff)
     } else {
         format!(
@@ -1104,6 +1107,7 @@ mod tests {
     #[test]
     fn driver_versions_read_as_the_vendor_writes_them() {
         assert_eq!(driver_version(NVIDIA, (572 << 22) | (83 << 14)), "572.83.0");
+        assert_eq!(driver_version(APPLE, 10402), "1.4.2");
         assert_eq!(
             driver_version(0x1002, vk::make_api_version(0, 2, 0, 302)),
             "2.0.302"
