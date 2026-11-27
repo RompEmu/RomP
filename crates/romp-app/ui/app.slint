@@ -2021,6 +2021,24 @@ component Panel inherits Rectangle {
 }
 
 /// A setting's name and explanation, on the side its row starts from.
+// A layout adds up a word-wrapped Text as if it sat on one line, which leaves a scrolling page
+// short of its end. This takes its width first and its height from that, so the lines count.
+component WrappedText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size;
+    in property <brush> text-color;
+    height: label.preferred-height;
+    label := Text {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        text: root.text;
+        font-size: root.font-size;
+        color: root.text-color;
+        wrap: word-wrap;
+        horizontal-alignment: Locale.start;
+    }
+}
 component SettingText inherits VerticalLayout {
     in property <string> label;
     in property <string> detail;
@@ -2029,7 +2047,7 @@ component SettingText inherits VerticalLayout {
     alignment: center;
     spacing: 2px;
     Text { text: root.label; font-size: Theme.font-body-large; overflow: elide; horizontal-alignment: Locale.start; }
-    if root.detail != "": Text { text: root.detail; font-size: Theme.font-small; color: root.detail-color; wrap: word-wrap; horizontal-alignment: Locale.start; }
+    if root.detail != "": WrappedText { text: root.detail; font-size: Theme.font-small; text-color: root.detail-color; }
 }
 
 component SettingRow inherits Rectangle {
@@ -2058,7 +2076,7 @@ component SettingRow inherits Rectangle {
 component SectionHeading inherits VerticalLayout {
     in property <string> subtitle;
     padding-bottom: 4px;
-    Text { horizontal-alignment: Locale.start; text: root.subtitle; font-size: Theme.font-body-large; color: Theme.text-secondary; wrap: word-wrap; }
+    WrappedText { text: root.subtitle; font-size: Theme.font-body-large; text-color: Theme.text-secondary; }
 }
 
 component SettingsTab inherits Rectangle {
@@ -2203,7 +2221,7 @@ component SettingsPage inherits FocusScope {
                     padding-left: 24px;
                     padding-right: 24px;
                     padding-top: 20px;
-                    padding-bottom: 64px;
+                    padding-bottom: 32px;
                     spacing: 16px;
                     if root.section == 0: VerticalLayout {
                         spacing: 16px;
