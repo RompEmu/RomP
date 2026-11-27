@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use ash::vk;
 use parking_lot::lock_api::RawMutex as _;
 use parking_lot::{Mutex, RawMutex};
@@ -505,7 +506,9 @@ impl HwVulkanContext {
         let bpp = bytes_per_pixel(image.format)
             .ok_or_else(|| anyhow::anyhow!("unsupported scanout format {:?}", image.format))?;
         let size = u64::from(width) * u64::from(height) * bpp;
-        let mapped = self.readback_buffer(state, size)?;
+        let mapped = self
+            .readback_buffer(state, size)
+            .context("allocating the frame readback buffer")?;
         let buffer = state.readback.as_ref().expect("readback buffer").buffer;
         let device = &state.device;
         let range = vk::ImageSubresourceRange::default()
@@ -549,12 +552,16 @@ impl HwVulkanContext {
                 depth: 1,
             });
         unsafe {
-            device.reset_command_buffer(state.commands, vk::CommandBufferResetFlags::empty())?;
-            device.begin_command_buffer(
-                state.commands,
-                &vk::CommandBufferBeginInfo::default()
-                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
-            )?;
+            device
+                .reset_command_buffer(state.commands, vk::CommandBufferResetFlags::empty())
+                .context("vkResetCommandBuffer")?;
+            device
+                .begin_command_buffer(
+                    state.commands,
+                    &vk::CommandBufferBeginInfo::default()
+                        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+                )
+                .context("vkBeginCommandBuffer")?;
             device.cmd_pipeline_barrier(
                 state.commands,
                 vk::PipelineStageFlags::ALL_COMMANDS,
@@ -580,7 +587,9 @@ impl HwVulkanContext {
                 &[to_host],
                 &[back],
             );
-            device.end_command_buffer(state.commands)?;
+            device
+                .end_command_buffer(state.commands)
+                .context("vkEndCommandBuffer")?;
         }
         let mut commands = std::mem::take(&mut pending.commands);
         commands.push(state.commands);
@@ -597,17 +606,22 @@ impl HwVulkanContext {
         let submitted = unsafe { device.queue_submit(state.queue, &[submit], state.fence) };
         // SAFETY: locked just above on this thread.
         unsafe { self.queue_lock.unlock(guard) };
-        submitted?;
+        submitted.context("vkQueueSubmit")?;
         unsafe {
-            device.wait_for_fences(&[state.fence], true, u64::MAX)?;
-            device.reset_fences(&[state.fence])?;
+            device
+                .wait_for_fences(&[state.fence], true, u64::MAX)
+                .context("vkWaitForFences")?;
+            device
+                .reset_fences(&[state.fence])
+                .context("vkResetFences")?;
         }
         let readback = state.readback.as_ref().expect("readback buffer");
         if !readback.coherent {
             let range = vk::MappedMemoryRange::default()
                 .memory(readback.memory)
                 .size(vk::WHOLE_SIZE);
-            unsafe { device.invalidate_mapped_memory_ranges(&[range]) }?;
+            unsafe { device.invalidate_mapped_memory_ranges(&[range]) }
+                .context("vkInvalidateMappedMemoryRanges")?;
         }
         let gpu_time = gpu_started.elapsed();
         let cpu_started = Instant::now();
