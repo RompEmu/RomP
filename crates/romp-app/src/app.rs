@@ -121,6 +121,17 @@ struct Controller {
     other_save: RefCell<Option<(i64, crate::saves::OtherSave)>>,
     playing: RefCell<Option<crate::store::GameDetail>>,
     syncing_game: Cell<Option<i64>>,
+    /// The game to play again without Vulkan once it has closed, and the emulator when OpenGL
+    /// is only being tried.
+    graphics_retry: Cell<Option<(i64, Option<&'static str>)>>,
+    /// The save slot the running game was started from, for starting it the same way again.
+    played_slot: Cell<Option<u8>>,
+    /// The emulator whose next launch tries OpenGL without the choice being saved.
+    opengl_trial: Cell<Option<&'static str>>,
+    /// The emulator running on such a trial, kept on OpenGL once it shows a frame.
+    opengl_trying: Cell<Option<&'static str>>,
+    /// What to tell the player once the game is back on OpenGL.
+    graphics_notice: RefCell<Option<String>>,
     downloaded_choice: Cell<bool>,
     icon_requests: RefCell<HashSet<String>>,
     running: RefCell<Option<crate::play::RunningGame>>,
@@ -242,6 +253,11 @@ pub fn run() -> anyhow::Result<()> {
         other_save: RefCell::new(None),
         playing: RefCell::new(None),
         syncing_game: Cell::new(None),
+        graphics_retry: Cell::new(None),
+        played_slot: Cell::new(None),
+        opengl_trial: Cell::new(None),
+        opengl_trying: Cell::new(None),
+        graphics_notice: RefCell::new(None),
         downloaded_choice: Cell::new(false),
         icon_requests: RefCell::default(),
         running: RefCell::new(None),

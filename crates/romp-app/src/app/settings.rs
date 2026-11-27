@@ -757,7 +757,7 @@ impl Controller {
         )
     }
 
-    fn show_consoles(&self) {
+    pub(super) fn show_consoles(&self) {
         let Some(ui) = self.ui() else { return };
         let chosen = self.console_choices();
         let groups: Vec<ConsoleGroup> = console_settings::console_groups(&chosen)

@@ -272,6 +272,11 @@ pub fn uses_vulkan(core_id: &str, chosen: &Chosen) -> bool {
         && !(has_graphics_choice(core_id) && graphics_selected(chosen, core_id) == 1)
 }
 
+/// Sets the emulator to OpenGL, as choosing it in Settings does.
+pub fn use_opengl(chosen: &mut Chosen, core_id: &str) {
+    chosen.insert(graphics_key(core_id), GRAPHICS_VALUES[1].to_string());
+}
+
 /// The cores this computer can run a console on; more than one means the console offers a choice.
 pub fn cores_for(platform: &str) -> Vec<&'static CoreInfo> {
     choices_for_platform(platform).collect()
@@ -591,12 +596,16 @@ mod tests {
 
         assert!(choose(&mut chosen, &key, 0));
         assert!(uses_vulkan("swanstation", &chosen));
+        use_opengl(&mut chosen, "swanstation");
+        assert!(!uses_vulkan("swanstation", &chosen));
     }
 
     #[test]
     fn the_emulator_that_only_draws_through_vulkan_has_no_choice() {
         let mut chosen = Chosen::new();
         assert!(!choose(&mut chosen, &graphics_key("armsx2"), 1));
+        use_opengl(&mut chosen, "armsx2");
+        assert!(uses_vulkan("armsx2", &chosen));
         assert!(!choose(&mut chosen, &graphics_key("snes9x"), 1));
         assert!(!uses_vulkan("snes9x", &chosen));
     }

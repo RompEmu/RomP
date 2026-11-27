@@ -35,6 +35,17 @@ pub struct LookOptions {
 }
 type Saved = Result<PathBuf, String>;
 
+/// How a game's Vulkan graphics let it down.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GraphicsFailure {
+    /// The runner said so, and why.
+    Reported(String),
+    /// The runner died without a word before showing a frame, as a graphics driver can make it.
+    Unconfirmed,
+}
+
+pub type GraphicsFailed = Box<dyn Fn(GraphicsFailure)>;
+
 pub struct GameOptions {
     pub core: PathBuf,
     pub rom: PathBuf,
@@ -43,6 +54,10 @@ pub struct GameOptions {
     pub title: String,
     pub jit: bool,
     pub vulkan: bool,
+    /// Told when Vulkan fails, for a game that can be played again without it; the game then
+    /// closes by itself.
+    pub graphics_failed: Option<GraphicsFailed>,
+    pub first_frame: Box<dyn Fn()>,
     pub options: Vec<(String, String)>,
     pub split_screens: bool,
     pub gamepads: Rc<RefCell<Gamepads>>,
@@ -95,6 +110,13 @@ impl RunningGame {
     pub fn save_placements(&self) {
         if let Self::Core(core) = self {
             core.game.save_placements();
+        }
+    }
+
+    /// Shows a line in the game's window for long enough to read.
+    pub fn notify(&self, text: &str) {
+        if let Self::Core(core) = self {
+            flash_for(core.game.primary(), text.to_string(), NOTICE_FOR);
         }
     }
 }
@@ -151,6 +173,8 @@ pub fn run(
             title,
             jit,
             vulkan,
+            graphics_failed: None,
+            first_frame: Box::new(|| {}),
             options: Vec::new(),
             split_screens: false,
             gamepads: Rc::new(RefCell::new(Gamepads::new())),
@@ -189,6 +213,19 @@ pub fn run(
 pub type CoreIdentity = (String, String);
 
 const RESUME_GRACE: Duration = Duration::from_secs(20);
+const NOTICE_FOR: Duration = Duration::from_secs(8);
+
+/// Whether the runner's end looks like a graphics driver taking it down: on Vulkan, before any
+/// frame, with no error of its own, and not while loading a save that could be to blame.
+fn died_early_on_vulkan(
+    vulkan: bool,
+    said_why: bool,
+    frame_shown: bool,
+    code: Option<i32>,
+    failed_resume: bool,
+) -> bool {
+    vulkan && !said_why && !frame_shown && code != Some(0) && !failed_resume
+}
 
 struct Game {
     session: RefCell<Session>,
@@ -1374,6 +1411,7 @@ pub fn launch(
     }
 
     let finished = Rc::new(Cell::new(false));
+    let closing = finished.clone();
     let started: Rc<RefCell<Option<CoreIdentity>>> = Rc::default();
     let game = Rc::new_cyclic(|weak: &Weak<Game>| {
         let finish: Rc<dyn Fn()> = Rc::new({
@@ -1485,6 +1523,12 @@ pub fn launch(
         let resumed = opts.load_slot == Some(0);
         let launched = std::time::Instant::now();
         let states_dir = opts.states_dir.clone();
+        let vulkan = opts.vulkan;
+        let graphics_failed = opts.graphics_failed;
+        let first_frame = opts.first_frame;
+        let mut frame_shown = false;
+        let mut said_why = false;
+        let mut vulkan_reported = false;
         move || {
             let Some(game) = weak.upgrade() else { return };
             let ui = game.primary();
@@ -1562,6 +1606,10 @@ pub fn launch(
                     last_seq = info.seq;
                     fresh = true;
                     frame_count = frame_count.wrapping_add(1);
+                    if !frame_shown {
+                        frame_shown = true;
+                        first_frame();
+                    }
                     shown = Some((info.width, info.height, info.aspect));
                     match (
                         game.windows.get(1),
@@ -1674,11 +1722,38 @@ pub fn launch(
                     }
                     continue;
                 }
+                if let SessionEvent::Runner(RunnerMsg::VulkanFailed { reason }) = event {
+                    tracing::warn!("the emulator's Vulkan graphics failed: {reason}");
+                    said_why = true;
+                    vulkan_reported = true;
+                    if let Some(failed) = &graphics_failed {
+                        failed(GraphicsFailure::Reported(reason));
+                        // No automatic save is written, so its picture stays as it was too.
+                        game.recent_thumbnail.borrow_mut().take();
+                        (game.finish)();
+                    }
+                    continue;
+                }
+                if matches!(
+                    event,
+                    SessionEvent::Runner(RunnerMsg::Exited { error: Some(_) })
+                ) {
+                    said_why = true;
+                }
                 let started_now = matches!(event, SessionEvent::Runner(RunnerMsg::Started { .. }));
+                // A runner stopped by its graphics didn't fail to load the save.
                 let failed_resume = resumed
+                    && !vulkan_reported
                     && launched.elapsed() < RESUME_GRACE
                     && matches!(event, SessionEvent::Ended { code, .. } if code != Some(0));
+                let died_early = !closing.get()
+                    && matches!(&event, SessionEvent::Ended { code, .. }
+                        if died_early_on_vulkan(vulkan, said_why, frame_shown, *code, failed_resume));
                 handle_event(ui, event, &game.finish, &started);
+                if let (true, Some(failed)) = (died_early, &graphics_failed) {
+                    failed(GraphicsFailure::Unconfirmed);
+                    (game.finish)();
+                }
                 if failed_resume {
                     if let Err(e) = crate::saves::set_aside_auto_state(&states_dir) {
                         tracing::warn!("setting aside the automatic save: {e}");
@@ -2032,9 +2107,13 @@ fn handle_event(
 }
 
 fn flash(ui: &GameWindow, text: String) {
+    flash_for(ui, text, Duration::from_secs(2));
+}
+
+fn flash_for(ui: &GameWindow, text: String, shown_for: Duration) {
     ui.set_status(text.into());
     let ui = ui.as_weak();
-    Timer::single_shot(Duration::from_secs(2), move || {
+    Timer::single_shot(shown_for, move || {
         if let Some(ui) = ui.upgrade() {
             ui.set_status("".into());
         }
@@ -2053,6 +2132,18 @@ pub fn split_frame(rgba: &[u8], width: u32, height: u32) -> Option<(&[u8], &[u8]
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_a_silent_death_before_the_first_frame_on_vulkan_blames_the_graphics() {
+        use super::died_early_on_vulkan as died;
+        assert!(died(true, false, false, Some(1), false));
+        assert!(died(true, false, false, None, false), "killed by a signal");
+        assert!(!died(false, false, false, Some(1), false), "on OpenGL");
+        assert!(!died(true, true, false, Some(1), false), "it said why");
+        assert!(!died(true, false, true, Some(1), false), "it had drawn");
+        assert!(!died(true, false, false, Some(0), false), "it closed");
+        assert!(!died(true, false, false, Some(1), true), "a bad resume");
+    }
+
     use super::*;
 
     #[test]

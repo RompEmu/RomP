@@ -272,6 +272,7 @@ impl Controller {
         if let Some(detail) = self.current_game().filter(|d| d.id == id) {
             self.show_save_slots(&detail);
         }
+        self.retry_without_vulkan();
     }
 
     pub(super) fn sync_pending(&self) {

@@ -24,6 +24,8 @@ use std::sync::Arc;
 use tr::tr;
 
 const SIMILAR_LIMIT: u32 = 12;
+/// How long a game that lost its graphics gets to close before it's started again.
+const RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(4);
 
 pub(super) struct GameState {
     detail: GameDetail,
@@ -617,6 +619,16 @@ impl Controller {
 
     /// Plays the current game, from a save slot when one is given.
     pub(super) fn play_game_from(&self, slot: Option<u8>) {
+        if self.running.borrow().is_none() && !self.preparing.get() {
+            // The player starting a game themselves ends whatever a failed Vulkan had lined up.
+            self.graphics_retry.take();
+            self.opengl_trial.take();
+            self.graphics_notice.take();
+        }
+        self.prepare_game(slot);
+    }
+
+    fn prepare_game(&self, slot: Option<u8>) {
         let Some(ui) = self.ui() else { return };
         let Some(detail) = self.current_game() else {
             return;
@@ -1238,6 +1250,7 @@ impl Controller {
         let achievements = self.achievements_launch(&detail);
         let hardcore = achievements.as_ref().is_some_and(|a| a.hardcore);
         let requested = self.requested_slot.take().filter(|_| !hardcore && states);
+        self.played_slot.set(requested);
         let load_slot = requested.or_else(|| {
             (reliable
                 && prefs.resume
@@ -1248,13 +1261,19 @@ impl Controller {
         let game_mappings = Rc::new(RefCell::new(
             self.mappings.borrow().for_console(&detail.platform_slug),
         ));
-        let choices = self.console_choices();
+        let mut choices = self.console_choices();
+        let trying = self.opengl_trial.take().filter(|id| *id == core.id);
+        if trying.is_some() {
+            crate::console_settings::use_opengl(&mut choices, core.id);
+        }
         let vulkan = crate::console_settings::uses_vulkan(core.id, &choices);
         tracing::info!(
             emulator = core.id,
             graphics = if vulkan { "vulkan" } else { "opengl" },
             reason = if vulkan {
                 "Vulkan works here"
+            } else if trying.is_some() {
+                "trying OpenGL after the game died on Vulkan"
             } else if crate::cores::has_graphics_choice(core.id) {
                 "set to OpenGL"
             } else {
@@ -1270,6 +1289,18 @@ impl Controller {
             title: detail.title.clone(),
             jit: core.jit,
             vulkan,
+            graphics_failed: (vulkan && crate::cores::has_graphics_choice(core.id)).then(|| {
+                Box::new(move |failure| {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        with_controller(|c| c.graphics_failed(core, failure));
+                    });
+                }) as play::GraphicsFailed
+            }),
+            first_frame: Box::new(move || {
+                let _ = slint::invoke_from_event_loop(move || {
+                    with_controller(|c| c.first_frame_shown(core));
+                });
+            }),
             options: crate::cores::with_platform_options(
                 &detail.platform_slug,
                 crate::console_settings::core_options(core.id, &choices),
@@ -1353,17 +1384,111 @@ impl Controller {
                 self.game_status(detail.id, String::new());
                 self.record_play(detail.id);
                 *self.playing.borrow_mut() = Some(detail);
+                self.opengl_trying.set(trying);
             }
-            Err(e) => self.game_status(
-                detail.id,
-                tr!("Could not start the game: {e}", e = format!("{e:#}")),
-            ),
+            Err(e) => {
+                self.graphics_notice.take();
+                self.game_status(
+                    detail.id,
+                    tr!("Could not start the game: {e}", e = format!("{e:#}")),
+                );
+            }
+        }
+    }
+
+    /// Vulkan let the running game down, so it's played again without it once it has closed.
+    fn graphics_failed(&self, core: &'static CoreInfo, failure: play::GraphicsFailure) {
+        let Some(id) = self.playing.borrow().as_ref().map(|d| d.id) else {
+            return;
+        };
+        match failure {
+            play::GraphicsFailure::Reported(reason) => {
+                tracing::warn!(
+                    emulator = core.id,
+                    %reason,
+                    "Vulkan failed, so the emulator is set to OpenGL and the game starts again"
+                );
+                self.keep_on_opengl(core);
+                self.graphics_retry.set(Some((id, None)));
+            }
+            play::GraphicsFailure::Unconfirmed => {
+                tracing::warn!(
+                    emulator = core.id,
+                    "the emulator died on Vulkan before its first frame, so the game is tried once on OpenGL"
+                );
+                self.graphics_retry.set(Some((id, Some(core.id))));
+            }
+        }
+    }
+
+    fn keep_on_opengl(&self, core: &'static CoreInfo) {
+        let mut chosen = self.console_choices();
+        crate::console_settings::use_opengl(&mut chosen, core.id);
+        let json = serde_json::to_string(&chosen).expect("console settings serialize");
+        self.shared
+            .store
+            .lock()
+            .unwrap()
+            .set(crate::console_settings::STORE_KEY, &json);
+        self.show_consoles();
+        *self.graphics_notice.borrow_mut() = Some(tr!(
+            "{name}'s Vulkan graphics stopped working, so it now uses OpenGL. You can change it back under Graphics in the Consoles part of Settings.",
+            name = core.name
+        ));
+    }
+
+    /// Starts the game whose Vulkan graphics failed again, once nothing of it is still running
+    /// or syncing, and only while its page is still the one open.
+    pub(super) fn retry_without_vulkan(&self) {
+        if self.running.borrow().is_some() || self.syncing_game.get().is_some() {
+            return;
+        }
+        let Some((id, trial)) = self.graphics_retry.take() else {
+            return;
+        };
+        if self.current_game().map(|g| g.id) != Some(id) {
+            self.graphics_notice.take();
+            return;
+        }
+        self.opengl_trial.set(trial);
+        self.prepare_game(self.played_slot.get());
+    }
+
+    fn first_frame_shown(&self, core: &'static CoreInfo) {
+        if self.opengl_trying.take() == Some(core.id) {
+            tracing::info!(
+                emulator = core.id,
+                "OpenGL showed a picture where Vulkan died, so the emulator stays on OpenGL"
+            );
+            self.keep_on_opengl(core);
+        }
+        let Some(notice) = self.graphics_notice.take() else {
+            return;
+        };
+        if let Some(running) = self.running.borrow().as_ref() {
+            running.notify(&notice);
+        }
+        let playing = self.playing.borrow().as_ref().map(|d| d.id);
+        if let Some(id) = playing {
+            self.game_status(id, notice);
         }
     }
 
     fn game_closed(&self, core: Option<&'static CoreInfo>, identity: Option<CoreIdentity>) {
-        self.running.borrow_mut().take();
+        let running = self.running.borrow_mut().take();
         self.game_mappings.borrow_mut().take();
+        self.opengl_trying.take();
+        if let (Some(running), Some(_)) = (&running, self.graphics_retry.get()) {
+            // The game starts again on the same saves, so the old emulator has to be gone first.
+            running.wait_exit(RETRY_AFTER);
+        }
+        // Set when the emulator was moved to OpenGL and its game then never showed a picture.
+        let unseen_notice = self
+            .graphics_retry
+            .get()
+            .is_none()
+            .then(|| self.graphics_notice.take())
+            .flatten();
         self.end_session();
         self.pump_installs();
         self.save_players();
@@ -1380,8 +1505,13 @@ impl Controller {
             self.refresh_romm_achievements();
         }
         if let Some(detail) = playing {
+            let id = detail.id;
             self.after_play(detail, core, identity);
+            if let Some(notice) = unseen_notice {
+                self.game_status(id, notice);
+            }
         }
+        self.retry_without_vulkan();
     }
 
     pub(super) fn delete_game(&self) {
