@@ -227,19 +227,41 @@ fn unique_id() -> String {
     )
 }
 
+/// What macOS's OpenGL prints for every shader an emulator links, hundreds of times a game,
+/// about names the shader simply doesn't use.
+fn is_shader_chatter(line: &str) -> bool {
+    line.starts_with("WARNING: Could not find")
+        && (line.ends_with("to match BindAttributeLocation request.")
+            || line.ends_with("to match FragDataBinding request."))
+}
+
 fn spawn_log_reader(stderr: ChildStderr, tail: Arc<Mutex<VecDeque<String>>>) -> JoinHandle<()> {
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stderr);
         let mut raw = Vec::new();
+        let mut chatter: u32 = 0;
         while matches!(reader.read_until(b'\n', &mut raw), Ok(n) if n > 0) {
             let line = String::from_utf8_lossy(&raw).trim_end().to_string();
             raw.clear();
+            if is_shader_chatter(&line) {
+                chatter += 1;
+                if chatter > 1 {
+                    continue;
+                }
+            }
             tracing::info!(target: "runner", "{line}");
             let mut tail = tail.lock().unwrap();
             if tail.len() == LOG_TAIL {
                 tail.pop_front();
             }
             tail.push_back(line);
+        }
+        if chatter > 1 {
+            tracing::info!(
+                target: "runner",
+                "left out {} more OpenGL shader warnings like the first",
+                chatter - 1
+            );
         }
     })
 }
@@ -268,6 +290,20 @@ fn accept(listener: &UnixListener, child: &mut Child) -> Result<UnixStream> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_opengl_shader_warnings_count_as_chatter() {
+        assert!(is_shader_chatter(
+            "WARNING: Could not find vertex shader attribute 'rawtex4' to match BindAttributeLocation request."
+        ));
+        assert!(is_shader_chatter(
+            "WARNING: Could not find fragment shader output 'ocol1' to match FragDataBinding request."
+        ));
+        assert!(!is_shader_chatter("WARNING: Could not find the game"));
+        assert!(!is_shader_chatter(
+            "[core L2] Suppressed popup: Warning - Failed to load Vulkan library."
+        ));
+    }
 
     fn config(runner: PathBuf) -> SessionConfig {
         SessionConfig {
