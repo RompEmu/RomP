@@ -1,5 +1,6 @@
 use crate::cores::{
-    choices_for_platform, core_for_platform_with, default_options, uses_vulkan, CoreInfo,
+    choices_for_platform, core_for_platform_with, default_options, has_graphics_choice,
+    vulkan_available, CoreInfo,
 };
 use crate::gettext_noop;
 use std::collections::BTreeMap;
@@ -13,6 +14,15 @@ pub const EMULATOR_LABEL: &str = gettext_noop!("Emulator core");
 pub const EMULATOR_DETAIL: &str = gettext_noop!(
     "Swaps the emulator that runs this console's games. Achievements work best with Beetle."
 );
+
+/// Whether an emulator draws through Vulkan or OpenGL is kept under this prefix, by emulator.
+pub const GRAPHICS_KEY_PREFIX: &str = "graphics:";
+pub const GRAPHICS_LABEL: &str = gettext_noop!("Graphics");
+pub const GRAPHICS_DETAIL: &str = gettext_noop!(
+    "Vulkan is usually faster and sharper. RomP switches to OpenGL by itself when Vulkan stops working."
+);
+pub const GRAPHICS_CHOICES: [&str; 2] = ["Vulkan", "OpenGL"];
+const GRAPHICS_VALUES: [&str; 2] = ["vulkan", "opengl"];
 
 pub struct Choice {
     pub label: &'static str,
@@ -242,6 +252,26 @@ pub fn core_key(platform: &str) -> String {
     format!("{CORE_KEY_PREFIX}{platform}")
 }
 
+/// The key an emulator's graphics choice is stored under.
+pub fn graphics_key(core_id: &str) -> String {
+    format!("{GRAPHICS_KEY_PREFIX}{core_id}")
+}
+
+/// Which of `GRAPHICS_CHOICES` the emulator is set to; Vulkan until chosen otherwise.
+pub fn graphics_selected(chosen: &Chosen, core_id: &str) -> usize {
+    chosen
+        .get(&graphics_key(core_id))
+        .and_then(|v| GRAPHICS_VALUES.iter().position(|g| g == v))
+        .unwrap_or(0)
+}
+
+/// Whether the emulator draws through Vulkan: this computer can, and the player hasn't chosen
+/// OpenGL for it.
+pub fn uses_vulkan(core_id: &str, chosen: &Chosen) -> bool {
+    vulkan_available(core_id)
+        && !(has_graphics_choice(core_id) && graphics_selected(chosen, core_id) == 1)
+}
+
 /// The cores this computer can run a console on; more than one means the console offers a choice.
 pub fn cores_for(platform: &str) -> Vec<&'static CoreInfo> {
     choices_for_platform(platform).collect()
@@ -265,7 +295,7 @@ pub fn console_groups(chosen: &Chosen) -> impl Iterator<Item = &'static Console>
 
 /// The consoles whose emulator on this computer has settings, set up for the chosen core.
 pub fn consoles(chosen: &Chosen) -> impl Iterator<Item = &'static Console> + use<'_> {
-    console_groups(chosen).filter(|c| !c.vulkan || uses_vulkan(c.core))
+    console_groups(chosen).filter(|c| !c.vulkan || uses_vulkan(c.core, chosen))
 }
 
 pub type Chosen = BTreeMap<String, String>;
@@ -291,6 +321,16 @@ pub fn choose(chosen: &mut Chosen, key: &str, index: usize) -> bool {
         chosen.insert(key.to_string(), core.id.to_string());
         return true;
     }
+    if let Some(core_id) = key.strip_prefix(GRAPHICS_KEY_PREFIX) {
+        let Some(value) = GRAPHICS_VALUES
+            .get(index)
+            .filter(|_| has_graphics_choice(core_id))
+        else {
+            return false;
+        };
+        chosen.insert(key.to_string(), value.to_string());
+        return true;
+    }
     let Some(setting) = CONSOLES
         .iter()
         .flat_map(|c| c.settings)
@@ -307,7 +347,7 @@ pub fn choose(chosen: &mut Chosen, key: &str, index: usize) -> bool {
 
 /// The core options a game starts with: the core's own defaults, then its console settings.
 pub fn core_options(core_id: &str, chosen: &Chosen) -> Vec<(String, String)> {
-    let mut options = default_options(core_id);
+    let mut options = default_options(core_id, uses_vulkan(core_id, chosen));
     for setting in consoles(chosen)
         .filter(|c| c.core == core_id)
         .flat_map(|c| c.settings)
@@ -497,7 +537,7 @@ mod tests {
         };
         assert_eq!(
             shown(&Chosen::new()),
-            if uses_vulkan("mednafen_psx_hw") {
+            if vulkan_available("mednafen_psx_hw") {
                 vec!["mednafen_psx_hw"]
             } else {
                 vec![]
@@ -505,16 +545,60 @@ mod tests {
         );
         assert_eq!(
             shown(&chosen),
-            if uses_vulkan("swanstation") {
+            if vulkan_available("swanstation") {
                 groups(&chosen)
             } else {
                 vec![]
             }
         );
-        if uses_vulkan("swanstation") {
+        if vulkan_available("swanstation") {
             let options = core_options("swanstation", &chosen);
             assert!(options.contains(&("swanstation_GPU_ResolutionScale".into(), "2".into())));
         }
+    }
+
+    #[test]
+    fn an_emulator_set_to_opengl_leaves_vulkan_and_its_settings() {
+        let mut chosen = Chosen::new();
+        let key = graphics_key("swanstation");
+        assert_eq!(graphics_selected(&chosen, "swanstation"), 0);
+        assert_eq!(
+            uses_vulkan("swanstation", &chosen),
+            vulkan_available("swanstation")
+        );
+        assert!(!choose(&mut chosen, &key, 2));
+        assert_eq!(
+            choose(&mut chosen, &key, 1),
+            has_graphics_choice("swanstation")
+        );
+        if !has_graphics_choice("swanstation") {
+            return;
+        }
+        assert_eq!(graphics_selected(&chosen, "swanstation"), 1);
+        assert!(!uses_vulkan("swanstation", &chosen));
+        assert_eq!(
+            uses_vulkan("mednafen_psx_hw", &chosen),
+            vulkan_available("mednafen_psx_hw"),
+            "the other PlayStation emulator keeps its own choice"
+        );
+        let options = core_options("swanstation", &chosen);
+        assert!(options.contains(&("swanstation_GPU_Renderer".into(), "OpenGL".into())));
+        assert!(!options
+            .iter()
+            .any(|(k, _)| k == "swanstation_GPU_ResolutionScale"));
+        chosen.insert(core_key("psx"), "swanstation".into());
+        assert!(consoles(&chosen).all(|c| c.core != "swanstation"));
+
+        assert!(choose(&mut chosen, &key, 0));
+        assert!(uses_vulkan("swanstation", &chosen));
+    }
+
+    #[test]
+    fn the_emulator_that_only_draws_through_vulkan_has_no_choice() {
+        let mut chosen = Chosen::new();
+        assert!(!choose(&mut chosen, &graphics_key("armsx2"), 1));
+        assert!(!choose(&mut chosen, &graphics_key("snes9x"), 1));
+        assert!(!uses_vulkan("snes9x", &chosen));
     }
 
     #[test]

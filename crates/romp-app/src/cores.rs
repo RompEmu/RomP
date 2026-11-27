@@ -412,8 +412,14 @@ fn vulkan_options(core_id: &str) -> Option<&'static [(&'static str, &'static str
         .map(|core| core.options)
 }
 
-pub fn uses_vulkan(core_id: &str) -> bool {
+/// Whether this computer can draw the core through Vulkan.
+pub fn vulkan_available(core_id: &str) -> bool {
     vulkan_options(core_id).is_some()
+}
+
+/// Whether the core can also draw through OpenGL here, which leaves the player a choice.
+pub fn has_graphics_choice(core_id: &str) -> bool {
+    core_id != ARMSX2.id && vulkan_available(core_id)
 }
 
 pub fn download_base(core: &CoreInfo) -> &'static str {
@@ -462,7 +468,7 @@ pub fn buildbot_url(base: &str, core: &CoreInfo) -> String {
     format!("{base}/{target}/latest/{}.zip", lib_file(core))
 }
 
-pub fn default_options(core_id: &str) -> Vec<(String, String)> {
+pub fn default_options(core_id: &str, vulkan: bool) -> Vec<(String, String)> {
     let options: &[(&str, &str)] = match core_id {
         "puae" => &[
             // Automatic picks the model a file's name asks for, such as an A1200 for "AGA".
@@ -503,7 +509,9 @@ pub fn default_options(core_id: &str) -> Vec<(String, String)> {
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
-    set_options(&mut options, vulkan_options(core_id).unwrap_or_default());
+    if vulkan {
+        set_options(&mut options, vulkan_options(core_id).unwrap_or_default());
+    }
     options
 }
 
@@ -866,7 +874,7 @@ mod tests {
         assert!(["vice_xvic", "vice_xplus4", "vice_x128"]
             .into_iter()
             .all(|id| is_computer(id)
-                && default_options(id)
+                && default_options(id, vulkan_available(id))
                     .contains(&("vice_drive_true_emulation".into(), "disabled".into()))));
         assert_eq!(core_for_platform("philips-cd-i").unwrap().id, "same_cdi");
         for slug in ["arcade", "neogeoaes", "cps2"] {
@@ -877,9 +885,9 @@ mod tests {
     #[test]
     fn cores_draw_with_vulkan_where_it_works() {
         let vulkan = crate::vulkan::available();
-        assert!(uses_vulkan("armsx2"));
-        assert!(!uses_vulkan("snes9x"));
-        assert_eq!(uses_vulkan("dolphin"), crate::vulkan::presents());
+        assert!(vulkan_available("armsx2") && !has_graphics_choice("armsx2"));
+        assert!(!vulkan_available("snes9x") && !has_graphics_choice("snes9x"));
+        assert_eq!(vulkan_available("dolphin"), crate::vulkan::presents());
         for core in [
             "flycast",
             "mednafen_psx_hw",
@@ -888,15 +896,24 @@ mod tests {
             "pcsx2",
             "swanstation",
         ] {
-            assert_eq!(uses_vulkan(core), vulkan, "{core}");
+            assert_eq!(vulkan_available(core), vulkan, "{core}");
+            assert_eq!(has_graphics_choice(core), vulkan, "{core}");
+            let opengl = default_options(core, false);
+            assert!(
+                vulkan_options(core)
+                    .unwrap_or_default()
+                    .iter()
+                    .all(|(k, v)| !opengl.contains(&(k.to_string(), v.to_string()))),
+                "{core} keeps its Vulkan renderer when told to use OpenGL"
+            );
         }
-        let n64 = default_options("mupen64plus_next");
+        let n64 = default_options("mupen64plus_next", vulkan_available("mupen64plus_next"));
         let rdp = n64.iter().find(|(k, _)| k == "mupen64plus-rdp-plugin");
         assert_eq!(rdp.map(|(_, v)| v.as_str()), vulkan.then_some("parallel"));
-        let ps2 = default_options("pcsx2");
+        let ps2 = default_options("pcsx2", vulkan_available("pcsx2"));
         let renderer = ps2.iter().filter(|(k, _)| k == "pcsx2_renderer").count();
         assert_eq!(renderer, 1, "one renderer choice, Vulkan replacing OpenGL");
-        let swanstation = default_options("swanstation");
+        let swanstation = default_options("swanstation", vulkan_available("swanstation"));
         let renderers: Vec<_> = swanstation
             .iter()
             .filter(|(k, _)| k == "swanstation_GPU_Renderer")
@@ -911,8 +928,10 @@ mod tests {
             "swanstation_MemoryCards_Card1Type".into(),
             "Libretro".into()
         )));
-        assert!(default_options("mednafen_psx_hw")
-            .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
+        assert!(
+            default_options("mednafen_psx_hw", vulkan_available("mednafen_psx_hw"))
+                .contains(&("beetle_psx_analog_toggle".into(), "enabled".into()))
+        );
         assert_eq!(download_base(&ARMSX2), ARMSX2_RELEASE);
         assert_eq!(download_base(core_for_platform("snes").unwrap()), BUILDBOT);
         if cfg!(target_os = "macos") {
@@ -1153,26 +1172,30 @@ mod tests {
 
     #[test]
     fn amiga_defaults_boot_a_real_kickstart() {
-        let options = default_options("puae");
+        let options = default_options("puae", vulkan_available("puae"));
         assert!(options.contains(&("puae_kickstart".into(), "auto".into())));
         assert!(options.contains(&("puae_model".into(), "auto".into())));
         assert!(options.contains(&("puae_model_fd".into(), "A600".into())));
         assert!(options.contains(&("puae_immediate_blits".into(), "immediate".into())));
-        assert!(default_options("mednafen_psx_hw")
-            .contains(&("beetle_psx_analog_toggle".into(), "enabled".into())));
-        assert!(default_options("snes9x").is_empty());
+        assert!(
+            default_options("mednafen_psx_hw", vulkan_available("mednafen_psx_hw"))
+                .contains(&("beetle_psx_analog_toggle".into(), "enabled".into()))
+        );
+        assert!(default_options("snes9x", vulkan_available("snes9x")).is_empty());
     }
 
     #[test]
     fn the_cd32_and_cdtv_run_puae_as_themselves() {
         for (slug, model) in [("amiga-cd32", "CD32"), ("commodore-cdtv", "CDTV")] {
             assert_eq!(core_for_platform(slug).unwrap().id, "puae");
-            let options = with_platform_options(slug, default_options("puae"));
+            let options =
+                with_platform_options(slug, default_options("puae", vulkan_available("puae")));
             assert!(options.contains(&("puae_model".into(), model.into())));
             assert!(options.contains(&("puae_fastmem_size".into(), "auto".into())));
             assert!(options.contains(&("puae_kickstart".into(), "auto".into())));
         }
-        let amiga = with_platform_options("amiga", default_options("puae"));
-        assert_eq!(amiga, default_options("puae"));
+        let amiga =
+            with_platform_options("amiga", default_options("puae", vulkan_available("puae")));
+        assert_eq!(amiga, default_options("puae", vulkan_available("puae")));
     }
 }

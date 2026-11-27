@@ -1248,6 +1248,20 @@ impl Controller {
         let game_mappings = Rc::new(RefCell::new(
             self.mappings.borrow().for_console(&detail.platform_slug),
         ));
+        let choices = self.console_choices();
+        let vulkan = crate::console_settings::uses_vulkan(core.id, &choices);
+        tracing::info!(
+            emulator = core.id,
+            graphics = if vulkan { "vulkan" } else { "opengl" },
+            reason = if vulkan {
+                "Vulkan works here"
+            } else if crate::cores::has_graphics_choice(core.id) {
+                "set to OpenGL"
+            } else {
+                "no Vulkan for this emulator here"
+            },
+            "graphics chosen"
+        );
         let options = GameOptions {
             core: core_path,
             rom,
@@ -1255,10 +1269,10 @@ impl Controller {
             states_dir,
             title: detail.title.clone(),
             jit: core.jit,
-            vulkan: crate::cores::uses_vulkan(core.id),
+            vulkan,
             options: crate::cores::with_platform_options(
                 &detail.platform_slug,
-                crate::console_settings::core_options(core.id, &self.console_choices()),
+                crate::console_settings::core_options(core.id, &choices),
             ),
             split_screens: core.id == "melondsds",
             gamepads: self.gamepads.clone(),

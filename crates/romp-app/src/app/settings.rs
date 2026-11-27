@@ -779,8 +779,21 @@ impl Controller {
                             as i32,
                     });
                 }
+                if crate::cores::has_graphics_choice(console.core) {
+                    options.push(ConsoleOption {
+                        key: console_settings::graphics_key(console.core).into(),
+                        label: translate(console_settings::GRAPHICS_LABEL).into(),
+                        detail: translate(console_settings::GRAPHICS_DETAIL).into(),
+                        choices: ModelRc::new(VecModel::from(
+                            console_settings::GRAPHICS_CHOICES
+                                .map(slint::SharedString::from)
+                                .to_vec(),
+                        )),
+                        current: console_settings::graphics_selected(&chosen, console.core) as i32,
+                    });
+                }
                 // Resolution settings need the Vulkan renderer, which isn't everywhere.
-                if !console.vulkan || crate::cores::uses_vulkan(console.core) {
+                if !console.vulkan || console_settings::uses_vulkan(console.core, &chosen) {
                     options.extend(console.settings.iter().map(|setting| {
                         ConsoleOption {
                             key: setting.key.into(),
@@ -864,8 +877,10 @@ impl Controller {
                 .lock()
                 .unwrap()
                 .set(console_settings::STORE_KEY, &json);
-            if key.starts_with(console_settings::CORE_KEY_PREFIX) {
-                // The console now lists the other emulator's settings.
+            if key.starts_with(console_settings::CORE_KEY_PREFIX)
+                || key.starts_with(console_settings::GRAPHICS_KEY_PREFIX)
+            {
+                // The console now lists the other emulator's settings, or the ones OpenGL has.
                 self.show_consoles();
             }
         }
