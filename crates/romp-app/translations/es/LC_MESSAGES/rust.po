@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: romp\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-11-24 21:28\n"
+"PO-Revision-Date: 2026-11-27 21:09\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
@@ -223,6 +223,10 @@ msgstr ""
 #: crates/romp-app/src/app/game.rs
 msgid "Could not start the game: {e}"
 msgstr "No se pudo iniciar el juego: {e}"
+
+#: crates/romp-app/src/app/game.rs
+msgid "{name}'s Vulkan graphics stopped working, so it now uses OpenGL. You can change it back under Graphics in the Consoles part of Settings."
+msgstr ""
 
 #: crates/romp-app/src/installs.rs
 msgid "{n} more waiting"
@@ -808,6 +812,14 @@ msgstr ""
 
 #: crates/romp-app/src/console_settings.rs
 msgid "Swaps the emulator that runs this console's games. Achievements work best with Beetle."
+msgstr ""
+
+#: crates/romp-app/src/console_settings.rs
+msgid "Graphics"
+msgstr ""
+
+#: crates/romp-app/src/console_settings.rs
+msgid "Vulkan is usually faster and sharper. RomP switches to OpenGL by itself when Vulkan stops working."
 msgstr ""
 
 #: crates/romp-app/src/console_settings.rs
