@@ -3,7 +3,7 @@ use ash::vk;
 use parking_lot::lock_api::RawMutex as _;
 use parking_lot::{Mutex, RawMutex};
 use romp_libretro::{HwContextProvider, RETRO_HW_CONTEXT_VULKAN};
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::ffi::{c_char, c_uint, c_void, CStr};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -119,7 +119,16 @@ fn readback_memory(types: &[vk::MemoryPropertyFlags], allowed: u32) -> Option<(u
     })
 }
 
+/// A frame copy can fail once, as when memory runs short for a moment; this many in a row
+/// means no picture is coming.
+const FAILED_COPIES: u32 = 30;
+
 const NVIDIA: u32 = 0x10de;
+
+/// A lost device stays lost, so there's nothing to wait for.
+fn is_device_lost(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<vk::Result>() == Some(&vk::Result::ERROR_DEVICE_LOST)
+}
 
 /// NVIDIA packs its driver version its own way; the rest follow Vulkan's.
 fn driver_version(vendor_id: u32, raw: u32) -> String {
@@ -167,6 +176,7 @@ pub struct HwVulkanContext {
     pending: Mutex<Pending>,
     queue_lock: RawMutex,
     failed: RefCell<Option<String>>,
+    failed_copies: Cell<u32>,
 }
 
 // SAFETY: the core only reaches this from other threads through lock_queue and unlock_queue,
@@ -316,6 +326,7 @@ impl HwVulkanContext {
             pending: Mutex::new(Pending::default()),
             queue_lock: RawMutex::INIT,
             failed: RefCell::new(None),
+            failed_copies: Cell::new(0),
         })
     }
 
@@ -941,10 +952,23 @@ impl HwContextProvider for HwVulkanContext {
         let Some(image) = image else {
             return vec![0; width as usize * height as usize * 4];
         };
-        self.copy_out(image, width, height).unwrap_or_else(|e| {
-            self.fail(format!("copying the frame out: {e:#}"));
-            vec![0; width as usize * height as usize * 4]
-        })
+        match self.copy_out(image, width, height) {
+            Ok(pixels) => {
+                self.failed_copies.set(0);
+                pixels
+            }
+            Err(e) => {
+                let failed = self.failed_copies.get() + 1;
+                self.failed_copies.set(failed);
+                if failed == 1 {
+                    tracing::warn!("Vulkan readback: {e:#}");
+                }
+                if failed >= FAILED_COPIES || is_device_lost(&e) {
+                    self.fail(format!("copying the frame out: {e:#}"));
+                }
+                vec![0; width as usize * height as usize * 4]
+            }
+        }
     }
 
     fn failure(&self) -> Option<String> {
@@ -1341,11 +1365,26 @@ mod tests {
             create_info: vk::ImageViewCreateInfo::default().format(vk::Format::D32_SFLOAT),
         };
         unsafe { (iface.set_image)(iface.handle, &frame, 0, std::ptr::null(), 0) };
-        assert!(ctx.readback_bgra(2, 2).iter().all(|&b| b == 0));
+        for _ in 1..FAILED_COPIES {
+            assert!(ctx.readback_bgra(2, 2).iter().all(|&b| b == 0));
+        }
+        assert_eq!(ctx.failure(), None, "a few failed copies can still recover");
+        ctx.readback_bgra(2, 2);
         let first = ctx.failure().expect("a failure");
         assert!(first.contains("unsupported scanout format"), "{first}");
         ctx.readback_bgra(2, 2);
         assert_eq!(ctx.failure(), Some(first));
+    }
+
+    #[test]
+    fn a_lost_device_is_told_from_other_errors_through_its_context() {
+        let lost = anyhow::Error::from(vk::Result::ERROR_DEVICE_LOST).context("vkQueueSubmit");
+        assert!(is_device_lost(&lost));
+        let other = anyhow::Error::from(vk::Result::ERROR_OUT_OF_DEVICE_MEMORY).context("x");
+        assert!(!is_device_lost(&other));
+        assert!(!is_device_lost(&anyhow::anyhow!(
+            "unsupported scanout format"
+        )));
     }
 
     #[test]
