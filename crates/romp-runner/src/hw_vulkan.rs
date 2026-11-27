@@ -150,6 +150,7 @@ pub struct HwVulkanContext {
     interface: OnceCell<Box<RenderInterface>>,
     pending: Mutex<Pending>,
     queue_lock: RawMutex,
+    failed: RefCell<Option<String>>,
 }
 
 // SAFETY: the core only reaches this from other threads through lock_queue and unlock_queue,
@@ -292,6 +293,7 @@ impl HwVulkanContext {
             interface: OnceCell::new(),
             pending: Mutex::new(Pending::default()),
             queue_lock: RawMutex::INIT,
+            failed: RefCell::new(None),
         })
     }
 
@@ -428,6 +430,15 @@ impl HwVulkanContext {
             last_scanout: None,
             readback_timing: None,
         })
+    }
+
+    /// Keeps the first failure, which is the one that explains the rest.
+    fn fail(&self, reason: String) {
+        let mut failed = self.failed.borrow_mut();
+        if failed.is_none() {
+            tracing::error!("Vulkan failed: {reason}");
+            *failed = Some(reason);
+        }
     }
 
     fn readback_buffer(&self, state: &mut DeviceState, size: u64) -> anyhow::Result<*const u8> {
@@ -895,13 +906,13 @@ impl HwContextProvider for HwVulkanContext {
             return vec![0; width as usize * height as usize * 4];
         };
         self.copy_out(image, width, height).unwrap_or_else(|e| {
-            static WARNED: std::sync::atomic::AtomicBool =
-                std::sync::atomic::AtomicBool::new(false);
-            if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                tracing::warn!("Vulkan readback: {e}");
-            }
+            self.fail(format!("copying the frame out: {e:#}"));
             vec![0; width as usize * height as usize * 4]
         })
+    }
+
+    fn failure(&self) -> Option<String> {
+        self.failed.borrow().clone()
     }
 
     fn take_readback_timing(&self) -> Option<(Duration, Duration)> {
@@ -937,7 +948,11 @@ impl HwContextProvider for HwVulkanContext {
         let state = self
             .create_device()
             .and_then(|context| self.state_for(&context))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                let reason = format!("{e:#}");
+                self.fail(format!("creating the device: {reason}"));
+                reason
+            })?;
         let interface = self.render_interface_for(&state);
         *self.state.borrow_mut() = Some(state);
         let _ = self.interface.set(Box::new(interface));
@@ -1260,11 +1275,32 @@ mod tests {
         let pixels = ctx.readback_bgra(4, 2);
         assert!(ctx.take_readback_timing().is_some());
         assert_eq!(ctx.take_readback_timing(), None);
+        assert_eq!(ctx.failure(), None);
         assert_eq!(pixels.len(), 4 * 2 * 4);
         assert!(
             pixels.chunks(4).all(|p| p == [0, 0, 255, 255]),
             "{pixels:?}"
         );
+    }
+
+    #[test]
+    fn a_frame_that_cannot_be_copied_out_is_a_failure() {
+        let Some((_guard, ctx)) = prepared() else {
+            return;
+        };
+        let iface = unsafe { &*(ctx.render_interface() as *const RenderInterface) };
+        assert_eq!(ctx.failure(), None);
+        let frame = RetroVulkanImage {
+            image_view: vk::ImageView::null(),
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            create_info: vk::ImageViewCreateInfo::default().format(vk::Format::D32_SFLOAT),
+        };
+        unsafe { (iface.set_image)(iface.handle, &frame, 0, std::ptr::null(), 0) };
+        assert!(ctx.readback_bgra(2, 2).iter().all(|&b| b == 0));
+        let first = ctx.failure().expect("a failure");
+        assert!(first.contains("unsupported scanout format"), "{first}");
+        ctx.readback_bgra(2, 2);
+        assert_eq!(ctx.failure(), Some(first));
     }
 
     #[test]
@@ -1274,6 +1310,7 @@ mod tests {
         };
         assert!(ctx.readback_bgra(2, 2).iter().all(|&b| b == 0));
         assert_eq!(ctx.take_readback_timing(), None);
+        assert_eq!(ctx.failure(), None);
     }
 
     #[test]

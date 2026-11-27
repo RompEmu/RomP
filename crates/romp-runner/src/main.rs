@@ -10,7 +10,7 @@ use romp_runner::state::{self, StateManager};
 use romp_runner::{archive, audio, hw_gl, hw_vulkan, perf, sandbox};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 const UNLOAD_GRACE: Duration = Duration::from_secs(2);
@@ -143,7 +143,8 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             // Cores that load Vulkan themselves find the same library through this.
             std::env::set_var("LIBVULKAN_PATH", library);
             let ctx = hw_vulkan::HwVulkanContext::create(library)
-                .with_context(|| format!("Vulkan is unavailable ({})", library.display()))?;
+                .with_context(|| format!("Vulkan is unavailable ({})", library.display()))
+                .inspect_err(|e| report_vulkan_failure(link, format!("{e:#}")))?;
             Some(Box::new(ctx))
         }
         None => hw_gl::HwGlContext::create(hw_gl::FBO_WIDTH, hw_gl::FBO_HEIGHT)
@@ -207,8 +208,12 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     if let Some(reset) = lr::take_pending_hw_reset() {
         if let Some(ctx) = &hw_ctx {
             ctx.make_current();
-            lr::with_frontend_installed(frontend, || ctx.prepare())
-                .map_err(|e| anyhow::anyhow!("the game's graphics could not start: {e}"))?;
+            lr::with_frontend_installed(frontend, || ctx.prepare()).map_err(|e| {
+                if let Some(reason) = ctx.failure() {
+                    report_vulkan_failure(link, reason);
+                }
+                anyhow::anyhow!("the game's graphics could not start: {e}")
+            })?;
             lr::with_frontend_installed(frontend, || unsafe { reset() });
         }
     }
@@ -275,6 +280,9 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
     let mut next_frame_at = Instant::now();
     let mut paused = false;
     let mut stop_requested = false;
+    let mut vulkan_failure = None;
+    let mut frames_shown: u64 = 0;
+    let started = Instant::now();
     let mut stats = perf::FrameStats::new(Duration::from_secs(10), Instant::now());
     loop {
         let now = Instant::now();
@@ -405,6 +413,17 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
                         hw_gl::hw_frame_size(frontend.hw_frame_width, frontend.hw_frame_height)
                     };
                     let pixels = ctx.readback_bgra(w, h);
+                    if let Some(reason) = ctx.failure() {
+                        error!(
+                            frames = frames_shown,
+                            ran_ms = started.elapsed().as_millis() as u64,
+                            "stopping the game, as Vulkan failed"
+                        );
+                        report_vulkan_failure(link, reason.clone());
+                        vulkan_failure = Some(reason);
+                        break;
+                    }
+                    frames_shown += 1;
                     frames.write(
                         &pixels,
                         w,
@@ -465,22 +484,34 @@ fn run(args: &Args, frontend: &mut Frontend, link: &Link) -> anyhow::Result<()> 
             next_frame_at = now;
         }
     }
-    if stop_requested {
-        saves.save_on_shutdown(&mut core, frontend, !args.no_auto_state);
+    if stop_requested || vulkan_failure.is_some() {
+        // A core may never finish unloading, least of all one whose graphics device is gone.
         let scratch = archive::scratch_dir(&session_tag);
+        let code = i32::from(vulkan_failure.is_some());
         std::thread::spawn(move || {
             std::thread::sleep(UNLOAD_GRACE);
             let _ = std::fs::remove_dir_all(scratch);
-            std::process::exit(0);
+            std::process::exit(code);
         });
+    }
+    if stop_requested {
+        saves.save_on_shutdown(&mut core, frontend, !args.no_auto_state);
     } else {
+        // A state taken without a working graphics device may not load again.
         saves.flush_sram(&mut core, frontend);
     }
     core.unload_game(frontend);
     lr::uninstall_hw_provider();
     drop(core);
     let _ = std::fs::remove_dir_all(archive::scratch_dir(&session_tag));
-    Ok(())
+    match vulkan_failure {
+        Some(reason) => Err(anyhow::anyhow!("Vulkan failed: {reason}")),
+        None => Ok(()),
+    }
+}
+
+fn report_vulkan_failure(link: &Link, reason: String) {
+    link.send(&RunnerMsg::VulkanFailed { reason });
 }
 
 fn src_format(format: lr::PixelFormat) -> SrcFormat {

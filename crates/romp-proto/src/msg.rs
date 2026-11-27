@@ -173,4 +173,8 @@ pub enum RunnerMsg {
     },
     Achievement(AchievementEvent),
     AchievementList(Vec<AchievementInfo>),
+    /// Vulkan stopped working or never started, and why; the runner stops after saying so.
+    VulkanFailed {
+        reason: String,
+    },
 }
