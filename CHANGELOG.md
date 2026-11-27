@@ -7,11 +7,12 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 ### Added
 
 - PlayStation games can run on SwanStation instead of Beetle PSX HW, chosen under **Emulator core** in the Consoles part of Settings. The memory card follows the game between the two, on RomM too, while each keeps its own save states. Achievements work best with Beetle. Thanks to @Meesayen for bringing in SwanStation.
-- Emulators that draw through Vulkan can be set to OpenGL instead, each on its own, under **Graphics** in the Consoles part of Settings. Vulkan stays the default.
+- Each emulator that draws through Vulkan has a **Graphics** setting in the Consoles part of Settings, to draw through OpenGL instead on a computer where Vulkan gives trouble. Vulkan stays the default, and ARMSX2 only draws through Vulkan.
 
 ### Fixed
 
-- A game whose Vulkan graphics stop working, as GameCube and Wii games did on some NVIDIA cards on Windows, no longer runs on with a black picture until it's closed. RomP switches that emulator to OpenGL, starts the game again and says so, and the log names the graphics driver and the call that failed. ([#57](https://github.com/RompEmu/RomP/issues/57))
+- GameCube and Wii games that lost their Vulkan graphics on some NVIDIA cards on Windows no longer keep running with a black picture and sound. When an emulator's Vulkan graphics fail, RomP switches that emulator to OpenGL, starts the game again and tells you where to change it back. The log now names the graphics driver and what failed. ([#57](https://github.com/RompEmu/RomP/issues/57))
+- The parts of Settings and a game's page scroll all the way to their end when descriptions wrap onto several lines.
 - Arcade, Neo Geo and CPS games play with FinalBurn Neo, and Commodore 64 tapes open in VICE, instead of FinalBurn Neo reporting missing romsets and VICE failing to open the file. RomP told these emulators a successful seek in files had failed. ([#55](https://github.com/RompEmu/RomP/issues/55), [#56](https://github.com/RompEmu/RomP/issues/56))
 
 ## [0.22.0] - 2026-11-15
