@@ -15,3 +15,4 @@ mod sandbox_linux;
 #[cfg(windows)]
 mod sandbox_windows;
 pub mod state;
+pub mod vulkan_device;

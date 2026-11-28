@@ -313,6 +313,7 @@ impl HwVulkanContext {
             (false, true) => "headless",
             (false, false) => "hidden window",
         };
+        crate::vulkan_device::stand_in(&entry, &instance);
         tracing::info!(surface = made, "Vulkan instance created");
         if surface == vk::SurfaceKHR::null() {
             tracing::warn!(
@@ -347,7 +348,7 @@ impl HwVulkanContext {
                     self.instance.handle(),
                     gpu,
                     self.surface,
-                    self._entry.static_fn().get_instance_proc_addr,
+                    crate::vulkan_device::get_instance_proc_addr,
                     std::ptr::null(),
                     0,
                     std::ptr::null(),
@@ -703,7 +704,7 @@ impl HwVulkanContext {
             gpu: state.gpu,
             device: state.device.handle(),
             get_device_proc_addr: self.instance.fp_v1_0().get_device_proc_addr,
-            get_instance_proc_addr: self._entry.static_fn().get_instance_proc_addr,
+            get_instance_proc_addr: crate::vulkan_device::get_instance_proc_addr,
             queue: state.queue,
             queue_index: state.queue_family,
             set_image,
@@ -1324,6 +1325,55 @@ mod tests {
             device.reset_fences(&[state.fence]).unwrap();
         }
         image
+    }
+
+    /// Creates a device the way a core does, with these extensions and no features.
+    fn device_as_a_core(ctx: &HwVulkanContext, extensions: &[*const c_char]) -> vk::Result {
+        let lookup = crate::vulkan_device::get_instance_proc_addr;
+        let found = unsafe { lookup(ctx.instance.handle(), c"vkCreateDevice".as_ptr()) };
+        // SAFETY: the lookup was asked for vkCreateDevice.
+        let create: vk::PFN_vkCreateDevice = unsafe { std::mem::transmute(found.unwrap()) };
+        let gpu = ctx.preferred_physical_device().unwrap();
+        let priorities = [1.0];
+        let queues = [vk::DeviceQueueCreateInfo::default().queue_priorities(&priorities)];
+        let info = vk::DeviceCreateInfo::default()
+            .queue_create_infos(&queues)
+            .enabled_extension_names(extensions);
+        let mut device = vk::Device::null();
+        let result = unsafe { create(gpu, &info, std::ptr::null(), &mut device) };
+        if result == vk::Result::SUCCESS {
+            let device = unsafe { ash::Device::load(ctx.instance.fp_v1_0(), device) };
+            unsafe { device.destroy_device(None) };
+        }
+        result
+    }
+
+    #[test]
+    fn a_core_creates_its_device_through_romp() {
+        let Some((_guard, ctx)) = context() else {
+            return;
+        };
+        assert_eq!(device_as_a_core(&ctx, &[]), vk::Result::SUCCESS);
+    }
+
+    #[test]
+    fn a_core_that_leaves_the_depth_clamp_feature_out_still_gets_its_device() {
+        let Some((_guard, ctx)) = context() else {
+            return;
+        };
+        let gpu = ctx.preferred_physical_device().unwrap();
+        let offered = unsafe { ctx.instance.enumerate_device_extension_properties(gpu) }.unwrap();
+        let clamp = c"VK_EXT_depth_clamp_control";
+        if !offered
+            .iter()
+            .any(|e| e.extension_name_as_c_str() == Ok(clamp))
+        {
+            return;
+        }
+        assert_eq!(
+            device_as_a_core(&ctx, &[clamp.as_ptr()]),
+            vk::Result::SUCCESS
+        );
     }
 
     #[test]
