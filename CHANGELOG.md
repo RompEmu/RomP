@@ -11,7 +11,7 @@ All notable changes to Romp are listed here. The format follows [Keep a Changelo
 
 ### Fixed
 
-- GameCube and Wii games that lost their Vulkan graphics on some NVIDIA cards on Windows no longer keep running with a black picture and sound. When an emulator's Vulkan graphics fail, RomP switches that emulator to OpenGL, starts the game again and tells you where to change it back. The log now names the graphics driver and what failed. ([#57](https://github.com/RompEmu/RomP/issues/57))
+- GameCube and Wii games that lost their Vulkan graphics on some NVIDIA cards on Windows no longer keep running with a black picture and sound. When an emulator's Vulkan graphics fail, RomP switches that emulator to OpenGL, starts the game again and tells you where to change it back. The log now names the graphics driver and what failed. RomP also turns on a Vulkan feature that Dolphin uses without asking for it, a possible reason for those cards losing the device, and logs the driver's own report when a device is lost. ([#57](https://github.com/RompEmu/RomP/issues/57))
 - The parts of Settings and a game's page scroll all the way to their end when descriptions wrap onto several lines.
 - Arcade, Neo Geo and CPS games play with FinalBurn Neo, and Commodore 64 tapes open in VICE, instead of FinalBurn Neo reporting missing romsets and VICE failing to open the file. RomP told these emulators a successful seek in files had failed. ([#55](https://github.com/RompEmu/RomP/issues/55), [#56](https://github.com/RompEmu/RomP/issues/56))
 
