@@ -483,6 +483,20 @@ impl HwVulkanContext {
         })
     }
 
+    /// A lost device is asked once, as the report doesn't change.
+    fn log_fault(&self) {
+        if self.failed.borrow().is_some() {
+            return;
+        }
+        let state = self.state.borrow();
+        let report = state
+            .as_ref()
+            .and_then(|s| crate::vulkan_device::fault_report(&self.instance, &s.device));
+        if let Some(report) = report {
+            tracing::error!("the driver's report on the lost Vulkan device: {report}");
+        }
+    }
+
     /// Keeps the first failure, which is the one that explains the rest.
     fn fail(&self, reason: String) {
         let mut failed = self.failed.borrow_mut();
@@ -966,6 +980,9 @@ impl HwContextProvider for HwVulkanContext {
                 self.failed_copies.set(failed);
                 if failed == 1 {
                     tracing::warn!("Vulkan readback: {e:#}");
+                }
+                if is_device_lost(&e) {
+                    self.log_fault();
                 }
                 if failed >= FAILED_COPIES || is_device_lost(&e) {
                     self.fail(format!("copying the frame out: {e:#}"));
